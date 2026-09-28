@@ -283,7 +283,6 @@ class _GameScreenState extends State<GameScreen>
               _TopBar(
                 title: _title,
                 paused: _paused,
-                turbo: _turbo,
                 keyboard: _showKeyboard,
                 onBack: _exit,
                 onPause: () => _setPaused(!_paused),
@@ -301,7 +300,7 @@ class _GameScreenState extends State<GameScreen>
                     : Stack(
                         fit: StackFit.expand,
                         children: [
-                          GameDisplay(frame: _frame),
+                          GameDisplay(frame: _frame, turbo: _turbo),
                           if (_paused)
                             const ColoredBox(
                               color: Colors.black54,
@@ -334,7 +333,6 @@ class _GameScreenState extends State<GameScreen>
 class _TopBar extends StatelessWidget {
   final String title;
   final bool paused;
-  final bool turbo;
   final bool keyboard;
   final VoidCallback onBack;
   final VoidCallback onPause;
@@ -344,7 +342,6 @@ class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.title,
     required this.paused,
-    required this.turbo,
     required this.keyboard,
     required this.onBack,
     required this.onPause,
@@ -371,14 +368,6 @@ class _TopBar extends StatelessWidget {
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis),
           ),
-          if (turbo)
-            Tooltip(
-              message: t.turboLoading,
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 4),
-                child: Icon(Icons.fast_forward_rounded, size: iconSize, color: ZxColors.yellow),
-              ),
-            ),
           IconButton(
             icon: Icon(keyboard ? Icons.sports_esports_rounded : Icons.keyboard_rounded,
                 size: iconSize),

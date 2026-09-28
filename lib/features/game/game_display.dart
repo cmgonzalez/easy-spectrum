@@ -3,11 +3,15 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../core/emulator/zx_types.dart';
+import '../../core/l10n.dart';
+import '../../core/theme/easy_theme.dart';
 
 /// Pinta el framebuffer 320×256 del Spectrum con píxeles cuadrados y sin filtrado.
+/// [turbo]: la cinta está cargando acelerada → icono ⏩ en la esquina inferior derecha.
 class GameDisplay extends StatelessWidget {
   final ui.Image? frame;
-  const GameDisplay({super.key, this.frame});
+  final bool turbo;
+  const GameDisplay({super.key, this.frame, this.turbo = false});
 
   @override
   Widget build(BuildContext context) {
@@ -16,9 +20,31 @@ class GameDisplay extends StatelessWidget {
       child: Center(
         child: AspectRatio(
           aspectRatio: zxFbWidth / zxFbHeight,
-          child: frame != null
-              ? CustomPaint(painter: _FramePainter(frame!))
-              : const ColoredBox(color: Colors.black),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              frame != null
+                  ? CustomPaint(painter: _FramePainter(frame!))
+                  : const ColoredBox(color: Colors.black),
+              if (turbo)
+                Positioned(
+                  right: 8,
+                  bottom: 8,
+                  child: Tooltip(
+                    message: context.l10n.turboLoading,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.fast_forward_rounded,
+                          size: 32, color: ZxColors.yellow),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

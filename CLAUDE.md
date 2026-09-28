@@ -62,7 +62,7 @@ distribuirlas con emuladores. Se copian a `<appSupport>/roms` al primer arranque
   intermedios (rasterizar era el grueso del costo) y audio silenciado. CLK enciende el motor al
   detectar un bucle cerrado de lectura del puerto FE, lo que también ocurre en menús que leen el
   teclado: por eso el parche de "cinta terminada" y, además, una pulsación del usuario suspende
-  el turbo hasta que el motor se detenga (multicargas). UI: ⏩ en la barra (`zx_is_turbo`).
+  el turbo hasta que el motor se detenga (multicargas). UI: ⏩ en la esquina inferior derecha de la imagen (`GameDisplay.turbo`, vía `zx_is_turbo`).
   Medido en AVD x86: Cobra (.tzx Ocean) ~40 s en vez de ~3,5 min; Green Beret (Speedlock) al menú.
 - Dart: ticks de hasta 100 ms se emulan completos (antes >100 ms se trataba como 20 ms → cámara
   lenta en teléfonos cargados); solo >0,5 s (pausa) se descarta.
