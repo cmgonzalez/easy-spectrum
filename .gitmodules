@@ -1,0 +1,4 @@
+[submodule "native/CLK"]
+	path = native/CLK
+	url = https://github.com/TomHarte/CLK.git
+	shallow = true

@@ -1,0 +1,52 @@
+# Build artifacts (APKs grandes — no van al repo, GitHub rechaza >100MB)
+*.apk
+*.aab
+
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.iml
+
+# Android
+android/local.properties
+android/.gradle
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/gradle/wrapper/gradle-wrapper.jar
+local.properties
+
+# iOS
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/Flutter/flutter_assets/
+ios/Flutter/flutter_export_environment.sh
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+
+# Generated l10n
+lib/l10n/app_localizations*.dart
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+
+# macOS
+.DS_Store
+
+# Secrets
+google-services.json
+GoogleService-Info.plist
+
+# Firma
+android/key.properties
