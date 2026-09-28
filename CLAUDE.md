@@ -1,7 +1,8 @@
 # CLAUDE.md — Easy Spectrum
 
 Emulador de ZX Spectrum en Flutter para Android (iOS preparado, sin probar).
-Paquete: `cl.easysoft.easyspectrum` — Repo: https://github.com/cmgonzalez/easy-spectrum
+Paquetes: `cl.easysoft.easyspectrum` (Free, con anuncios) y `cl.easysoft.easyspectrum.pro`
+(Pro, sin anuncios) — ver "Ediciones". Repo: https://github.com/cmgonzalez/easy-spectrum
 UI accesible (botones ≥64dp, fuente ≥18–20sp), estética Spectrum (negro + arcoíris).
 Base de estructura: `C:\dev\easygbemu` (mismo patrón FFI + Ticker + flutter_soloud).
 
@@ -101,14 +102,39 @@ El inglés es el idioma de reserva para locales no soportados.
 - Añadir un texto: agregarlo a los 5 ARB (con `@clave`/placeholders solo en `app_es.arb`) y `flutter gen-l10n`.
 - `zx_last_error()` devuelve códigos (`missing_roms`, `bad_snapshot`…) que traduce `zxErrorText()`.
 - Probar un idioma en el emulador sin cambiar el sistema:
-  `adb shell cmd locale set-app-locales cl.easysoft.easyspectrum --locales ru`
+  `adb shell cmd locale set-app-locales cl.easysoft.easyspectrum --locales ru` (o `...easyspectrum.pro`)
+
+## Ediciones Free / Pro (flavors)
+
+Un solo código y dos apps: `productFlavors` en `android/app/build.gradle.kts` (dimensión `edicion`).
+
+| | Free | Pro |
+|---|---|---|
+| applicationId | `cl.easysoft.easyspectrum` | `cl.easysoft.easyspectrum.pro` (`applicationIdSuffix`) |
+| Nombre | Easy Spectrum | Easy Spectrum Pro (`resValue app_name`) |
+| Anuncios | banner + interstitial | ninguno |
+| Ícono | `android/app/src/main/res` | `android/app/src/pro/res` (`flutter_launcher_icons-pro.yaml`) |
+
+- El `namespace` (paquete Kotlin) es el mismo en ambas: `MainActivity` no se mueve.
+- Dart: `Edition.isPro` (`lib/core/edition.dart`) = `appFlavor == 'pro'`, constante de compilación.
+  `AdManager` es no-op en la Pro (no inicializa AdMob; `createBanner` devuelve null).
+- `android/app/src/pro/AndroidManifest.xml` quita con `tools:node="remove"`: `MobileAdsInitProvider`
+  (**sin App ID tumba la app al arrancar**), el meta-data APPLICATION_ID, `AD_ID`, los tres
+  `ACCESS_ADSERVICES_*` y la property `AD_SERVICES_CONFIG` que agrega el SDK. Si se actualiza
+  google_mobile_ads, revisar con `aapt dump permissions app-pro-release.apk`.
+- Cada edición tiene sus propios datos en el teléfono (biblioteca y ajustes no se comparten).
+- `flutter build` **exige `--flavor free|pro`**.
 
 ## Build
 
-```powershell
-& "C:\Users\cmgon\dev-tools\flutter\bin\flutter.bat" build apk --debug
-& "C:\Users\cmgon\dev-tools\flutter\bin\flutter.bat" build appbundle
+```bash
+bash build-app.sh                  # APK release de las dos → EasySpectrum[Pro]-<ver>-<code>.apk
+bash build-app.sh aab              # AAB de las dos (Play Store)
+bash build-app.sh release pro      # solo una edición
+bash build-app.sh release all push # + commit + push
 ```
+Equivale a `flutter build apk --release --flavor free` (o `pro`).
+El versionCode está en `pubspec.yaml` y en `android/app/build.gradle.kts`: subir los dos.
 Firma release: `android/key.properties` (no va al repo). Primera compilación nativa ~5 min (CLK × 2 ABIs).
 
 ## Estado
@@ -119,7 +145,8 @@ Firma release: `android/key.properties` (no va al repo). Primera compilación na
 - [x] APK release verificado en AVD (BASIC 128K, carga .tap, teclado, juego jugable)
 - [ ] Probar en SM S926B (audio real)
 - [ ] Save states (requiere parchear CLK o serializar State)
-- [ ] IDs AdMob reales / política de privacidad `www.easysoft.cl/easy-spectrum/privacy.html`
+- [x] Ediciones Free/Pro con flavors (verificado en AVD: Pro sin anuncios ni permisos publicitarios)
+- [ ] IDs AdMob reales (solo Free) / política de privacidad `www.easysoft.cl/easy-spectrum/privacy.html`
 - [x] Localización es/en/ru/it/pt
 - [x] SNA de 128K (cargador propio) + fix de pantalla sombra en snapshots 128K (verificado con SNA sintéticos)
 - [ ] Un juego que falla al cargar queda igual en "Mis juegos" (¿borrarlo o marcarlo?)
