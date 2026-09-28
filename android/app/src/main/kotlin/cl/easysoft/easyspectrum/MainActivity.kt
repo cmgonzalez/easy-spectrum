@@ -4,6 +4,9 @@ import android.content.Intent
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.provider.OpenableColumns
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -28,6 +31,15 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // Vibración de los controles con duración e intensidad propias (lib/core/haptics.dart).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "cl.easysoft.easyspectrum/haptics")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "vibrate") {
+                    vibrate(call.argument<Int>("ms") ?: 15, call.argument<Int>("amplitude") ?: 120)
+                    result.success(null)
+                } else result.notImplemented()
+            }
+
         // Archivos abiertos con "Abrir con" / "Compartir". Dart pide el del arranque
         // con "initial"; los que llegan con la app abierta se envían con "open".
         openChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, OPEN_CHANNEL).also {
@@ -41,6 +53,21 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+    }
+
+    private val vibrator: Vibrator? by lazy {
+        if (Build.VERSION.SDK_INT >= 31)
+            (getSystemService(VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+        else @Suppress("DEPRECATION") (getSystemService(VIBRATOR_SERVICE) as? Vibrator)
+    }
+
+    private fun vibrate(ms: Int, amplitude: Int) {
+        val v = vibrator ?: return
+        if (!v.hasVibrator()) return
+        if (Build.VERSION.SDK_INT >= 26) {
+            val amp = if (v.hasAmplitudeControl()) amplitude.coerceIn(1, 255) else VibrationEffect.DEFAULT_AMPLITUDE
+            v.vibrate(VibrationEffect.createOneShot(ms.toLong(), amp))
+        } else @Suppress("DEPRECATION") v.vibrate(ms.toLong())
     }
 
     override fun onNewIntent(intent: Intent) {

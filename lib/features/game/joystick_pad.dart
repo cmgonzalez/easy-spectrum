@@ -1,9 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/emulator/zx_types.dart';
+import '../../core/haptics.dart';
 import '../../core/l10n.dart';
 import 'pad_config_sheet.dart';
 import 'skin.dart';
@@ -105,20 +105,20 @@ class _JoystickPadState extends State<JoystickPad> {
 
   void _setDir(int dir) {
     if (dir == _dir) return;
-    if (widget.haptics && dir != 0) HapticFeedback.selectionClick();
+    if (widget.haptics && dir != 0) Haptics.tick();
     setState(() => _dir = dir);
     _emit();
   }
 
   void _setFire(bool v) {
     if (v == _fire) return;
-    if (widget.haptics && v) HapticFeedback.lightImpact();
+    if (widget.haptics && v) Haptics.press();
     setState(() => _fire = v);
     _emit();
   }
 
   void _setKey(int code, bool v) {
-    if (v && widget.haptics) HapticFeedback.selectionClick();
+    if (v && widget.haptics) Haptics.press();
     setState(() => v ? _keysDown.add(code) : _keysDown.remove(code));
     widget.onKey(code, v);
   }
@@ -152,7 +152,7 @@ class _JoystickPadState extends State<JoystickPad> {
       case _Zone.key:
         _setKey(z.$2, true);
       case _Zone.action:
-        if (widget.haptics) HapticFeedback.selectionClick();
+        if (widget.haptics) Haptics.press();
         setState(() => _actionsDown.add(z.$2));
     }
   }

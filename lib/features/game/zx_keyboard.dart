@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/emulator/zx_types.dart';
+import '../../core/haptics.dart';
 import '../../core/theme/easy_theme.dart';
 import 'skin.dart';
 
@@ -90,7 +90,7 @@ class _ZxKeyboardState extends State<ZxKeyboard> {
   bool _isModifier(int code) => code == ZxKey.caps || code == ZxKey.sym;
 
   void _press(int code) {
-    if (widget.haptics) HapticFeedback.selectionClick();
+    if (widget.haptics) Haptics.press();
     setState(() => _down.add(code));
     if (_isModifier(code)) {
       _modifierHeld.add(code);
