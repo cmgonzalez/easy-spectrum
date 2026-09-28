@@ -58,11 +58,14 @@ distribuirlas con emuladores. Se copian a `<appSupport>/roms` al primer arranque
 - **Carga rápida = trap + turbo.** El trap de CLK solo intercepta `LD-BYTES` del ROM (0x056B):
   sirve para .tap, pero casi todos los .tzx traen cargadores propios (Ocean 0x11, Speedlock
   0x12/0x13…) que cargarían a velocidad real. `zx_run()` emula en turbo mientras la cinta gira:
-  tramos de 20 ms hasta el 75% del tick (máx. 25 ms), tope ×50, **sin ScanTarget** en los tramos
+  tramos de 20 ms hasta el 75% del tick (máx. 25 ms), tope ×50, **sin rasterizar** (`SoftScanTarget::set_drawing(false)`) en los tramos
   intermedios (rasterizar era el grueso del costo) y audio silenciado. CLK enciende el motor al
   detectar un bucle cerrado de lectura del puerto FE, lo que también ocurre en menús que leen el
   teclado: por eso el parche de "cinta terminada" y, además, una pulsación del usuario suspende
   el turbo hasta que el motor se detenga (multicargas). UI: ⏩ en la esquina inferior derecha de la imagen (`GameDisplay.turbo`, vía `zx_is_turbo`).
+  **No desconectar el ScanTarget** (`set_scan_target(nullptr)`): deja de contar líneas y el
+  primer frame tras reconectar sale corrido y recalibra mal → la imagen saltaba arriba/abajo.
+  Solo se publican frames dibujados completos (de un retrazo vertical al siguiente).
   Medido en AVD x86: Cobra (.tzx Ocean) ~40 s en vez de ~3,5 min; Green Beret (Speedlock) al menú.
 - Dart: ticks de hasta 100 ms se emulan completos (antes >100 ms se trataba como 20 ms → cámara
   lenta en teléfonos cargados); solo >0,5 s (pausa) se descarta.

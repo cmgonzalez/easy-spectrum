@@ -90,8 +90,15 @@ public:
 		return data_ptr_;
 	}
 
+	/// Sin dibujar (turbo de carga): se siguen contando líneas y retrazos para no perder
+	/// la posición vertical, pero no se rasteriza ni se publica nada.
+	void set_drawing(bool drawing) {
+		drawing_ = drawing;
+		if(!drawing) frame_clean_ = false;
+	}
+
 	void end_scan() override {
-		if(!data_ptr_ || !data_length_) return;
+		if(!drawing_ || !data_ptr_ || !data_length_) return;
 		const auto &p0 = scan_.end_points[0];
 		const auto &p1 = scan_.end_points[1];
 		const int off0 = p0.data_offset, off1 = p1.data_offset;
@@ -138,7 +145,9 @@ public:
 				++line_;
 			break;
 			case Event::BeginVerticalRetrace: {
-				// Frame completo → publicar.
+				// Solo frames dibujados de principio a fin: uno parcial (tras salir del
+				// turbo) saldría mezclado y recalibraría mal la línea superior del papel.
+				if(!frame_clean_) break;
 				{
 					std::lock_guard lock(fb_mutex_);
 					front_ = work_;
@@ -151,10 +160,11 @@ public:
 						v_calibrated_ = true;
 					}
 				}
-				frame_min_data_line_ = INT32_MAX;
 			} break;
 			case Event::EndVerticalRetrace:
 				line_ = 0;
+				frame_min_data_line_ = INT32_MAX;
+				frame_clean_ = drawing_;
 			break;
 			default: break;
 		}
@@ -209,6 +219,8 @@ private:
 	int paper_top_line_ = 0;
 	int frame_min_data_line_ = INT32_MAX;
 	int frames_ = 0;
+	bool drawing_ = true;
+	bool frame_clean_ = false;	// se dibujó desde el último EndVerticalRetrace
 
 	std::array<uint32_t, FbW * FbH> work_{}, front_{}, snapshot_{};
 	std::mutex fb_mutex_;
@@ -539,16 +551,17 @@ int zx_run(ZxHandle *h, double seconds) {
 		const double limit = seconds * 50.0;
 		constexpr double Slice = 0.02;
 		double done = 0.0;
-		// Sin vídeo en los tramos intermedios (solo se muestra un frame por tick y
-		// rasterizarlos todos es el grueso del costo); el último tramo sí dibuja.
-		h->scan_producer->set_scan_target(nullptr);
+		// Sin rasterizar los tramos intermedios (solo se muestra un frame por tick y
+		// dibujarlos todos es el grueso del costo); el último tramo sí dibuja. No se
+		// desconecta el ScanTarget: perdería la cuenta de líneas y la imagen saltaría.
+		h->scan_target.set_drawing(false);
 		while(done < limit && Clock::now() < deadline && h->machine->get_tape_is_playing()) {
 			h->timed->run_for(Time::Seconds(Slice));
 			h->timed->flush_output(MachineTypes::TimedMachine::Output::All);
 			done += Slice;
 		}
-		h->scan_producer->set_scan_target(&h->scan_target);
-		const double tail = std::max(seconds - done, 0.021);	// ≥1 frame visible
+		h->scan_target.set_drawing(true);
+		const double tail = std::max(seconds - done, 0.041);	// ≥1 frame completo visible
 		h->timed->run_for(Time::Seconds(tail));
 		h->emulated += done + tail;
 	} else {
