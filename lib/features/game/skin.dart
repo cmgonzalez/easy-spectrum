@@ -23,6 +23,8 @@ class SkinView extends StatelessWidget {
   final void Function(int pointer, Offset imagePos)? onMove;
   final void Function(int pointer) onUp;
   final SkinPainter painter;
+  /// Capa encima de [painter] que se repinta sola (animaciones: ver SkinPainter.repaint).
+  final SkinPainter? foreground;
   final bool stretch;
 
   const SkinView({
@@ -31,6 +33,7 @@ class SkinView extends StatelessWidget {
     required this.onDown,
     required this.onUp,
     required this.painter,
+    this.foreground,
     this.onMove,
     this.stretch = false,
   });
@@ -76,6 +79,19 @@ class SkinView extends StatelessWidget {
                     ..origin = skin.origin,
                 ),
               ),
+              if (foreground != null)
+                Positioned(
+                  left: origin.dx,
+                  top: origin.dy,
+                  width: w,
+                  height: h,
+                  child: CustomPaint(
+                    painter: foreground!
+                      ..sx = sx
+                      ..sy = sy
+                      ..origin = skin.origin,
+                  ),
+                ),
             ],
           ),
         );
@@ -86,6 +102,8 @@ class SkinView extends StatelessWidget {
 
 /// Painter de overlays (pulsaciones, rótulos) en coordenadas de la imagen original.
 abstract class SkinPainter extends CustomPainter {
+  SkinPainter({super.repaint});
+
   double sx = 1, sy = 1;
   Offset origin = Offset.zero;
 

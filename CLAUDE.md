@@ -111,6 +111,10 @@ defecto) + hasta 3 botones extra con cualquier tecla, dibujados entre la cruceta
 (1 grande, 2 lado a lado, 3 en triángulo; se miran antes que la cruceta y el fuego). Se guarda
 por juego en `MediaDb.pad`; sin configuración propia vale el "Control por defecto" de Ajustes
 (`joy_type` en SharedPreferences; `joy_mapping` era el índice del formato antiguo).
+LCD del mando: letrero en bucle (`_LcdPainter`, capa `SkinView.foreground` que se repinta con
+un Ticker propio sin reconstruir el mando) con juego · año y editor · género · control · botones
+extra · `<< ENTER | ESPACIO >>`; al pulsar una mitad se pinta en negativo. Vibración con
+`lib/core/haptics.dart` (canal nativo, cruceta 10 ms suave, botones 22 ms firme).
 
 ### Miniaturas de juegos (`GameThumbnail`)
 Pantalla de 6912 bytes ($4000) → imagen 256×192. Guardadas en `MediaDb`.

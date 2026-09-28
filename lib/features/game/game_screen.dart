@@ -91,6 +91,12 @@ class _GameScreenState extends State<GameScreen>
   Future<void> _boot() async {
     _settings = await AppSettings.load();
     _pad = await PadConfig.load(widget.mediaPath, _settings.joyMapping);
+    if (widget.mediaPath.isNotEmpty) {
+      // La ficha de ZXDB (si ya está) da título real y datos para el LCD.
+      GameInfoService.load(widget.mediaPath).then((_) {
+        if (mounted) setState(() {});
+      });
+    }
     _showKeyboard = widget.mediaPath.isEmpty || _settings.startWithKeyboard;
     if (_settings.keepScreenOn) WakelockPlus.enable();
 
@@ -235,6 +241,24 @@ class _GameScreenState extends State<GameScreen>
         _captureClock -= _afterTape; // pantalla lisa: probar de nuevo en un rato
       }
     });
+  }
+
+  /// Letrero del LCD del mando: juego · año y editor · control · ENTER | ESPACIO.
+  String _lcdText() {
+    final t = context.l10n;
+    final info = widget.mediaPath.isEmpty ? null : GameInfoService.cached(widget.mediaPath);
+    final control = _pad.type == JoyMapping.keyboard
+        ? '${t.joyKeyboard} ${_pad.keys.map(zxKeyLabel).join(' ')}'
+        : _pad.type.label;
+    final extras = _pad.extraKeys;
+    return [
+      _title,
+      if (info != null && info.subtitle.isNotEmpty) info.subtitle,
+      if (info?.genre != null) info!.genre!,
+      control,
+      if (extras.isNotEmpty) '${t.extraButtons} ${extras.map(zxKeyLabel).join(' ')}',
+      '<< ENTER | ${t.space} >>',
+    ].join('  ·  ').toUpperCase();
   }
 
   // --- Entrada ---------------------------------------------------------------
@@ -452,6 +476,7 @@ class _GameScreenState extends State<GameScreen>
                           onKey: _onKey,
                           onAction: _onPadAction,
                           extraKeys: _pad.extraKeys,
+                          lcdText: _lcdText(),
                           haptics: _settings.vibration,
                         ),
                 ),

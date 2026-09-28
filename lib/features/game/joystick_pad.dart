@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../../core/emulator/zx_types.dart';
 import '../../core/haptics.dart';
@@ -60,6 +61,8 @@ class JoystickPad extends StatefulWidget {
   final void Function(PadAction action) onAction;
   final List<int> extraKeys;
   final bool haptics;
+  /// Letrero que avanza por la pantalla LCD (juego, datos, control…).
+  final String lcdText;
 
   const JoystickPad({
     super.key,
@@ -68,6 +71,7 @@ class JoystickPad extends StatefulWidget {
     required this.onAction,
     this.extraKeys = const [],
     this.haptics = true,
+    this.lcdText = '',
   });
 
   static double get aspectRatio => _skin.width / _skin.height;
@@ -76,7 +80,24 @@ class JoystickPad extends StatefulWidget {
   State<JoystickPad> createState() => _JoystickPadState();
 }
 
-class _JoystickPadState extends State<JoystickPad> {
+class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStateMixin {
+  // Reloj del letrero del LCD: solo repinta esa capa, no reconstruye el mando.
+  final _clock = ValueNotifier<double>(0);
+  late final Ticker _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker((d) => _clock.value = d.inMicroseconds / 1e6)..start();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    _clock.dispose();
+    super.dispose();
+  }
+
   final Map<int, (_Zone, int)> _pointers = {}; // puntero → zona (+ tecla / acción)
   int _dir = 0;
   bool _fire = false;
@@ -192,7 +213,13 @@ class _JoystickPadState extends State<JoystickPad> {
         keys: {..._keysDown},
         actions: {..._actionsDown},
         extras: [for (final k in widget.extraKeys) (k, zxKeyName(context, k))],
-        space: context.l10n.space,
+      ),
+      foreground: _LcdPainter(
+        clock: _clock,
+        text: widget.lcdText,
+        enter: _keysDown.contains(ZxKey.enter),
+        space: _keysDown.contains(ZxKey.space),
+        spaceLabel: context.l10n.space,
       ),
     );
   }
@@ -204,17 +231,13 @@ class _PadOverlay extends SkinPainter {
   final Set<int> keys;
   final Set<int> actions;
   final List<(int, String)> extras; // (tecla, rótulo)
-  final String space;
   _PadOverlay({
     required this.dir,
     required this.fire,
     required this.keys,
     required this.actions,
     required this.extras,
-    required this.space,
   });
-
-  static const _lcdInk = Color(0xFF263022);
 
   void _text(Canvas canvas, String text, Offset center, TextStyle style, {double? maxWidth}) {
     final tp = TextPainter(
@@ -335,21 +358,6 @@ class _PadOverlay extends SkinPainter {
     for (var i = 0; i < extras.length; i++) {
       _extraButton(canvas, layout[i].$1, layout[i].$2, extras[i].$2, keys.contains(extras[i].$1));
     }
-
-    // LCD: ENTER | ESPACIO, con la mitad pulsada en negativo.
-    final left = Rect.fromLTRB(_lcd.left, _lcd.top, _lcd.center.dx, _lcd.bottom);
-    final right = Rect.fromLTRB(_lcd.center.dx, _lcd.top, _lcd.right, _lcd.bottom);
-    final pressedLcd = Paint()..color = _lcdInk.withValues(alpha: 0.85);
-    final enter = keys.contains(ZxKey.enter), spc = keys.contains(ZxKey.space);
-    if (enter) canvas.drawRect(left.deflate(6), pressedLcd);
-    if (spc) canvas.drawRect(right.deflate(6), pressedLcd);
-    canvas.drawLine(Offset(_lcd.center.dx, _lcd.top + 14), Offset(_lcd.center.dx, _lcd.bottom - 14),
-        Paint()
-          ..color = _lcdInk.withValues(alpha: 0.6)
-          ..strokeWidth = 4);
-    const lcdLight = Color(0xFF9DAA8C);
-    _label(canvas, 'ENTER', left.center, 46, enter ? lcdLight : _lcdInk);
-    _label(canvas, space, right.center, 46, spc ? lcdLight : _lcdInk);
   }
 
   @override
@@ -360,6 +368,85 @@ class _PadOverlay extends SkinPainter {
       !setEquals(old.keys, keys) ||
       !setEquals(old.actions, actions) ||
       old.extras.length != extras.length ||
-      !Iterable.generate(extras.length).every((i) => old.extras[i] == extras[i]) ||
-      old.space != space;
+      !Iterable.generate(extras.length).every((i) => old.extras[i] == extras[i]);
+}
+
+/// Pantalla LCD: letrero que avanza en bucle y, al pulsar una mitad, ENTER o
+/// ESPACIO en negativo. Se repinta con [clock] (segundos).
+class _LcdPainter extends SkinPainter {
+  final ValueNotifier<double> clock;
+  final String text;
+  final bool enter;
+  final bool space;
+  final String spaceLabel;
+  _LcdPainter({
+    required this.clock,
+    required this.text,
+    required this.enter,
+    required this.space,
+    required this.spaceLabel,
+  }) : super(repaint: clock);
+
+  static const _ink = Color(0xFF263022);
+  static const _light = Color(0xFF9DAA8C);
+  static const _speed = 110.0; // px de la imagen por segundo
+  static const _gap = 160.0; // entre el final del texto y la vuelta a empezar
+
+  // El TextPainter del letrero se reutiliza entre fotogramas.
+  static String? _cachedText;
+  static TextPainter? _cached;
+
+  static TextPainter _paintText(String text, double size, Color color) => TextPainter(
+        text: TextSpan(
+          text: text,
+          style: TextStyle(
+            fontSize: size,
+            fontWeight: FontWeight.w900,
+            color: color,
+            letterSpacing: size * 0.08,
+            fontFamily: 'monospace',
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+  @override
+  void paintSkin(Canvas canvas) {
+    final screen = _lcd.deflate(10);
+    canvas.save();
+    canvas.clipRect(screen);
+
+    if (text.isNotEmpty) {
+      final tp = _cachedText == text && _cached != null
+          ? _cached!
+          : (_cached = _paintText(text, 44, _ink.withValues(alpha: 0.9)));
+      _cachedText = text;
+      final y = screen.center.dy - tp.height / 2;
+      if (tp.width <= screen.width) {
+        tp.paint(canvas, Offset(screen.center.dx - tp.width / 2, y));
+      } else {
+        final period = tp.width + _gap;
+        var x = screen.left + screen.width * 0.25 - (clock.value * _speed) % period;
+        for (; x < screen.right; x += period) {
+          tp.paint(canvas, Offset(x, y));
+        }
+      }
+    }
+
+    final halves = [
+      (enter, Rect.fromLTRB(screen.left, screen.top, _lcd.center.dx, screen.bottom), 'ENTER'),
+      (space, Rect.fromLTRB(_lcd.center.dx, screen.top, screen.right, screen.bottom), spaceLabel),
+    ];
+    for (final (on, r, label) in halves) {
+      if (!on) continue;
+      canvas.drawRect(r, Paint()..color = _ink.withValues(alpha: 0.92));
+      final tp = _paintText(label.toUpperCase(), 46, _light);
+      tp.paint(canvas, r.center - Offset(tp.width / 2, tp.height / 2));
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_LcdPainter old) =>
+      geometryChanged(old) || old.text != text || old.enter != enter || old.space != space;
 }
