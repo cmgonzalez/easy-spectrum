@@ -43,6 +43,22 @@ android {
         }
     }
 
+    // Dos ediciones del mismo código. El namespace (paquete de Kotlin) no cambia;
+    // solo el applicationId, que es la identidad en el teléfono y en Play Store.
+    // En Dart se distingue con `appFlavor` (ver lib/core/edition.dart).
+    flavorDimensions += "edicion"
+    productFlavors {
+        create("free") {
+            dimension = "edicion"
+            resValue("string", "app_name", "Easy Spectrum")
+        }
+        create("pro") {
+            dimension = "edicion"
+            applicationIdSuffix = ".pro"   // cl.easysoft.easyspectrum.pro
+            resValue("string", "app_name", "Easy Spectrum Pro")
+        }
+    }
+
     externalNativeBuild {
         cmake {
             path = file("../../native/CMakeLists.txt")

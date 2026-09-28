@@ -2,6 +2,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import '../edition.dart';
+
+/// Anuncios de la edición gratuita. En la Pro ([Edition.showAds] = false) todo es
+/// no-op: no se inicializa AdMob ni se pide ningún anuncio.
 class AdManager {
   AdManager._();
   static final AdManager instance = AdManager._();
@@ -18,7 +22,14 @@ class AdManager {
   BannerAd? _banner;
   InterstitialAd? _interstitial;
 
-  BannerAd createBanner({VoidCallback? onLoaded}) {
+  Future<void> initialize() async {
+    if (!Edition.showAds) return;
+    await MobileAds.instance.initialize();
+  }
+
+  /// null en la Pro.
+  BannerAd? createBanner({VoidCallback? onLoaded}) {
+    if (!Edition.showAds) return null;
     _banner?.dispose();
     _banner = BannerAd(
       adUnitId: _bannerId,
@@ -33,6 +44,7 @@ class AdManager {
   }
 
   Future<void> preloadInterstitial() async {
+    if (!Edition.showAds) return;
     await InterstitialAd.load(
       adUnitId: _interstitialId,
       request: const AdRequest(),

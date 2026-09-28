@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../../core/ads/ad_manager.dart';
+import '../../core/edition.dart';
 import '../../core/l10n.dart';
 import '../../core/storage/game_library.dart';
 import '../../core/theme/easy_theme.dart';
@@ -124,6 +125,10 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text('Easy Spectrum'),
+            if (Edition.isPro) ...[
+              SizedBox(width: 8),
+              _ProBadge(),
+            ],
             SizedBox(width: 12),
             RainbowStripes(height: 22),
           ],
@@ -234,6 +239,23 @@ class _BigButton extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
       ),
+    );
+  }
+}
+
+class _ProBadge extends StatelessWidget {
+  const _ProBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: ZxColors.yellow,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Text('PRO',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.black)),
     );
   }
 }

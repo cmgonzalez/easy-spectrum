@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/edition.dart';
 import '../../core/l10n.dart';
 import '../../core/theme/easy_theme.dart';
 
@@ -17,7 +18,7 @@ class AboutScreen extends StatelessWidget {
           const Center(child: RainbowStripes(height: 40)),
           const SizedBox(height: 16),
           _Section(
-            title: 'Easy Spectrum v1.0',
+            title: '${Edition.appName} v1.0',
             body: '${t.aboutDescription}\n\n${t.developedBy}\nsoporte@easysoft.cl',
           ),
           _Section(
