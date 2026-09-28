@@ -9,6 +9,7 @@ class AppSettings {
   bool vibration = true;
   bool keepScreenOn = true;
   bool startWithKeyboard = false;
+  bool onlineInfo = true;
 
   static Future<AppSettings> load() async {
     final p = await SharedPreferences.getInstance();
@@ -21,6 +22,7 @@ class AppSettings {
     s.vibration = p.getBool('vibration') ?? true;
     s.keepScreenOn = p.getBool('keep_screen_on') ?? true;
     s.startWithKeyboard = p.getBool('start_keyboard') ?? false;
+    s.onlineInfo = p.getBool('online_info') ?? true;
     return s;
   }
 
@@ -32,5 +34,6 @@ class AppSettings {
     await p.setBool('vibration', vibration);
     await p.setBool('keep_screen_on', keepScreenOn);
     await p.setBool('start_keyboard', startWithKeyboard);
+    await p.setBool('online_info', onlineInfo);
   }
 }

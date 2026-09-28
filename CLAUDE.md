@@ -74,7 +74,7 @@ distribuirlas con emuladores. Se copian a `<appSupport>/roms` al primer arranque
 ## Probar el core sin Flutter
 
 `tools/zxtest.cpp`: ejecutable que arranca la máquina, corre N segundos y vuelca `out.ppm`.
-Compilar con el clang del NDK (target `x86_64-linux-android24` para el AVD, `aarch64` para el S26),
+Compilar con el clang del NDK (target `x86_64-linux-android24` para el AVD, `aarch64` para el S24+),
 push a `/data/local/tmp/zx/` junto con las ROMs, y ejecutar `./zxtest juego.tap <modelo> <segundos>`.
 En Git Bash usar `MSYS_NO_PATHCONV=1` para que adb no reescriba las rutas `/data/...`.
 
@@ -130,6 +130,20 @@ Pantalla de 6912 bytes ($4000) → imagen 256×192. Caché en `<appSupport>/thum
     la pantalla): así la pantalla del juego no se mueve al cambiar teclado ↔ mando. El teclado
     (recortado desde y=283, solo la placa de teclas, 2,27:1) se dibuja con `SkinView(stretch: true)`,
     estirado ~20% en vertical (teclas más altas); escala x/y independientes en toques y overlays.
+
+## Fichas de ZXDB (ajuste "Buscar datos de los juegos en internet", activado por defecto)
+
+`lib/core/storage/game_info.dart` (`GameInfoService`): MD5 del archivo → `GET https://api.zxinfo.dk/v3/filecheck/<md5>`
+(404 = no está) → `GET /v3/games/<id>?mode=compact` → título, año, editor, género y `screens[]`.
+La pantalla de carga (`scrUrl`, .scr de 6912 bytes) se baja de `https://zxinfo.dk/media<scrUrl>` y va a
+`thumbs/<juego>.net.scr`. Prioridad de miniatura: pantalla del archivo > ZXDB > captura del emulador.
+- Solo por hash (volcados de WOS/TOSEC/Spectrum Computing). **No buscar por nombre**: "Cobra"
+  devuelve primero el de ZX81. `api.zxinfo.dk` redirige (301) a `internal.zxinfo.dk`.
+- Caché `info/<juego>.json`; `{}` = no está en ZXDB. Errores de red no se cachean (se reintenta
+  en la próxima sesión). Sin cuenta ni clave; User-Agent propio.
+- Miniatura automática sin red: `GameScreen._checkCapture` captura al terminar la primera carga
+  (cinta parada 2 s; sin cinta, a los 15 s). Si la pantalla final es pobre (créditos en 2 colores)
+  usa la última pantalla con color vista durante la carga (= pantalla de carga).
 
 ## Abrir archivos desde otras apps
 

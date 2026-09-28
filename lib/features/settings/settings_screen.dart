@@ -108,6 +108,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   value: s.keepScreenOn,
                   onChanged: (v) => _update((s) => s.keepScreenOn = v),
                 ),
+                _Header(t.library),
+                SwitchListTile(
+                  secondary: const Icon(Icons.travel_explore_rounded, size: 32),
+                  title: Text(t.onlineInfo),
+                  subtitle: Text(t.onlineInfoSubtitle),
+                  value: s.onlineInfo,
+                  onChanged: (v) => _update((s) => s.onlineInfo = v),
+                ),
                 const Divider(height: 32),
                 ListTile(
                   leading: const Icon(Icons.info_outline_rounded, size: 32),

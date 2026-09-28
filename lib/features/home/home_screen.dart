@@ -9,6 +9,8 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../../core/ads/ad_manager.dart';
 import '../../core/edition.dart';
 import '../../core/l10n.dart';
+import '../../core/settings.dart';
+import '../../core/storage/game_info.dart';
 import '../../core/storage/game_library.dart';
 import '../../core/storage/game_thumbnail.dart';
 import '../../core/storage/incoming_files.dart';
@@ -60,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refresh() async {
+    GameInfoService.enabled = (await AppSettings.load()).onlineInfo;
     final games = await GameLibrary.list();
     if (mounted) setState(() => _games = games);
   }
@@ -135,6 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
       try {
         await f.delete();
         await GameThumbnail.forget(f.path);
+        await GameInfoService.forget(f.path);
       } catch (_) {}
       _refresh();
     }
@@ -164,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
+            ).then((_) => _refresh()),
           ),
         ],
       ),
@@ -196,18 +200,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     Card(
                       color: ZxColors.bodyLight,
                       margin: const EdgeInsets.symmetric(vertical: 5),
-                      child: ListTile(
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                        leading: _GameThumb(path: g.path),
-                        title: Text(GameLibrary.titleOf(g.path),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(GameLibrary.extensionOf(g.path).toUpperCase()),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline_rounded, size: 28),
-                          tooltip: t.delete,
-                          onPressed: () => _deleteGame(g),
-                        ),
+                      child: _GameTile(
+                        key: ValueKey(g.path),
+                        path: g.path,
+                        deleteTooltip: t.delete,
+                        onDelete: () => _deleteGame(g),
                         onTap: () => _play(path: g.path),
                       ),
                     ),
@@ -283,11 +280,65 @@ class _ProBadge extends StatelessWidget {
   }
 }
 
+/// Fila de "Mis juegos": pide la ficha a ZXDB (si está activado) y, cuando llega,
+/// se redibuja con el título real, año · editor y la pantalla de carga.
+class _GameTile extends StatefulWidget {
+  final String path;
+  final String deleteTooltip;
+  final VoidCallback onDelete;
+  final VoidCallback onTap;
+  const _GameTile({
+    super.key,
+    required this.path,
+    required this.deleteTooltip,
+    required this.onDelete,
+    required this.onTap,
+  });
+
+  @override
+  State<_GameTile> createState() => _GameTileState();
+}
+
+class _GameTileState extends State<_GameTile> {
+  GameInfo? _info;
+
+  @override
+  void initState() {
+    super.initState();
+    _info = GameInfoService.cached(widget.path);
+    GameInfoService.load(widget.path).then((info) {
+      if (mounted && info != _info) setState(() => _info = info);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ext = GameLibrary.extensionOf(widget.path).toUpperCase();
+    final info = _info;
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      // La clave cambia al llegar la ficha: vuelve a pedir la miniatura (puede
+      // haber llegado la pantalla de carga de ZXDB).
+      leading: _GameThumb(key: ValueKey(info?.id), path: widget.path),
+      title: Text(info?.title ?? GameLibrary.titleOf(widget.path),
+          maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(info == null || info.subtitle.isEmpty ? ext : '${info.subtitle} · $ext',
+          maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: IconButton(
+        icon: const Icon(Icons.delete_outline_rounded, size: 28),
+        tooltip: widget.deleteTooltip,
+        onPressed: widget.onDelete,
+      ),
+      onTap: widget.onTap,
+    );
+  }
+}
+
 /// Miniatura 4:3 con la pantalla de carga o del snapshot; ícono genérico si el
 /// formato no trae pantalla (.dsk, .csw) o mientras se genera.
 class _GameThumb extends StatelessWidget {
   final String path;
-  const _GameThumb({required this.path});
+  const _GameThumb({super.key, required this.path});
 
   @override
   Widget build(BuildContext context) {

@@ -12,6 +12,7 @@ import '../../core/l10n.dart';
 import '../../core/emulator/zx_bridge.dart';
 import '../../core/emulator/zx_types.dart';
 import '../../core/settings.dart';
+import '../../core/storage/game_info.dart';
 import '../../core/storage/game_library.dart';
 import '../../core/storage/game_thumbnail.dart';
 import '../../core/theme/easy_theme.dart';
@@ -54,13 +55,24 @@ class _GameScreenState extends State<GameScreen>
   String? _error;
 
   Duration _lastTick = Duration.zero;
+
+  // Miniatura automática para juegos cuyo archivo no trae pantalla (cinta cifrada,
+  // .dsk…): se captura en cuanto termina la primera carga.
+  bool _wantCapture = false;
+  bool _capturing = false;
+  bool _tapeSeen = false;
+  double _captureClock = 0; // s reales desde que paró la cinta (o desde el inicio)
+  double _shotClock = 0;
+  Uint8List? _loadingShot; // última pantalla con color vista durante la carga
   int _joyMask = 0;
 
   AudioSource? _stream;
   SoundHandle? _handle;
 
   String get _title =>
-      widget.mediaPath.isEmpty ? 'ZX Spectrum' : GameLibrary.titleOf(widget.mediaPath);
+      widget.mediaPath.isEmpty
+          ? 'ZX Spectrum'
+          : GameInfoService.cached(widget.mediaPath)?.title ?? GameLibrary.titleOf(widget.mediaPath);
 
   @override
   void initState() {
@@ -88,7 +100,11 @@ class _GameScreenState extends State<GameScreen>
       setState(() => _error = err);
       return;
     }
+    if (widget.mediaPath.isNotEmpty) {
+      _wantCapture = await GameThumbnail.needsCapture(widget.mediaPath);
+    }
     await _initAudio();
+    if (!mounted) return;
     setState(() => _started = true);
     _ticker.start();
   }
@@ -161,6 +177,7 @@ class _GameScreenState extends State<GameScreen>
     _feedAudio();
     final turbo = _zx.turbo;
     if (turbo != _turbo) setState(() => _turbo = turbo);
+    if (_wantCapture) _checkCapture(delta);
     if (frames == 0 || _frameBusy) return;
 
     _frameBusy = true;
@@ -176,6 +193,43 @@ class _GameScreenState extends State<GameScreen>
     } finally {
       _frameBusy = false;
     }
+  }
+
+  /// Carga terminada = la cinta giró y lleva [_afterTape] s parada (los cargadores
+  /// multiparte paran el motor un momento entre bloques). Sin cinta (.dsk, o .tap
+  /// cargado al instante por el trap) se espera [_noTape]. Si al terminar la
+  /// pantalla es pobre (créditos en blanco y negro) se usa la pantalla de carga,
+  /// guardada cada segundo mientras gira la cinta. Si sale lisa, se reintenta.
+  static const _afterTape = 2.0, _noTape = 15.0;
+
+  void _checkCapture(double delta) {
+    if (_capturing) return;
+    if (_zx.tapePlaying) {
+      _tapeSeen = true;
+      _captureClock = 0;
+      _shotClock += delta;
+      if (_shotClock >= 1) {
+        _shotClock = 0;
+        final fb = _zx.framebuffer();
+        if (fb != null && GameThumbnail.paperColours(fb) >= 3) _loadingShot = fb;
+      }
+      return;
+    }
+    _captureClock += delta;
+    if (_captureClock < (_tapeSeen ? _afterTape : _noTape)) return;
+    var fb = _zx.framebuffer();
+    if (fb == null) return;
+    if (_loadingShot != null && GameThumbnail.paperColours(fb) < 3) fb = _loadingShot!;
+    _capturing = true;
+    GameThumbnail.saveCaptureIfMissing(widget.mediaPath, fb).then((done) {
+      _capturing = false;
+      if (done) {
+        _wantCapture = false;
+        _loadingShot = null;
+      } else {
+        _captureClock -= _afterTape; // pantalla lisa: probar de nuevo en un rato
+      }
+    });
   }
 
   // --- Entrada ---------------------------------------------------------------

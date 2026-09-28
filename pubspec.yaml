@@ -22,6 +22,7 @@ dependencies:
   archive: ^4.0.2
   flutter_soloud: ^4.0.4
   wakelock_plus: ^1.2.10
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:

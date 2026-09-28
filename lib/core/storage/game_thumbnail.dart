@@ -16,7 +16,8 @@ import 'package:path_provider/path_provider.dart';
 ///   juego ([saveCaptureIfMissing]). Sin eso, la UI muestra el ícono genérico.
 ///
 /// Caché en `<appSupport>/thumbs/`: `<nombre>.scr` (6912 bytes; vacío = el archivo
-/// no tiene pantalla) y `<nombre>.rgba` (captura 256×192 RGBA). Imagen decodificada
+/// no tiene pantalla), `<nombre>.net.scr` (pantalla de ZXDB) y `<nombre>.rgba`
+/// (captura 256×192 RGBA). Prioridad: archivo > ZXDB > captura. Imagen decodificada
 /// en memoria.
 class GameThumbnail {
   static const screenSize = 6912;
@@ -30,7 +31,7 @@ class GameThumbnail {
     if (_memory.containsKey(gamePath)) return Future.value(_memory[gamePath]);
     return _pending.putIfAbsent(gamePath, () async {
       try {
-        final screen = await _screenFor(gamePath);
+        final screen = await _screenFor(gamePath) ?? await _netScreen(gamePath);
         ui.Image? image;
         if (screen != null) {
           image = await _render(screen);
@@ -55,36 +56,73 @@ class GameThumbnail {
   /// Borra la caché de un juego (al quitarlo de la biblioteca).
   static Future<void> forget(String gamePath) async {
     _memory.remove(gamePath)?.dispose();
-    for (final ext in const ['scr', 'rgba']) {
+    for (final ext in const ['scr', 'net.scr', 'rgba']) {
       try {
         await (await _cacheFile(gamePath, ext)).delete();
       } catch (_) {}
     }
   }
 
+  /// true si el juego no trae pantalla propia ni tiene captura todavía.
+  static Future<bool> needsCapture(String gamePath) async {
+    try {
+      if (await _screenFor(gamePath) != null) return false;
+      if (await _netScreen(gamePath) != null) return false;
+      return !await (await _cacheFile(gamePath, 'rgba')).exists();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Colores distintos (hasta [max]) en la zona de papel del framebuffer RGBA
+  /// 320×256: 1 = pantalla lisa (carga en negro), 2 = texto, 3+ = imagen.
+  static int paperColours(Uint8List framebuffer, [int max = 3]) {
+    final words = framebuffer.buffer.asUint32List(framebuffer.offsetInBytes, framebuffer.length ~/ 4);
+    final colours = <int>{};
+    for (var y = 32; y < 224; y++) {
+      for (var x = 32; x < 288; x += 3) {
+        colours.add(words[y * 320 + x]);
+        if (colours.length >= max) return max;
+      }
+    }
+    return colours.length;
+  }
+
   /// Guarda la pantalla del emulador ([framebuffer] RGBA 320×256 con borde) como
   /// miniatura, solo si el archivo del juego no trae pantalla propia y aún no hay
-  /// captura. Se descartan pantallas lisas (salir durante una carga en negro).
-  static Future<void> saveCaptureIfMissing(String gamePath, Uint8List framebuffer) async {
+  /// captura. Se descartan pantallas lisas: devuelve false para que se reintente;
+  /// true = guardada o no hace falta.
+  static Future<bool> saveCaptureIfMissing(String gamePath, Uint8List framebuffer) async {
     try {
-      if (await _screenFor(gamePath) != null) return;
+      if (!await needsCapture(gamePath)) return true;
+      if (paperColours(framebuffer, 2) < 2) return false;
       final file = await _cacheFile(gamePath, 'rgba');
-      if (await file.exists()) return;
       // Zona de papel: 256×192 desde (32, 32) en el framebuffer de 320×256.
       final crop = Uint8List(_captureSize);
       for (var y = 0; y < 192; y++) {
         final src = ((y + 32) * 320 + 32) * 4;
         crop.setRange(y * 1024, y * 1024 + 1024, framebuffer, src);
       }
-      final colours = <int>{};
-      final words = crop.buffer.asUint32List();
-      for (var i = 0; i < words.length && colours.length < 3; i += 97) {
-        colours.add(words[i]);
-      }
-      if (colours.length < 3) return;
       await file.writeAsBytes(crop, flush: true);
       _memory.remove(gamePath)?.dispose();
-    } catch (_) {}
+      return true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Pantalla de carga bajada de ZXDB (ver GameInfoService): se usa si el archivo
+  /// no trae una propia, antes que la captura del emulador.
+  static Future<void> saveNetScreen(String gamePath, Uint8List screen) async {
+    await (await _cacheFile(gamePath, 'net.scr')).writeAsBytes(screen, flush: true);
+    _memory.remove(gamePath)?.dispose();
+  }
+
+  static Future<Uint8List?> _netScreen(String gamePath) async {
+    final f = await _cacheFile(gamePath, 'net.scr');
+    if (!await f.exists()) return null;
+    final bytes = await f.readAsBytes();
+    return bytes.length == screenSize ? bytes : null;
   }
 
   static Future<File> _cacheFile(String gamePath, [String ext = 'scr']) async {
