@@ -16,8 +16,10 @@ class AppSettings {
     final s = AppSettings();
     s.model = ZxModel.values[(p.getInt('model') ?? ZxModel.k128.index)
         .clamp(0, ZxModel.values.length - 1)];
-    s.joyMapping = JoyMapping.values[(p.getInt('joy_mapping') ?? 0)
-        .clamp(0, JoyMapping.values.length - 1)];
+    // 'joy_mapping' (índice) era el formato antiguo: Kempston, Sinclair, Cursor, QAOP.
+    const legacy = [JoyMapping.kempston, JoyMapping.sinclair1, JoyMapping.cursor, JoyMapping.keyboard];
+    s.joyMapping = JoyMapping.byName(p.getString('joy_type')) ??
+        legacy[(p.getInt('joy_mapping') ?? 0).clamp(0, legacy.length - 1)];
     s.quickLoad = p.getBool('quick_load') ?? true;
     s.vibration = p.getBool('vibration') ?? true;
     s.keepScreenOn = p.getBool('keep_screen_on') ?? true;
@@ -29,7 +31,7 @@ class AppSettings {
   Future<void> save() async {
     final p = await SharedPreferences.getInstance();
     await p.setInt('model', model.index);
-    await p.setInt('joy_mapping', joyMapping.index);
+    await p.setString('joy_type', joyMapping.name);
     await p.setBool('quick_load', quickLoad);
     await p.setBool('vibration', vibration);
     await p.setBool('keep_screen_on', keepScreenOn);

@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../emulator/zx_types.dart';
+import 'media_db.dart';
 
 /// Error al importar: [extension] es null si el .zip no trae ningún juego.
 class GameImportException implements Exception {
@@ -52,8 +53,32 @@ class GameLibrary {
       throw GameImportException(extensionOf(name));
     }
     final file = File('${(await _dir()).path}/$name');
-    await file.writeAsBytes(data, flush: true);
+    // Mismo nombre con otro contenido: lo guardado del anterior ya no vale.
+    if (await file.exists() && !_same(await file.readAsBytes(), data)) {
+      await MediaDb.delete(file.path);
+    }
+    // Temporal + renombrar: la lista puede estar leyendo el archivo (miniatura,
+    // huella para ZXDB) y no debe verlo a medio escribir.
+    final tmp = File('${file.path}.part');
+    await tmp.writeAsBytes(data, flush: true);
+    await tmp.rename(file.path);
     return file.path;
+  }
+
+  /// Quita un juego de la biblioteca con todo lo guardado sobre él.
+  static Future<void> delete(String path) async {
+    try {
+      await File(path).delete();
+    } catch (_) {}
+    await MediaDb.delete(path);
+  }
+
+  static bool _same(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   /// Juegos guardados, del más reciente al más antiguo.

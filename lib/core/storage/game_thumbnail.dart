@@ -5,20 +5,19 @@ import 'dart:ui' as ui;
 
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
+
+import 'media_db.dart';
 
 /// Miniaturas de juegos a partir de su pantalla del Spectrum (6912 bytes: 6144 de
 /// píxeles + 768 de atributos, lo que el ROM guarda en $4000):
 /// - .tap / .tzx: la pantalla de carga (SCREEN$). Lógica portada de easytape-app.
 /// - .sna / .z80 / .szx: la RAM del snapshot (respetando la pantalla sombra del 128K).
 /// - Si el archivo no trae pantalla extraíble (.dsk, .csw, cintas con la pantalla
-///   cifrada o comprimida), se usa la última pantalla del emulador al salir del
-///   juego ([saveCaptureIfMissing]). Sin eso, la UI muestra el ícono genérico.
+///   cifrada o comprimida): la pantalla de carga de ZXDB (GameInfoService) o, sin
+///   ella, la captura del emulador al terminar la carga ([saveCaptureIfMissing]).
 ///
-/// Caché en `<appSupport>/thumbs/`: `<nombre>.scr` (6912 bytes; vacío = el archivo
-/// no tiene pantalla), `<nombre>.net.scr` (pantalla de ZXDB) y `<nombre>.rgba`
-/// (captura 256×192 RGBA). Prioridad: archivo > ZXDB > captura. Imagen decodificada
-/// en memoria.
+/// Todo se guarda en [MediaDb] (file_screen, net_screen, capture). Prioridad:
+/// archivo > ZXDB > captura. Imagen decodificada en memoria.
 class GameThumbnail {
   static const screenSize = 6912;
   static final Map<String, ui.Image?> _memory = {};
@@ -36,11 +35,8 @@ class GameThumbnail {
         if (screen != null) {
           image = await _render(screen);
         } else {
-          final capture = await _cacheFile(gamePath, 'rgba');
-          if (await capture.exists()) {
-            final rgba = await capture.readAsBytes();
-            if (rgba.length == _captureSize) image = await _decode(rgba);
-          }
+          final rgba = (await MediaDb.get(gamePath, ['capture']))?['capture'] as Uint8List?;
+          if (rgba != null && rgba.length == _captureSize) image = await _decode(rgba);
         }
         _memory[gamePath] = image;
         return image;
@@ -53,22 +49,15 @@ class GameThumbnail {
     });
   }
 
-  /// Borra la caché de un juego (al quitarlo de la biblioteca).
-  static Future<void> forget(String gamePath) async {
-    _memory.remove(gamePath)?.dispose();
-    for (final ext in const ['scr', 'net.scr', 'rgba']) {
-      try {
-        await (await _cacheFile(gamePath, ext)).delete();
-      } catch (_) {}
-    }
-  }
+  /// Olvida la imagen en memoria (la fila de la base la borra GameLibrary).
+  static void forget(String gamePath) => _memory.remove(gamePath)?.dispose();
 
   /// true si el juego no trae pantalla propia ni tiene captura todavía.
   static Future<bool> needsCapture(String gamePath) async {
     try {
       if (await _screenFor(gamePath) != null) return false;
-      if (await _netScreen(gamePath) != null) return false;
-      return !await (await _cacheFile(gamePath, 'rgba')).exists();
+      final row = await MediaDb.get(gamePath, ['net_screen', 'capture']);
+      return row?['net_screen'] == null && row?['capture'] == null;
     } catch (_) {
       return false;
     }
@@ -89,21 +78,20 @@ class GameThumbnail {
   }
 
   /// Guarda la pantalla del emulador ([framebuffer] RGBA 320×256 con borde) como
-  /// miniatura, solo si el archivo del juego no trae pantalla propia y aún no hay
-  /// captura. Se descartan pantallas lisas: devuelve false para que se reintente;
-  /// true = guardada o no hace falta.
+  /// miniatura, solo si el juego no tiene otra pantalla ni captura. Se descartan
+  /// pantallas lisas: devuelve false para que se reintente; true = guardada o no
+  /// hace falta.
   static Future<bool> saveCaptureIfMissing(String gamePath, Uint8List framebuffer) async {
     try {
       if (!await needsCapture(gamePath)) return true;
       if (paperColours(framebuffer, 2) < 2) return false;
-      final file = await _cacheFile(gamePath, 'rgba');
       // Zona de papel: 256×192 desde (32, 32) en el framebuffer de 320×256.
       final crop = Uint8List(_captureSize);
       for (var y = 0; y < 192; y++) {
         final src = ((y + 32) * 320 + 32) * 4;
         crop.setRange(y * 1024, y * 1024 + 1024, framebuffer, src);
       }
-      await file.writeAsBytes(crop, flush: true);
+      await MediaDb.put(gamePath, {'capture': crop});
       _memory.remove(gamePath)?.dispose();
       return true;
     } catch (_) {
@@ -114,36 +102,24 @@ class GameThumbnail {
   /// Pantalla de carga bajada de ZXDB (ver GameInfoService): se usa si el archivo
   /// no trae una propia, antes que la captura del emulador.
   static Future<void> saveNetScreen(String gamePath, Uint8List screen) async {
-    await (await _cacheFile(gamePath, 'net.scr')).writeAsBytes(screen, flush: true);
+    await MediaDb.put(gamePath, {'net_screen': screen});
     _memory.remove(gamePath)?.dispose();
   }
 
   static Future<Uint8List?> _netScreen(String gamePath) async {
-    final f = await _cacheFile(gamePath, 'net.scr');
-    if (!await f.exists()) return null;
-    final bytes = await f.readAsBytes();
-    return bytes.length == screenSize ? bytes : null;
+    final bytes = (await MediaDb.get(gamePath, ['net_screen']))?['net_screen'] as Uint8List?;
+    return bytes != null && bytes.length == screenSize ? bytes : null;
   }
 
-  static Future<File> _cacheFile(String gamePath, [String ext = 'scr']) async {
-    final dir = Directory('${(await getApplicationSupportDirectory()).path}/thumbs');
-    await dir.create(recursive: true);
-    final name = gamePath.split(RegExp(r'[\\/]')).last;
-    return File('${dir.path}/$name.$ext');
-  }
-
-  /// Pantalla desde la caché, o extraída del archivo del juego. Un archivo vacío
-  /// en la caché marca "este juego no tiene pantalla" para no volver a buscar.
+  /// Pantalla del archivo: de la base o, la primera vez, extraída del archivo.
+  /// Vacía en la base = "este archivo no trae pantalla" (no se vuelve a buscar).
   static Future<Uint8List?> _screenFor(String gamePath) async {
-    final cache = await _cacheFile(gamePath);
-    if (await cache.exists()) {
-      final bytes = await cache.readAsBytes();
-      return bytes.length == screenSize ? bytes : null;
-    }
+    final cached = (await MediaDb.get(gamePath, ['file_screen']))?['file_screen'] as Uint8List?;
+    if (cached != null) return cached.length == screenSize ? cached : null;
     final data = await File(gamePath).readAsBytes();
     final ext = gamePath.split('.').last.toLowerCase();
     final screen = extractScreen(ext, data);
-    await cache.writeAsBytes(screen ?? Uint8List(0), flush: true);
+    await MediaDb.put(gamePath, {'file_screen': screen ?? Uint8List(0)});
     return screen;
   }
 

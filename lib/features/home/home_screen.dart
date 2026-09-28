@@ -112,6 +112,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final t = context.l10n;
     try {
       final path = await GameLibrary.import(name, bytes);
+      GameThumbnail.forget(path);
+      GameInfoService.forget(path);
       await _play(path: path);
     } on GameImportException catch (e) {
       _snack(e.extension == null ? t.zipWithoutGame : t.unsupportedFormat(e.extension!));
@@ -135,11 +137,9 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     if (ok == true) {
-      try {
-        await f.delete();
-        await GameThumbnail.forget(f.path);
-        await GameInfoService.forget(f.path);
-      } catch (_) {}
+      await GameLibrary.delete(f.path);
+      GameThumbnail.forget(f.path);
+      GameInfoService.forget(f.path);
       _refresh();
     }
   }

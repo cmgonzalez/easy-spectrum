@@ -52,7 +52,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final s = _s;
     final t = context.l10n;
-    String joyLabel(JoyMapping m) => m == JoyMapping.qaop ? t.joyQaop : m.label;
+    String joyLabel(JoyMapping m) => m == JoyMapping.keyboard ? t.joyQaop : m.label;
     return Scaffold(
       appBar: AppBar(title: Text(t.settings)),
       body: s == null
@@ -81,7 +81,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.sports_esports_rounded, size: 32),
                   title: Text(t.joystickType),
-                  subtitle: Text(joyLabel(s.joyMapping)),
+                  subtitle: Text('${joyLabel(s.joyMapping)}\n${t.joystickTypeNote}'),
+                  isThreeLine: true,
                   onTap: () async {
                     final v = await _choose(
                         t.joystick, JoyMapping.values, joyLabel, s.joyMapping);

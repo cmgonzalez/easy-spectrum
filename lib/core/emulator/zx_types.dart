@@ -38,23 +38,63 @@ class ZxKey {
   static const space = 0x0701, sym = 0x0702, m = 0x0704, n = 0x0708, b = 0x0710;
 }
 
-/// Cómo se traduce el joystick en pantalla a la máquina.
+/// Teclado del Spectrum por filas, como en la máquina (para elegir teclas).
+const zxKeyRows = <List<int>>[
+  [ZxKey.k1, ZxKey.k2, ZxKey.k3, ZxKey.k4, ZxKey.k5, ZxKey.k6, ZxKey.k7, ZxKey.k8, ZxKey.k9, ZxKey.k0],
+  [ZxKey.q, ZxKey.w, ZxKey.e, ZxKey.r, ZxKey.t, ZxKey.y, ZxKey.u, ZxKey.i, ZxKey.o, ZxKey.p],
+  [ZxKey.a, ZxKey.s, ZxKey.d, ZxKey.f, ZxKey.g, ZxKey.h, ZxKey.j, ZxKey.k, ZxKey.l, ZxKey.enter],
+  [ZxKey.caps, ZxKey.z, ZxKey.x, ZxKey.c, ZxKey.v, ZxKey.b, ZxKey.n, ZxKey.m, ZxKey.sym, ZxKey.space],
+];
+
+const _zxKeyLabels = <String>[
+  '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', //
+  'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P',
+  'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'ENTER',
+  'CAPS', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', 'SYM', 'SPACE',
+];
+
+/// Nombre corto de una tecla ('Q', 'ENTER', 'CAPS', 'SYM', 'SPACE').
+String zxKeyLabel(int key) {
+  var i = 0;
+  for (final row in zxKeyRows) {
+    for (final k in row) {
+      if (k == key) return _zxKeyLabels[i];
+      i++;
+    }
+  }
+  return '?';
+}
+
+/// Teclas por defecto del control "Teclado": [arriba, abajo, izquierda, derecha, fuego].
+const defaultPadKeys = [ZxKey.q, ZxKey.a, ZxKey.o, ZxKey.p, ZxKey.m];
+
+/// Cómo se traduce el joystick en pantalla a la máquina. Se guarda por nombre.
 enum JoyMapping {
   kempston('Kempston'),
-  sinclair('Sinclair (6-7-8-9-0)'),
+  sinclair1('Sinclair 1 (6-7-8-9-0)'),
+  sinclair2('Sinclair 2 (1-2-3-4-5)'),
   cursor('Cursor (5-6-7-8-0)'),
-  qaop('Q-A-O-P + Space'); // la UI usa AppLocalizations.joyQaop
+  keyboard('Q-A-O-P-M'); // la UI usa AppLocalizations.joyKeyboard
 
   const JoyMapping(this.label);
   final String label;
 
-  /// Teclas para cada dirección [up, down, left, right, fire]; null = usar joystick.
+  /// Teclas para [arriba, abajo, izquierda, derecha, fuego]; null = joystick Kempston.
+  /// Para [keyboard] son las de por defecto (la configuración de cada juego manda).
   List<int>? get keys => switch (this) {
         JoyMapping.kempston => null,
-        JoyMapping.sinclair => const [ZxKey.k9, ZxKey.k8, ZxKey.k6, ZxKey.k7, ZxKey.k0],
+        JoyMapping.sinclair1 => const [ZxKey.k9, ZxKey.k8, ZxKey.k6, ZxKey.k7, ZxKey.k0],
+        JoyMapping.sinclair2 => const [ZxKey.k4, ZxKey.k3, ZxKey.k1, ZxKey.k2, ZxKey.k5],
         JoyMapping.cursor => const [ZxKey.k7, ZxKey.k6, ZxKey.k5, ZxKey.k8, ZxKey.k0],
-        JoyMapping.qaop => const [ZxKey.q, ZxKey.a, ZxKey.o, ZxKey.p, ZxKey.space],
+        JoyMapping.keyboard => defaultPadKeys,
       };
+
+  static JoyMapping? byName(String? name) {
+    for (final m in values) {
+      if (m.name == name) return m;
+    }
+    return null;
+  }
 }
 
 /// Extensiones que acepta el emulador.

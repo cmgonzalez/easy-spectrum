@@ -67,7 +67,7 @@
   "errUnsupportedFormat": "Formato de archivo no soportado.",
   "errMachineFailed": "No se pudo iniciar la máquina.",
   "errOpenFailed": "No se pudo abrir el archivo.",
-  "fire": "FUEGO",
+  "fire": "Fuego",
   "space": "ESPACIO",
   "machine": "Máquina",
   "spectrumModel": "Modelo de Spectrum",
@@ -83,9 +83,9 @@
   "quickLoad": "Carga rápida de cintas",
   "quickLoadSubtitle": "Las cintas cargan mucho más rápido",
   "controls": "Controles",
-  "joystickType": "Tipo de joystick",
+  "joystickType": "Control por defecto",
   "joystick": "Joystick",
-  "joyQaop": "Teclas Q-A-O-P + Espacio",
+  "joyQaop": "Teclado (Q-A-O-P-M)",
   "startWithKeyboard": "Empezar con el teclado",
   "startWithKeyboardSubtitle": "Si no, se muestra el mando",
   "vibration": "Vibrar al pulsar",
@@ -106,5 +106,27 @@
   "formatTapes": "Cintas",
   "formatDisks": "Discos +3",
   "formatZip": "También dentro de archivos .zip",
-  "turboLoading": "Cargando cinta a alta velocidad"
+  "turboLoading": "Cargando cinta a alta velocidad",
+  "joystickTypeNote": "Cada juego puede tener el suyo (botón rojo del mando)",
+  "joyKeyboard": "Teclado",
+  "padConfig": "Configurar control",
+  "padConfigNote": "Se guarda para este juego",
+  "controlType": "Tipo de control",
+  "padKeys": "Teclas",
+  "dirUp": "Arriba",
+  "dirDown": "Abajo",
+  "dirLeft": "Izquierda",
+  "dirRight": "Derecha",
+  "extraButtons": "Botones extra",
+  "extraButton": "Botón {n}",
+  "chooseKey": "Elige una tecla",
+  "padReset": "Restablecer",
+  "padDone": "Listo",
+  "@extraButton": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  }
 }

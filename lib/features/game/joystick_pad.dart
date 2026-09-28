@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/emulator/zx_types.dart';
 import '../../core/l10n.dart';
+import 'pad_config_sheet.dart';
 import 'skin.dart';
 
 /// Geometría medida sobre la imagen original del mando (art/, 1536×1024). El asset lo
@@ -19,28 +20,53 @@ const _fireRadius = 128.0; // tapa del botón
 const _fireReach = 240.0;
 const _lcd = Rect.fromLTRB(484, 752, 1038, 858);
 
-/// Botones de colores → teclas 1-4 (las de los menús "1 teclado, 2 Kempston…").
-const _buttons = <(Rect, int, String)>[
-  (Rect.fromLTRB(813, 192, 949, 287), ZxKey.k1, '1'),
-  (Rect.fromLTRB(962, 191, 1098, 287), ZxKey.k2, '2'),
-  (Rect.fromLTRB(1110, 191, 1247, 287), ZxKey.k3, '3'),
-  (Rect.fromLTRB(1259, 191, 1397, 287), ZxKey.k4, '4'),
+/// Botones de colores = acciones del mando (ver [PadAction]).
+const _buttons = <Rect>[
+  Rect.fromLTRB(813, 192, 949, 287),
+  Rect.fromLTRB(962, 191, 1098, 287),
+  Rect.fromLTRB(1110, 191, 1247, 287),
+  Rect.fromLTRB(1259, 191, 1397, 287),
 ];
 
-enum _Zone { dpad, fire, key }
+/// Botones extra (hasta 3), en el hueco entre los pozos de la cruceta y del fuego
+/// (x ≈ 567..963): 1 grande al centro, 2 lado a lado o 3 en triángulo. Se miran
+/// antes que la cruceta y el fuego, cuyos radios de toque llegan hasta aquí.
+List<(Offset, double)> _extraLayout(int n) => switch (n) {
+      1 => const [(Offset(765, 525), 88.0)],
+      2 => const [(Offset(683, 525), 74.0), (Offset(847, 525), 74.0)],
+      3 => const [(Offset(688, 440), 70.0), (Offset(842, 440), 70.0), (Offset(765, 600), 70.0)],
+      _ => const [],
+    };
+
+/// Acciones de los botones de colores, en orden: rojo, amarillo, verde, azul.
+enum PadAction {
+  config(Icons.sports_esports_rounded), // configurar el control
+  settings(Icons.settings_rounded), // ajustes de la app
+  keyboard(Icons.keyboard_rounded), // cambiar al teclado
+  exit(Icons.format_list_bulleted_rounded); // volver a la lista
+
+  const PadAction(this.icon);
+  final IconData icon;
+}
+
+enum _Zone { dpad, fire, key, action }
 
 /// Mando dibujado con la imagen: cruceta roja (8 direcciones, se puede deslizar),
-/// botón redondo = FUEGO, botones de colores = teclas 1-4 y la pantalla LCD
-/// partida en ENTER | ESPACIO.
+/// botón redondo = FUEGO, botones de colores = [PadAction], botones extra con la
+/// tecla que se les asignó y la pantalla LCD partida en ENTER | ESPACIO.
 class JoystickPad extends StatefulWidget {
   final void Function(int mask) onJoystick;
   final void Function(int code, bool pressed) onKey;
+  final void Function(PadAction action) onAction;
+  final List<int> extraKeys;
   final bool haptics;
 
   const JoystickPad({
     super.key,
     required this.onJoystick,
     required this.onKey,
+    required this.onAction,
+    this.extraKeys = const [],
     this.haptics = true,
   });
 
@@ -51,10 +77,11 @@ class JoystickPad extends StatefulWidget {
 }
 
 class _JoystickPadState extends State<JoystickPad> {
-  final Map<int, (_Zone, int)> _pointers = {}; // puntero → zona (+ tecla)
+  final Map<int, (_Zone, int)> _pointers = {}; // puntero → zona (+ tecla / acción)
   int _dir = 0;
   bool _fire = false;
   final Set<int> _keysDown = {};
+  final Set<int> _actionsDown = {};
 
   void _emit() => widget.onJoystick(_dir | (_fire ? ZxJoy.fire : 0));
 
@@ -97,10 +124,15 @@ class _JoystickPadState extends State<JoystickPad> {
   }
 
   (_Zone, int)? _zoneAt(Offset p) {
+    final extras = _extraLayout(widget.extraKeys.length);
+    for (var i = 0; i < extras.length; i++) {
+      final (c, r) = extras[i];
+      if ((p - c).distance <= r + 12) return (_Zone.key, widget.extraKeys[i]);
+    }
     if ((p - _dpadCenter).distance <= _dpadReach) return (_Zone.dpad, 0);
     if ((p - _fireCenter).distance <= _fireReach) return (_Zone.fire, 0);
-    for (final (r, code, _) in _buttons) {
-      if (r.inflate(18).contains(p)) return (_Zone.key, code);
+    for (var i = 0; i < _buttons.length; i++) {
+      if (_buttons[i].inflate(18).contains(p)) return (_Zone.action, i);
     }
     if (_lcd.inflate(18).contains(p)) {
       return (_Zone.key, p.dx < _lcd.center.dx ? ZxKey.enter : ZxKey.space);
@@ -119,6 +151,9 @@ class _JoystickPadState extends State<JoystickPad> {
         _setFire(true);
       case _Zone.key:
         _setKey(z.$2, true);
+      case _Zone.action:
+        if (widget.haptics) HapticFeedback.selectionClick();
+        setState(() => _actionsDown.add(z.$2));
     }
   }
 
@@ -137,6 +172,10 @@ class _JoystickPadState extends State<JoystickPad> {
         _setFire(false);
       case _Zone.key:
         _setKey(z.$2, false);
+      case _Zone.action:
+        // Al soltar: la acción puede abrir un panel o cambiar de pantalla.
+        setState(() => _actionsDown.remove(z.$2));
+        widget.onAction(PadAction.values[z.$2]);
     }
   }
 
@@ -151,6 +190,8 @@ class _JoystickPadState extends State<JoystickPad> {
         dir: _dir,
         fire: _fire,
         keys: {..._keysDown},
+        actions: {..._actionsDown},
+        extras: [for (final k in widget.extraKeys) (k, zxKeyName(context, k))],
         space: context.l10n.space,
       ),
     );
@@ -161,26 +202,90 @@ class _PadOverlay extends SkinPainter {
   final int dir;
   final bool fire;
   final Set<int> keys;
+  final Set<int> actions;
+  final List<(int, String)> extras; // (tecla, rótulo)
   final String space;
-  _PadOverlay({required this.dir, required this.fire, required this.keys, required this.space});
+  _PadOverlay({
+    required this.dir,
+    required this.fire,
+    required this.keys,
+    required this.actions,
+    required this.extras,
+    required this.space,
+  });
 
   static const _lcdInk = Color(0xFF263022);
 
-  void _label(Canvas canvas, String text, Offset center, double size, Color color) {
+  void _text(Canvas canvas, String text, Offset center, TextStyle style, {double? maxWidth}) {
     final tp = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          fontSize: size,
-          fontWeight: FontWeight.w900,
-          color: color,
-          letterSpacing: size * 0.08,
-          fontFamily: 'monospace',
-        ),
-      ),
+      text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,
     )..layout();
+    if (maxWidth != null && tp.width > maxWidth) {
+      // Rótulos largos (ENTER, SPACE…): se encogen para caber en el botón.
+      final k = maxWidth / tp.width;
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.scale(k);
+      tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
+      canvas.restore();
+      return;
+    }
     tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+  }
+
+  void _label(Canvas canvas, String text, Offset center, double size, Color color, {double? maxWidth}) =>
+      _text(
+          canvas,
+          text,
+          center,
+          TextStyle(
+            fontSize: size,
+            fontWeight: FontWeight.w900,
+            color: color,
+            letterSpacing: size * 0.08,
+            fontFamily: 'monospace',
+          ),
+          maxWidth: maxWidth);
+
+  void _icon(Canvas canvas, IconData icon, Offset center, double size, Color color) => _text(
+        canvas,
+        String.fromCharCode(icon.codePoint),
+        center,
+        TextStyle(
+          fontSize: size,
+          color: color,
+          fontFamily: icon.fontFamily,
+          package: icon.fontPackage,
+          height: 1,
+        ),
+      );
+
+  /// Botón extra: redondo y oscuro como el de fuego, con la tecla escrita.
+  void _extraButton(Canvas canvas, Offset c, double r, String label, bool pressed) {
+    canvas.drawCircle(c + const Offset(0, 6), r + 4, Paint()..color = Colors.black.withValues(alpha: 0.55));
+    canvas.drawCircle(c, r + 6, Paint()..color = const Color(0xFF141517));
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.3, -0.4),
+          colors: pressed
+              ? const [Color(0xFF2A2D31), Color(0xFF16181A)]
+              : const [Color(0xFF55595F), Color(0xFF2A2C30)],
+        ).createShader(Rect.fromCircle(center: c, radius: r)),
+    );
+    if (pressed) {
+      canvas.drawCircle(
+          c,
+          r + 3,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 8
+            ..color = const Color(0xFF00C8D8));
+    }
+    _label(canvas, label, c, r * 0.72, Colors.white.withValues(alpha: 0.92), maxWidth: r * 1.6);
   }
 
   @override
@@ -216,12 +321,19 @@ class _PadOverlay extends SkinPainter {
             ..color = const Color(0xFFE8322B));
     }
 
-    // Botones de colores con su número.
-    for (final (r, code, label) in _buttons) {
-      if (keys.contains(code)) {
+    // Botones de colores con el ícono de su acción.
+    for (var i = 0; i < _buttons.length; i++) {
+      final r = _buttons[i];
+      if (actions.contains(i)) {
         canvas.drawRRect(RRect.fromRectAndRadius(r.deflate(8), const Radius.circular(14)), glow);
       }
-      _label(canvas, label, r.center, 52, Colors.white.withValues(alpha: 0.9));
+      _icon(canvas, PadAction.values[i].icon, r.center, 64, Colors.white.withValues(alpha: 0.92));
+    }
+
+    // Botones extra.
+    final layout = _extraLayout(extras.length);
+    for (var i = 0; i < extras.length; i++) {
+      _extraButton(canvas, layout[i].$1, layout[i].$2, extras[i].$2, keys.contains(extras[i].$1));
     }
 
     // LCD: ENTER | ESPACIO, con la mitad pulsada en negativo.
@@ -242,5 +354,12 @@ class _PadOverlay extends SkinPainter {
 
   @override
   bool shouldRepaint(_PadOverlay old) =>
-      geometryChanged(old) || old.dir != dir || old.fire != fire || !setEquals(old.keys, keys) || old.space != space;
+      geometryChanged(old) ||
+      old.dir != dir ||
+      old.fire != fire ||
+      !setEquals(old.keys, keys) ||
+      !setEquals(old.actions, actions) ||
+      old.extras.length != extras.length ||
+      !Iterable.generate(extras.length).every((i) => old.extras[i] == extras[i]) ||
+      old.space != space;
 }

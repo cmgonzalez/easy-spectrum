@@ -4,9 +4,9 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'game_thumbnail.dart';
+import 'media_db.dart';
 
 /// Ficha de un juego según ZXDB (vía la API de ZXInfo).
 class GameInfo {
@@ -23,19 +23,6 @@ class GameInfo {
         if (publisher != null)
           publisher!.replaceAll(RegExp(r',?\s+(Ltd\.?|Limited|Inc\.?|S\.?A\.?|plc)$', caseSensitive: false), ''),
       ].join(' · ');
-
-  Map<String, Object?> toJson() =>
-      {'id': id, 'title': title, 'year': year, 'publisher': publisher, 'genre': genre};
-
-  static GameInfo? fromJson(Map<String, Object?> j) => j['id'] == null
-      ? null
-      : GameInfo(
-          id: j['id'] as int,
-          title: j['title'] as String,
-          year: j['year'] as int?,
-          publisher: j['publisher'] as String?,
-          genre: j['genre'] as String?,
-        );
 }
 
 /// Identifica los juegos por el MD5 del archivo en ZXDB (api.zxinfo.dk, gratuita,
@@ -43,8 +30,8 @@ class GameInfo {
 /// Solo reconoce volcados conocidos (WOS, TOSEC, Spectrum Computing…): la búsqueda
 /// por nombre no es fiable ("Cobra" da primero el de ZX81), así que no se usa.
 ///
-/// Caché en `<appSupport>/info/<juego>.json`; `{}` = no está en ZXDB (no se vuelve
-/// a preguntar). Los errores de red no se cachean: se reintenta en otra sesión.
+/// Se guarda en [MediaDb] (zxdb_status 0 = no está en ZXDB, no se vuelve a
+/// preguntar). Los errores de red no se guardan: se reintenta en otra sesión.
 class GameInfoService {
   static const _api = 'https://api.zxinfo.dk/v3';
   static const _media = 'https://zxinfo.dk/media';
@@ -64,14 +51,30 @@ class GameInfoService {
     if (_memory.containsKey(gamePath)) return Future.value(_memory[gamePath]);
     return _pending.putIfAbsent(gamePath, () async {
       try {
-        final file = await _cacheFile(gamePath);
-        if (await file.exists()) {
-          return _memory[gamePath] =
-              GameInfo.fromJson(jsonDecode(await file.readAsString()) as Map<String, Object?>);
+        final row = await MediaDb.get(
+            gamePath, ['zxdb_status', 'zxdb_id', 'title', 'year', 'publisher', 'genre']);
+        final status = row?['zxdb_status'] as int?;
+        if (status != null) {
+          return _memory[gamePath] = status == 1
+              ? GameInfo(
+                  id: row!['zxdb_id'] as int,
+                  title: row['title'] as String,
+                  year: row['year'] as int?,
+                  publisher: row['publisher'] as String?,
+                  genre: row['genre'] as String?,
+                )
+              : null;
         }
         if (!enabled) return null; // sin guardar en memoria: al activarlo se consulta
         final info = await _fetch(gamePath);
-        await file.writeAsString(jsonEncode(info?.toJson() ?? {}), flush: true);
+        await MediaDb.put(gamePath, {
+          'zxdb_status': info == null ? 0 : 1,
+          'zxdb_id': info?.id,
+          'title': info?.title,
+          'year': info?.year,
+          'publisher': info?.publisher,
+          'genre': info?.genre,
+        });
         return _memory[gamePath] = info;
       } catch (e) {
         debugPrint('ZXInfo: $e');
@@ -82,23 +85,16 @@ class GameInfoService {
     });
   }
 
-  static Future<void> forget(String gamePath) async {
-    _memory.remove(gamePath);
-    try {
-      await (await _cacheFile(gamePath)).delete();
-    } catch (_) {}
-  }
-
-  static Future<File> _cacheFile(String gamePath) async {
-    final dir = Directory('${(await getApplicationSupportDirectory()).path}/info');
-    await dir.create(recursive: true);
-    final name = gamePath.split(RegExp(r'[\\/]')).last;
-    return File('${dir.path}/$name.json');
-  }
+  /// Olvida la ficha en memoria (la fila de la base la borra GameLibrary).
+  static void forget(String gamePath) => _memory.remove(gamePath);
 
   /// null = no está en ZXDB. Lanza excepción si falla la red.
   static Future<GameInfo?> _fetch(String gamePath) async {
-    final hash = md5.convert(await File(gamePath).readAsBytes()).toString();
+    final data = await File(gamePath).readAsBytes();
+    // Un archivo vacío coincide con entradas de ZXDB que traen archivos vacíos
+    // (p. ej. "Colours"): nunca identificar algo tan pequeño.
+    if (data.length < 256) return null;
+    final hash = md5.convert(data).toString();
     final check = await _getJson('$_api/filecheck/$hash');
     if (check == null) return null;
     final id = int.parse('${check['entry_id']}');

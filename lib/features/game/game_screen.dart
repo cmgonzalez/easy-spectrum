@@ -11,13 +11,16 @@ import '../../core/ads/ad_manager.dart';
 import '../../core/l10n.dart';
 import '../../core/emulator/zx_bridge.dart';
 import '../../core/emulator/zx_types.dart';
+import '../../core/pad_config.dart';
 import '../../core/settings.dart';
 import '../../core/storage/game_info.dart';
 import '../../core/storage/game_library.dart';
 import '../../core/storage/game_thumbnail.dart';
 import '../../core/theme/easy_theme.dart';
 import 'game_display.dart';
+import '../settings/settings_screen.dart';
 import 'joystick_pad.dart';
+import 'pad_config_sheet.dart';
 import 'zx_keyboard.dart';
 
 class GameScreen extends StatefulWidget {
@@ -43,6 +46,7 @@ class _GameScreenState extends State<GameScreen>
   final _alive = Completer<void>();
   late final Ticker _ticker;
   AppSettings _settings = AppSettings();
+  PadConfig _pad = PadConfig(type: JoyMapping.kempston);
 
   ui.Image? _frame;
   bool _frameBusy = false;
@@ -86,6 +90,7 @@ class _GameScreenState extends State<GameScreen>
 
   Future<void> _boot() async {
     _settings = await AppSettings.load();
+    _pad = await PadConfig.load(widget.mediaPath, _settings.joyMapping);
     _showKeyboard = widget.mediaPath.isEmpty || _settings.startWithKeyboard;
     if (_settings.keepScreenOn) WakelockPlus.enable();
 
@@ -237,7 +242,7 @@ class _GameScreenState extends State<GameScreen>
   void _onKey(int code, bool pressed) => _zx.setKey(code, pressed);
 
   void _onJoystick(int mask) {
-    final keys = _settings.joyMapping.keys;
+    final keys = _pad.directionKeys;
     if (keys == null) {
       _zx.setJoystick(mask);
     } else {
@@ -248,6 +253,61 @@ class _GameScreenState extends State<GameScreen>
       }
     }
     _joyMask = mask;
+  }
+
+  /// Suelta todo lo pulsado (al cambiar de controles o abrir un panel).
+  void _releaseInputs() {
+    _zx.clearKeys();
+    _onJoystick(0);
+  }
+
+  void _toggleInput() => setState(() {
+        _releaseInputs();
+        _showKeyboard = !_showKeyboard;
+      });
+
+  /// Botones de colores del mando.
+  void _onPadAction(PadAction action) {
+    switch (action) {
+      case PadAction.config:
+        _whilePaused(_configurePad);
+      case PadAction.settings:
+        _whilePaused(_openSettings);
+      case PadAction.keyboard:
+        _toggleInput();
+      case PadAction.exit:
+        _exit();
+    }
+  }
+
+  /// Pausa el juego mientras dura [task] (si no lo estaba ya).
+  Future<void> _whilePaused(Future<void> Function() task) async {
+    _releaseInputs();
+    final wasPaused = _paused;
+    if (!wasPaused) _setPaused(true);
+    await task();
+    if (mounted && !wasPaused && !_exiting) _setPaused(false);
+  }
+
+  Future<void> _configurePad() async {
+    final c = await showPadConfig(context, _pad, _settings.joyMapping);
+    if (c == null || !mounted) return;
+    setState(() => _pad = c);
+    await c.save(widget.mediaPath);
+  }
+
+  Future<void> _openSettings() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+    final s = await AppSettings.load();
+    // Sin configuración propia, el juego sigue el tipo de control de Ajustes.
+    final pad = await PadConfig.load(widget.mediaPath, s.joyMapping);
+    if (!mounted) return;
+    s.keepScreenOn ? WakelockPlus.enable() : WakelockPlus.disable();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    setState(() {
+      _settings = s;
+      _pad = pad;
+    });
   }
 
   // --- Ciclo de vida ---------------------------------------------------------
@@ -357,11 +417,7 @@ class _GameScreenState extends State<GameScreen>
                 keyboard: _showKeyboard,
                 onBack: _exit,
                 onPause: () => _setPaused(!_paused),
-                onToggleInput: () => setState(() {
-                  _zx.clearKeys();
-                  _onJoystick(0);
-                  _showKeyboard = !_showKeyboard;
-                }),
+                onToggleInput: _toggleInput,
                 onMenu: _showMenu,
               ),
               Expanded(
@@ -394,6 +450,8 @@ class _GameScreenState extends State<GameScreen>
                       : JoystickPad(
                           onJoystick: _onJoystick,
                           onKey: _onKey,
+                          onAction: _onPadAction,
+                          extraKeys: _pad.extraKeys,
                           haptics: _settings.vibration,
                         ),
                 ),

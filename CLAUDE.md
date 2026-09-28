@@ -88,12 +88,32 @@ lib/core/emulator/zx_types.dart    ZxModel, ZxKey (fila<<8|bit), ZxJoy, JoyMappi
 lib/core/settings.dart             AppSettings (SharedPreferences)
 lib/core/storage/game_library.dart juegos importados → <appDocs>/games (+ .zip)
 lib/core/storage/game_thumbnail.dart miniaturas de "Mis juegos" (pantalla del Spectrum)
+lib/core/storage/media_db.dart     base SQLite (sqflite) con todo lo de cada juego
+lib/core/pad_config.dart           configuración del mando por juego
 lib/features/game/                 game_screen (Ticker, reloj de pared), zx_keyboard, joystick_pad
 ```
 
+### Base de datos de medios (`MediaDb`, `<appSupport>/media.db`)
+Una fila por archivo de la biblioteca (clave = nombre del archivo; `<basic>` = sin medio):
+`file_screen` (pantalla sacada del archivo; vacía = no trae; NULL = sin mirar), `net_screen`
+(pantalla de ZXDB), `capture` (RGBA 256×192), `zxdb_status` (NULL sin consultar / 0 no está /
+1 encontrado) + `zxdb_id, title, year, publisher, genre`, y `pad` (JSON de `PadConfig`).
+Reemplazó las cachés en archivos (`thumbs/`, `info/`), que se borran al crear la base.
+`GameLibrary.import` escribe a `.part` y renombra (la lista no debe leer el archivo a medias:
+un archivo vacío tiene en ZXDB la huella de "Colours") y borra la fila si el contenido cambió;
+`GameLibrary.delete` borra archivo + fila.
+
+### Mando: botones de colores y configuración por juego
+Botones de colores = `PadAction`: rojo configurar control (`pad_config_sheet.dart`), amarillo
+Ajustes, verde teclado, azul volver a la lista. `PadConfig`: tipo (`JoyMapping`: Kempston,
+Sinclair 1 6-7-8-9-0, Sinclair 2 1-2-3-4-5, Cursor, Teclado con teclas propias, QAOPM por
+defecto) + hasta 3 botones extra con cualquier tecla, dibujados entre la cruceta y el fuego
+(1 grande, 2 lado a lado, 3 en triángulo; se miran antes que la cruceta y el fuego). Se guarda
+por juego en `MediaDb.pad`; sin configuración propia vale el "Control por defecto" de Ajustes
+(`joy_type` en SharedPreferences; `joy_mapping` era el índice del formato antiguo).
+
 ### Miniaturas de juegos (`GameThumbnail`)
-Pantalla de 6912 bytes ($4000) → imagen 256×192. Caché en `<appSupport>/thumbs/`:
-`<juego>.scr` (vacío = el archivo no trae pantalla) y `<juego>.rgba` (captura).
+Pantalla de 6912 bytes ($4000) → imagen 256×192. Guardadas en `MediaDb`.
 - `.tap`/`.tzx`: header Code en $4000 → seguro. Si no, candidatos (bloques ≥6912 con offsets
   1/0/2/3 —turbo 0x11 incluido—, 0x14 raw de 6912, pantalla partida 6144+768) filtrados por
   `_looksLikeScreen`: ≤64 atributos distintos, ≤25% FLASH y **coherencia vertical ≥0,45**
@@ -108,7 +128,7 @@ Pantalla de 6912 bytes ($4000) → imagen 256×192. Caché en `<appSupport>/thum
 
 - Loop: cada tick de vsync se llama `zx_run(delta real)`; delta >0,1 s se descarta (pausa).
 - Teclado: multitáctil con `Listener`; CAPS/SYM se fijan con un toque y se sueltan tras la siguiente tecla.
-- Joystick: Kempston (por defecto), Sinclair, Cursor o QAOP+Espacio (estos tres simulan teclas).
+- Joystick: ver "Mando: botones de colores y configuración por juego".
 - **Pieles** (`assets/skin/`, fuente en `art/` 11_32_04 teclado y 11_23_12 mando): `skin.dart`
   (`SkinView`) ajusta la imagen (contain), traduce toques a píxeles de la imagen y `SkinPainter`
   dibuja overlays en esas coordenadas. **Revisar el perfil de color de las imágenes nuevas**: la
@@ -136,10 +156,10 @@ Pantalla de 6912 bytes ($4000) → imagen 256×192. Caché en `<appSupport>/thum
 `lib/core/storage/game_info.dart` (`GameInfoService`): MD5 del archivo → `GET https://api.zxinfo.dk/v3/filecheck/<md5>`
 (404 = no está) → `GET /v3/games/<id>?mode=compact` → título, año, editor, género y `screens[]`.
 La pantalla de carga (`scrUrl`, .scr de 6912 bytes) se baja de `https://zxinfo.dk/media<scrUrl>` y va a
-`thumbs/<juego>.net.scr`. Prioridad de miniatura: pantalla del archivo > ZXDB > captura del emulador.
+`MediaDb.net_screen`. Prioridad de miniatura: pantalla del archivo > ZXDB > captura del emulador.
 - Solo por hash (volcados de WOS/TOSEC/Spectrum Computing). **No buscar por nombre**: "Cobra"
   devuelve primero el de ZX81. `api.zxinfo.dk` redirige (301) a `internal.zxinfo.dk`.
-- Caché `info/<juego>.json`; `{}` = no está en ZXDB. Errores de red no se cachean (se reintenta
+- Guardado en `MediaDb` (`zxdb_status` 0 = no está en ZXDB). Archivos < 256 bytes no se consultan. Errores de red no se cachean (se reintenta
   en la próxima sesión). Sin cuenta ni clave; User-Agent propio.
 - Miniatura automática sin red: `GameScreen._checkCapture` captura al terminar la primera carga
   (cinta parada 2 s; sin cinta, a los 15 s). Si la pantalla final es pobre (créditos en 2 colores)
