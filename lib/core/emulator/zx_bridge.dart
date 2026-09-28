@@ -58,6 +58,7 @@ class ZxBridge {
     _getTape = lib.lookupFunction<_IntRetN, _IntRet>('zx_get_tape_playing');
     _setQuick = lib.lookupFunction<_IntArgN, _IntArg>('zx_set_quickload');
     _setSpeed = lib.lookupFunction<_SpeedN, _Speed>('zx_set_speed');
+    _isTurbo = lib.lookupFunction<_IntRetN, _IntRet>('zx_is_turbo');
   }
 
   static final ZxBridge instance = ZxBridge._();
@@ -77,6 +78,7 @@ class ZxBridge {
   late final _IntRet _getTape;
   late final _IntArg _setQuick;
   late final _Speed _setSpeed;
+  late final _IntRet _isTurbo;
 
   Pointer<Void> _h = nullptr;
   Pointer<Int16>? _audioBuf;
@@ -200,6 +202,9 @@ class ZxBridge {
   set tapePlaying(bool v) {
     if (isRunning) _setTape(_h, v ? 1 : 0);
   }
+
+  /// true mientras la cinta carga en turbo (emulación acelerada y sin sonido).
+  bool get turbo => isRunning && _isTurbo(_h) != 0;
 
   void setSpeed(double multiplier) {
     if (isRunning) _setSpeed(_h, multiplier);

@@ -41,6 +41,7 @@ class _GameScreenState extends State<GameScreen>
   bool _autoPaused = false;
   bool _exiting = false;
   bool _showKeyboard = false;
+  bool _turbo = false;
   String? _error;
 
   Duration _lastTick = Duration.zero;
@@ -138,10 +139,18 @@ class _GameScreenState extends State<GameScreen>
     var delta = (now - _lastTick).inMicroseconds / 1e6;
     _lastTick = now;
     // Primer tick o vuelta de pausa: no intentar recuperar el tiempo perdido.
-    if (delta <= 0 || delta > 0.1) delta = 1 / 50;
+    // Ticks lentos (teléfono cargado) sí se recuperan, hasta 100 ms por tick:
+    // descartarlos dejaría el juego en cámara lenta.
+    if (delta <= 0 || delta > 0.5) {
+      delta = 1 / 50;
+    } else if (delta > 0.1) {
+      delta = 0.1;
+    }
 
     final frames = _zx.run(delta);
     _feedAudio();
+    final turbo = _zx.turbo;
+    if (turbo != _turbo) setState(() => _turbo = turbo);
     if (frames == 0 || _frameBusy) return;
 
     _frameBusy = true;
@@ -274,6 +283,7 @@ class _GameScreenState extends State<GameScreen>
               _TopBar(
                 title: _title,
                 paused: _paused,
+                turbo: _turbo,
                 keyboard: _showKeyboard,
                 onBack: _exit,
                 onPause: () => _setPaused(!_paused),
@@ -324,6 +334,7 @@ class _GameScreenState extends State<GameScreen>
 class _TopBar extends StatelessWidget {
   final String title;
   final bool paused;
+  final bool turbo;
   final bool keyboard;
   final VoidCallback onBack;
   final VoidCallback onPause;
@@ -333,6 +344,7 @@ class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.title,
     required this.paused,
+    required this.turbo,
     required this.keyboard,
     required this.onBack,
     required this.onPause,
@@ -359,6 +371,14 @@ class _TopBar extends StatelessWidget {
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis),
           ),
+          if (turbo)
+            Tooltip(
+              message: t.turboLoading,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Icon(Icons.fast_forward_rounded, size: iconSize, color: ZxColors.yellow),
+              ),
+            ),
           IconButton(
             icon: Icon(keyboard ? Icons.sports_esports_rounded : Icons.keyboard_rounded,
                 size: iconSize),

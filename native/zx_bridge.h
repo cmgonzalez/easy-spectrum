@@ -47,6 +47,12 @@ void zx_destroy(ZxHandle* h);
 /* Avanza la emulación `seconds` segundos de tiempo real. Devuelve frames completados. */
 int zx_run(ZxHandle* h, double seconds);
 
+/* Segundos emulados desde zx_create (con turbo de carga avanza más rápido que el reloj). */
+double zx_get_emulated_time(ZxHandle* h);
+
+/* 1 si el último zx_run corrió en turbo de carga (cinta girando). */
+int zx_is_turbo(ZxHandle* h);
+
 /* Framebuffer RGBA8888 ZX_FB_WIDTH×ZX_FB_HEIGHT del último frame completo. */
 const uint8_t* zx_get_framebuffer(ZxHandle* h);
 
@@ -68,7 +74,8 @@ void zx_reset(ZxHandle* h);
 void zx_set_tape_playing(ZxHandle* h, int playing);
 int  zx_get_tape_playing(ZxHandle* h);
 
-/* Carga rápida de cinta (trap de ROM). 1 = activada (defecto). */
+/* Carga rápida de cinta. 1 = activada (defecto): trap de la rutina del ROM (.tap)
+ * más turbo de emulación mientras gira la cinta (cargadores propios, .tzx). */
 void zx_set_quickload(ZxHandle* h, int enabled);
 
 /* Multiplicador de velocidad (1.0 = normal). */

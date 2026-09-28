@@ -1,11 +1,11 @@
-# CLAUDE.md — Easy Spectrum
+# AGENTS.md — Easy Spectrum
 
 Emulador de ZX Spectrum en Flutter para Android (iOS preparado, sin probar).
 Paquete: `cl.easysoft.easyspectrum` — Repo: https://github.com/cmgonzalez/easy-spectrum
 UI accesible (botones ≥64dp, fuente ≥18–20sp), estética Spectrum (negro + arcoíris).
 Base de estructura: `C:\dev\easygbemu` (mismo patrón FFI + Ticker + flutter_soloud).
 
-> **Leer también:** `C:\dev\CLAUDE.md` — instrucciones globales del workspace.
+> **Leer también:** `C:\dev\AGENTS.md` — instrucciones globales del workspace.
 
 ---
 
@@ -53,19 +53,7 @@ distribuirlas con emuladores. Se copian a `<appSupport>/roms` al primer arranque
 - **Parche a CLK sin tocar el submódulo**: `ZXSpectrum.cpp` se compila desde una copia que genera
   CMake (`ZXSpectrum_patched.cpp` en el dir de build). Bug upstream: al instalar un estado 128K no
   llama a `set_video_address()` → se ignoraba la pantalla sombra (banco 7) en .sna/.z80/.szx 128K.
-  Segundo parche: `get_tape_is_playing()` = motor encendido **y** cinta sin terminar (ver turbo).
-  Si CLK cambia ese código, el configure falla con "Parche ZXSpectrum.cpp '<nombre>': no se encontró el texto".
-- **Carga rápida = trap + turbo.** El trap de CLK solo intercepta `LD-BYTES` del ROM (0x056B):
-  sirve para .tap, pero casi todos los .tzx traen cargadores propios (Ocean 0x11, Speedlock
-  0x12/0x13…) que cargarían a velocidad real. `zx_run()` emula en turbo mientras la cinta gira:
-  tramos de 20 ms hasta el 75% del tick (máx. 25 ms), tope ×50, **sin ScanTarget** en los tramos
-  intermedios (rasterizar era el grueso del costo) y audio silenciado. CLK enciende el motor al
-  detectar un bucle cerrado de lectura del puerto FE, lo que también ocurre en menús que leen el
-  teclado: por eso el parche de "cinta terminada" y, además, una pulsación del usuario suspende
-  el turbo hasta que el motor se detenga (multicargas). UI: ⏩ en la barra (`zx_is_turbo`).
-  Medido en AVD x86: Cobra (.tzx Ocean) ~40 s en vez de ~3,5 min; Green Beret (Speedlock) al menú.
-- Dart: ticks de hasta 100 ms se emulan completos (antes >100 ms se trataba como 20 ms → cámara
-  lenta en teléfonos cargados); solo >0,5 s (pausa) se descarta.
+  Si CLK cambia ese código, el configure falla con "Parche ZXSpectrum.cpp: no se encontró el texto".
 
 ## Probar el core sin Flutter
 

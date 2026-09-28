@@ -39,7 +39,7 @@
   "spectrumModelSubtitle": "{model} — snapshots (.z80, .sna) usam o próprio modelo",
   "model": "Modelo",
   "quickLoad": "Carregamento rápido de fitas",
-  "quickLoadSubtitle": "Jogos .tap/.tzx carregam na hora",
+  "quickLoadSubtitle": "As fitas carregam muito mais rápido",
   "controls": "Controles",
   "joystickType": "Tipo de joystick",
   "joystick": "Joystick",
@@ -60,5 +60,6 @@
   "formatsTitle": "Formatos",
   "formatTapes": "Fitas",
   "formatDisks": "Discos +3",
-  "formatZip": "Também dentro de arquivos .zip"
+  "formatZip": "Também dentro de arquivos .zip",
+  "turboLoading": "Carregando fita em alta velocidade"
 }

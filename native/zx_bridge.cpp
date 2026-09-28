@@ -34,6 +34,8 @@
 #include <cstring>
 #include <fstream>
 #include <memory>
+#include <atomic>
+#include <chrono>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -220,6 +222,7 @@ public:
 	explicit AudioRing(size_t capacity) : buf_(capacity) {}
 
 	void speaker_did_complete_samples(Outputs::Speaker::Speaker &, const std::vector<int16_t> &buffer) override {
+		if(muted_.load(std::memory_order_relaxed)) return;
 		std::lock_guard lock(mutex_);
 		for(const int16_t s : buffer) {
 			if(count_ == buf_.size()) {	// lleno: descartar lo más viejo
@@ -229,6 +232,15 @@ public:
 			buf_[write_] = s;
 			write_ = (write_ + 1) % buf_.size();
 			++count_;
+		}
+	}
+
+	/// Silencio durante el turbo de carga: el audio acelerado no sirve y desbordaría el buffer.
+	void set_muted(bool muted) {
+		muted_.store(muted, std::memory_order_relaxed);
+		if(muted) {
+			std::lock_guard lock(mutex_);
+			read_ = write_ = count_ = 0;
 		}
 	}
 
@@ -248,6 +260,7 @@ private:
 	std::vector<int16_t> buf_;
 	size_t read_ = 0, write_ = 0, count_ = 0;
 	std::mutex mutex_;
+	std::atomic<bool> muted_{false};
 };
 
 bool read_file(const std::string &path, std::vector<uint8_t> &out) {
@@ -334,11 +347,18 @@ struct ZxHandle {
 	MachineTypes::JoystickMachine *joysticks = nullptr;
 	MachineTypes::SoftResettable *resettable = nullptr;
 	Configurable::Device *configurable = nullptr;
+	MachineTypes::ScanProducer *scan_producer = nullptr;
 	Outputs::Speaker::Speaker *speaker = nullptr;
 
 	SoftScanTarget scan_target;
 	AudioRing audio{48000 * 2};	// ~0.5 s estéreo a 48 kHz
 	int joy_mask = 0;
+	bool turbo_load = true;	// acelerar mientras gira la cinta (ver zx_run)
+	bool in_turbo = false;
+	// Una pulsación del usuario durante el turbo lo suspende hasta que el motor se
+	// detenga (menús de juegos multicarga que leen el teclado con la cinta a medias).
+	bool turbo_suppressed = false;
+	double emulated = 0.0;	// segundos emulados desde zx_create
 
 	// Secuencia de teclas con tiempos propios (el Typer de CLK va demasiado rápido
 	// para el debounce del ROM 48K: dos comillas seguidas se leen como una).
@@ -443,7 +463,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 		h->joysticks = dynamic_cast<MachineTypes::JoystickMachine *>(raw);
 		h->resettable = dynamic_cast<MachineTypes::SoftResettable *>(raw);
 		h->configurable = dynamic_cast<Configurable::Device *>(raw);
-		auto *const scan_producer = dynamic_cast<MachineTypes::ScanProducer *>(raw);
+		auto *const scan_producer = h->scan_producer = dynamic_cast<MachineTypes::ScanProducer *>(raw);
 		auto *const audio_producer = dynamic_cast<MachineTypes::AudioProducer *>(raw);
 
 		if(!h->timed || !scan_producer) { g_last_error = "machine_failed"; return nullptr; }
@@ -499,9 +519,52 @@ int zx_run(ZxHandle *h, double seconds) {
 			h->keyboard->set_key_state(step.key, step.press);
 		}
 	}
-	h->timed->run_for(Time::Seconds(seconds));
+
+	// Turbo de carga. El trap de CLK solo acelera la rutina LD-BYTES del ROM; los
+	// cargadores propios (casi todos los .tzx: Speedlock, Alkatraz…) cargan a
+	// velocidad real. Mientras el motor gira (CLK lo enciende al detectar un bucle
+	// de lectura de cinta y lo apaga tras 0,5 s sin lecturas) se emula en tramos
+	// hasta gastar ~75% del tick (máx. 25 ms) en tiempo real, con tope ×50 y audio silenciado.
+	const bool playing = h->machine->get_tape_is_playing();
+	if(!playing) h->turbo_suppressed = false;
+	const bool turbo = h->turbo_load && playing && !h->turbo_suppressed;
+	if(turbo != h->in_turbo) {
+		h->in_turbo = turbo;
+		h->audio.set_muted(turbo);
+	}
+	if(turbo) {
+		using Clock = std::chrono::steady_clock;
+		const double budget = std::min(seconds * 0.75, 0.025);	// tope: no ahogar la UI
+		const auto deadline = Clock::now() + std::chrono::duration<double>(budget);
+		const double limit = seconds * 50.0;
+		constexpr double Slice = 0.02;
+		double done = 0.0;
+		// Sin vídeo en los tramos intermedios (solo se muestra un frame por tick y
+		// rasterizarlos todos es el grueso del costo); el último tramo sí dibuja.
+		h->scan_producer->set_scan_target(nullptr);
+		while(done < limit && Clock::now() < deadline && h->machine->get_tape_is_playing()) {
+			h->timed->run_for(Time::Seconds(Slice));
+			h->timed->flush_output(MachineTypes::TimedMachine::Output::All);
+			done += Slice;
+		}
+		h->scan_producer->set_scan_target(&h->scan_target);
+		const double tail = std::max(seconds - done, 0.021);	// ≥1 frame visible
+		h->timed->run_for(Time::Seconds(tail));
+		h->emulated += done + tail;
+	} else {
+		h->timed->run_for(Time::Seconds(seconds));
+		h->emulated += seconds;
+	}
 	h->timed->flush_output(MachineTypes::TimedMachine::Output::All);
 	return h->scan_target.take_frames();
+}
+
+double zx_get_emulated_time(ZxHandle *h) {
+	return h ? h->emulated : 0.0;
+}
+
+int zx_is_turbo(ZxHandle *h) {
+	return (h && h->in_turbo) ? 1 : 0;
 }
 
 const uint8_t *zx_get_framebuffer(ZxHandle *h) {
@@ -509,7 +572,9 @@ const uint8_t *zx_get_framebuffer(ZxHandle *h) {
 }
 
 void zx_set_key(ZxHandle *h, int key, int pressed) {
-	if(h && h->keyboard) h->keyboard->set_key_state(uint16_t(key), pressed != 0);
+	if(!h || !h->keyboard) return;
+	if(pressed && h->in_turbo) h->turbo_suppressed = true;
+	h->keyboard->set_key_state(uint16_t(key), pressed != 0);
 }
 
 void zx_clear_keys(ZxHandle *h) {
@@ -529,6 +594,7 @@ void zx_set_joystick(ZxHandle *h, int mask) {
 	if(sticks.empty()) return;
 	auto &stick = *sticks.front();
 	using Input = Inputs::Joystick::Input;
+	if(mask && h->in_turbo) h->turbo_suppressed = true;
 	const int changed = mask ^ h->joy_mask;
 	h->joy_mask = mask;
 	const std::pair<int, Input::Type> map[] = {
@@ -558,7 +624,9 @@ int zx_get_tape_playing(ZxHandle *h) {
 }
 
 void zx_set_quickload(ZxHandle *h, int enabled) {
-	if(!h || !h->configurable) return;
+	if(!h) return;
+	h->turbo_load = enabled != 0;
+	if(!h->configurable) return;
 	auto options = h->configurable->get_options();
 	if(auto *const zx = dynamic_cast<Sinclair::ZXSpectrum::Machine::Options *>(options.get())) {
 		zx->quick_load = enabled != 0;

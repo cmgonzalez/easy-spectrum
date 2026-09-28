@@ -39,7 +39,7 @@
   "spectrumModelSubtitle": "{model} — snapshots (.z80, .sna) use their own model",
   "model": "Model",
   "quickLoad": "Fast tape loading",
-  "quickLoadSubtitle": ".tap/.tzx games load instantly",
+  "quickLoadSubtitle": "Tapes load much faster",
   "controls": "Controls",
   "joystickType": "Joystick type",
   "joystick": "Joystick",
@@ -60,5 +60,6 @@
   "formatsTitle": "Formats",
   "formatTapes": "Tapes",
   "formatDisks": "+3 disks",
-  "formatZip": "Also inside .zip files"
+  "formatZip": "Also inside .zip files",
+  "turboLoading": "Loading tape at high speed"
 }

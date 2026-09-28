@@ -81,7 +81,7 @@
   },
   "model": "Modelo",
   "quickLoad": "Carga rápida de cintas",
-  "quickLoadSubtitle": "Los juegos .tap/.tzx cargan al instante",
+  "quickLoadSubtitle": "Las cintas cargan mucho más rápido",
   "controls": "Controles",
   "joystickType": "Tipo de joystick",
   "joystick": "Joystick",
@@ -102,5 +102,6 @@
   "formatsTitle": "Formatos",
   "formatTapes": "Cintas",
   "formatDisks": "Discos +3",
-  "formatZip": "También dentro de archivos .zip"
+  "formatZip": "También dentro de archivos .zip",
+  "turboLoading": "Cargando cinta a alta velocidad"
 }

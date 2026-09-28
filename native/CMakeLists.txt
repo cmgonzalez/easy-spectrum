@@ -54,20 +54,36 @@ set(CLK_SOURCES
 list(TRANSFORM CLK_SOURCES PREPEND "${CLK}/")
 
 # ZXSpectrum.cpp se compila desde una copia parcheada (el submódulo no se toca).
-# Bug de CLK: al instalar el estado de un snapshot 128K asigna port7ffd_ y
-# actualiza el mapa de memoria, pero no la base de vídeo → se ignora la
-# pantalla sombra (banco 7). Afecta a .sna 128K, .z80 y .szx.
+# Si CLK cambia upstream alguno de los textos, el configure falla con un error claro.
 set(ZX_SRC "${CLK}/Machines/Sinclair/ZXSpectrum/ZXSpectrum.cpp")
 set(ZX_PATCHED "${CMAKE_CURRENT_BINARY_DIR}/ZXSpectrum_patched.cpp")
 configure_file("${ZX_SRC}" "${ZX_PATCHED}.orig" COPYONLY)  # re-configura si cambia
 file(READ "${ZX_SRC}" ZX_TEXT)
 string(REPLACE "\r\n" "\n" ZX_TEXT "${ZX_TEXT}")  # por si el checkout usa CRLF
-set(ZX_FIND "\t\t\t\tport7ffd_ = state->last_7ffd;\n\t\t\t\tupdate_memory_map();\n")
-string(FIND "${ZX_TEXT}" "${ZX_FIND}" ZX_POS)
-if(ZX_POS EQUAL -1)
-    message(FATAL_ERROR "Parche ZXSpectrum.cpp: no se encontró el texto (¿cambió CLK upstream?)")
-endif()
-string(REPLACE "${ZX_FIND}" "${ZX_FIND}\t\t\t\tset_video_address();\n" ZX_TEXT "${ZX_TEXT}")
+
+function(zx_patch NAME FIND REPLACEMENT)
+    string(FIND "${ZX_TEXT}" "${FIND}" POS)
+    if(POS EQUAL -1)
+        message(FATAL_ERROR "Parche ZXSpectrum.cpp '${NAME}': no se encontró el texto (¿cambió CLK upstream?)")
+    endif()
+    string(REPLACE "${FIND}" "${REPLACEMENT}" RESULT "${ZX_TEXT}")
+    set(ZX_TEXT "${RESULT}" PARENT_SCOPE)
+endfunction()
+
+# 1. Bug: al instalar el estado de un snapshot 128K asigna port7ffd_ y actualiza el
+#    mapa de memoria, pero no la base de vídeo → se ignora la pantalla sombra (banco 7).
+#    Afecta a .sna 128K, .z80 y .szx.
+zx_patch(pantalla-sombra
+    "\t\t\t\tport7ffd_ = state->last_7ffd;\n\t\t\t\tupdate_memory_map();\n"
+    "\t\t\t\tport7ffd_ = state->last_7ffd;\n\t\t\t\tupdate_memory_map();\n\t\t\t\tset_video_address();\n")
+
+# 2. "Cinta reproduciéndose" = motor encendido y cinta sin terminar. El motor automático
+#    se enciende con cualquier bucle cerrado de lectura del puerto FE, incluido un menú
+#    que lee el teclado; sin esto el turbo de carga (zx_run) seguiría activo en el juego.
+zx_patch(cinta-terminada
+    "\t\treturn tape_player_.motor_control();\n"
+    "\t\treturn tape_player_.motor_control() && !tape_player_.is_at_end();\n")
+
 file(WRITE "${ZX_PATCHED}" "${ZX_TEXT}")
 # La copia está fuera de su carpeta: sus #include "State.hpp"/"Video.hpp" relativos
 # tienen que encontrar la original.

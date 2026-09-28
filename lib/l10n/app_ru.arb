@@ -39,7 +39,7 @@
   "spectrumModelSubtitle": "{model} — снимки (.z80, .sna) используют свою модель",
   "model": "Модель",
   "quickLoad": "Быстрая загрузка с ленты",
-  "quickLoadSubtitle": "Игры .tap/.tzx загружаются мгновенно",
+  "quickLoadSubtitle": "Ленты загружаются намного быстрее",
   "controls": "Управление",
   "joystickType": "Тип джойстика",
   "joystick": "Джойстик",
@@ -60,5 +60,6 @@
   "formatsTitle": "Форматы",
   "formatTapes": "Ленты",
   "formatDisks": "Диски +3",
-  "formatZip": "Также внутри архивов .zip"
+  "formatZip": "Также внутри архивов .zip",
+  "turboLoading": "Ускоренная загрузка с ленты"
 }
