@@ -6,9 +6,10 @@ import '../../core/theme/easy_theme.dart';
 import 'skin.dart';
 
 /// Geometría medida sobre la imagen original del teclado (art/, 1536×959): bandas
-/// verticales de cada fila y tramos horizontales de cada tecla. El asset es un
-/// recorte desde y=283 (sin la cabecera "sinclair", solo la placa de teclas).
-const _skin = SkinImage('assets/skin/keyboard.jpg', 1536, 676, origin: Offset(0, 283));
+/// verticales de cada fila y tramos horizontales de cada tecla. El asset lo genera
+/// tools/make_skins.py: sin la cabecera "sinclair" y con la franja metálica inferior
+/// reflejada arriba; empieza en y=268 de la original.
+const _skin = SkinImage('assets/skin/keyboard.jpg', 1536, 691, origin: Offset(0, 268));
 
 const _rowBands = [(354.0, 421.0), (492.0, 560.0), (630.0, 698.0), (765.0, 837.0)];
 
@@ -46,7 +47,7 @@ final Map<int, Rect> _keyRects = {
 /// la vecina y, dentro de la fila, gana la tecla de centro más cercano: los
 /// espacios entre teclas también cuentan (más fácil de acertar con el dedo).
 int? _keyAt(Offset p) {
-  const top = 283.0, bottom = 959.0; // todo el recorte
+  const top = 268.0, bottom = 959.0; // todo el asset
   if (p.dy < top || p.dy > bottom || p.dx < 30 || p.dx > 1500) return null;
   var row = _rowBands.length - 1;
   for (var r = 0; r < _rowBands.length - 1; r++) {
