@@ -12,6 +12,7 @@ import '../../core/emulator/zx_bridge.dart';
 import '../../core/emulator/zx_types.dart';
 import '../../core/settings.dart';
 import '../../core/storage/game_library.dart';
+import '../../core/storage/game_thumbnail.dart';
 import '../../core/theme/easy_theme.dart';
 import 'game_display.dart';
 import 'joystick_pad.dart';
@@ -215,6 +216,12 @@ class _GameScreenState extends State<GameScreen>
     if (_exiting) return;
     _exiting = true;
     _ticker.stop();
+    // Juegos cuyo archivo no trae pantalla (cinta cifrada, .dsk…): la última
+    // pantalla del emulador queda como miniatura en la biblioteca.
+    final fb = _zx.framebuffer();
+    if (fb != null && widget.mediaPath.isNotEmpty) {
+      await GameThumbnail.saveCaptureIfMissing(widget.mediaPath, fb);
+    }
     _disposeAudio();
     _zx.dispose();
     AdManager.instance.showInterstitialThenDo(() {

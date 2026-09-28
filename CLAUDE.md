@@ -87,8 +87,24 @@ lib/core/emulator/zx_bridge.dart   FFI (start/run/frame/keys/joystick/audio/tape
 lib/core/emulator/zx_types.dart    ZxModel, ZxKey (fila<<8|bit), ZxJoy, JoyMapping
 lib/core/settings.dart             AppSettings (SharedPreferences)
 lib/core/storage/game_library.dart juegos importados → <appDocs>/games (+ .zip)
+lib/core/storage/game_thumbnail.dart miniaturas de "Mis juegos" (pantalla del Spectrum)
 lib/features/game/                 game_screen (Ticker, reloj de pared), zx_keyboard, joystick_pad
 ```
+
+### Miniaturas de juegos (`GameThumbnail`)
+Pantalla de 6912 bytes ($4000) → imagen 256×192. Caché en `<appSupport>/thumbs/`:
+`<juego>.scr` (vacío = el archivo no trae pantalla) y `<juego>.rgba` (captura).
+- `.tap`/`.tzx`: header Code en $4000 → seguro. Si no, candidatos (bloques ≥6912 con offsets
+  1/0/2/3 —turbo 0x11 incluido—, 0x14 raw de 6912, pantalla partida 6144+768) filtrados por
+  `_looksLikeScreen`: ≤64 atributos distintos, ≤25% FLASH y **coherencia vertical ≥0,45**
+  (fila de píxeles ≈ la de abajo). Medido: pantallas reales 0,61–0,71; cifradas/comprimidas
+  0,18–0,31. Muchas cintas protegidas (Speedlock, Hysteria, Cobra) cifran la pantalla: se descartan.
+- `.sna` (48K y 128K), `.z80` (v1 RLE, v2/v3 por páginas), `.szx` (RAMP con zlib): desde la RAM,
+  respetando la pantalla sombra (bit 3 de $7FFD → banco 7). `.szx` sin probar (no había muestras).
+- Sin pantalla en el archivo (cifrada, `.dsk`, `.csw`): al **salir del juego** se guarda la
+  pantalla del emulador (`saveCaptureIfMissing`, recorte de papel del framebuffer; se descartan
+  pantallas lisas). Se espera antes de salir para que el inicio no cachee "sin imagen".
+- Origen: lógica de easytape-app (`TapDecoder/TzxDecoder.extractLoadingScreen`), ampliada.
 
 - Loop: cada tick de vsync se llama `zx_run(delta real)`; delta >0,1 s se descarta (pausa).
 - Teclado: multitáctil con `Listener`; CAPS/SYM se fijan con un toque y se sueltan tras la siguiente tecla.
@@ -113,7 +129,15 @@ Un solo código y dos apps: `productFlavors` en `android/app/build.gradle.kts` (
 | applicationId | `cl.easysoft.easyspectrum` | `cl.easysoft.easyspectrum.pro` (`applicationIdSuffix`) |
 | Nombre | Easy Spectrum | Easy Spectrum Pro (`resValue app_name`) |
 | Anuncios | banner + interstitial | ninguno |
-| Ícono | `android/app/src/main/res` | `android/app/src/pro/res` (`flutter_launcher_icons-pro.yaml`) |
+| Ícono | `android/app/src/main/res` (config en `pubspec.yaml`) | `android/app/src/pro/res` (`flutter_launcher_icons-pro.yaml`) |
+
+**Íconos**: fuente en `art/` (ilustraciones con fondo completo; `10_50_38` Free, `10_50_51` Pro).
+Adaptativo en dos capas generadas con Python: `app_icon[_pro]_bg.png` = la imagen desenfocada
+(el degradado sigue hasta el borde de la máscara) y `app_icon[_pro]_fg.png` = la ilustración a
+680/1024 con bordes difuminados; `adaptive_icon_foreground_inset: 0`. Legacy y Play Store
+(`icon-app_play_512[_pro].png`) = imagen completa. **Gotcha**: si existe
+`flutter_launcher_icons-pro.yaml`, `dart run flutter_launcher_icons` (incluso con `-f pubspec.yaml`)
+solo procesa flavors → para la Free apartar temporalmente ese yaml.
 
 - El `namespace` (paquete Kotlin) es el mismo en ambas: `MainActivity` no se mueve.
 - Dart: `Edition.isPro` (`lib/core/edition.dart`) = `appFlavor == 'pro'`, constante de compilación.

@@ -1,8 +1,9 @@
-# Ícono de la edición Pro (flavor "pro" → android/app/src/pro/res).
+# Ícono de la edición Pro (flavor "pro" → android/app/src/pro/res). Mismo esquema que pubspec.yaml.
 # Regenerar: dart run flutter_launcher_icons -f flutter_launcher_icons-pro.yaml
 flutter_launcher_icons:
   android: true
   ios: false
   image_path: "assets/icon/app_icon_pro.png"
-  adaptive_icon_background: "#000000"
-  adaptive_icon_foreground: "assets/icon/app_icon_pro.png"
+  adaptive_icon_background: "assets/icon/app_icon_pro_bg.png"
+  adaptive_icon_foreground: "assets/icon/app_icon_pro_fg.png"
+  adaptive_icon_foreground_inset: 0

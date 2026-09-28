@@ -37,9 +37,13 @@ flutter:
     - assets/roms/
     - assets/icon/
 
+# Ícono de la edición Free (android/app/src/main/res). La Pro: flutter_launcher_icons-pro.yaml.
+# Fuente: art/ (ilustración con fondo completo). Adaptativo en dos capas: fondo = la imagen
+# desenfocada, frente = la ilustración reducida con bordes difuminados (margen ya incluido → inset 0).
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/icon/app_icon.png"
-  adaptive_icon_background: "#000000"
-  adaptive_icon_foreground: "assets/icon/app_icon.png"
+  adaptive_icon_background: "assets/icon/app_icon_bg.png"
+  adaptive_icon_foreground: "assets/icon/app_icon_fg.png"
+  adaptive_icon_foreground_inset: 0

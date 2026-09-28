@@ -130,14 +130,20 @@ class ZxBridge {
 
   /// Frame actual como imagen lista para pintar.
   Future<ui.Image?> frame() {
-    if (!isRunning) return Future.value(null);
-    final ptr = _fb(_h);
-    if (ptr == nullptr) return Future.value(null);
-    final bytes = Uint8List.fromList(ptr.asTypedList(zxFbWidth * zxFbHeight * 4));
+    final bytes = framebuffer();
+    if (bytes == null) return Future.value(null);
     final c = Completer<ui.Image>();
     ui.decodeImageFromPixels(
         bytes, zxFbWidth, zxFbHeight, ui.PixelFormat.rgba8888, c.complete);
     return c.future;
+  }
+
+  /// Copia del framebuffer RGBA ([zxFbWidth]×[zxFbHeight]) del último frame completo.
+  Uint8List? framebuffer() {
+    if (!isRunning) return null;
+    final ptr = _fb(_h);
+    if (ptr == nullptr) return null;
+    return Uint8List.fromList(ptr.asTypedList(zxFbWidth * zxFbHeight * 4));
   }
 
   // El ROM lee el teclado una vez por frame (20 ms): un toque más corto que eso

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import '../../core/ads/ad_manager.dart';
 import '../../core/edition.dart';
 import '../../core/l10n.dart';
 import '../../core/storage/game_library.dart';
+import '../../core/storage/game_thumbnail.dart';
 import '../../core/theme/easy_theme.dart';
 import '../game/game_screen.dart';
 import '../settings/settings_screen.dart';
@@ -111,6 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (ok == true) {
       try {
         await f.delete();
+        await GameThumbnail.forget(f.path);
       } catch (_) {}
       _refresh();
     }
@@ -175,8 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: ListTile(
                         contentPadding:
                             const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                        leading: const Icon(Icons.videogame_asset_rounded,
-                            size: 36, color: ZxColors.green),
+                        leading: _GameThumb(path: g.path),
                         title: Text(GameLibrary.titleOf(g.path),
                             maxLines: 1, overflow: TextOverflow.ellipsis),
                         subtitle: Text(GameLibrary.extensionOf(g.path).toUpperCase()),
@@ -256,6 +258,34 @@ class _ProBadge extends StatelessWidget {
       ),
       child: const Text('PRO',
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.black)),
+    );
+  }
+}
+
+/// Miniatura 4:3 con la pantalla de carga o del snapshot; ícono genérico si el
+/// formato no trae pantalla (.dsk, .csw) o mientras se genera.
+class _GameThumb extends StatelessWidget {
+  final String path;
+  const _GameThumb({required this.path});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 80,
+      height: 60,
+      child: FutureBuilder<ui.Image?>(
+        future: GameThumbnail.load(path),
+        builder: (context, snap) {
+          final image = snap.data;
+          if (image == null) {
+            return const Icon(Icons.videogame_asset_rounded, size: 40, color: ZxColors.green);
+          }
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: RawImage(image: image, fit: BoxFit.fill, filterQuality: FilterQuality.medium),
+          );
+        },
+      ),
     );
   }
 }
