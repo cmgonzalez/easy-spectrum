@@ -28,6 +28,7 @@
   "back": "Назад",
   "errMissingRoms": "Отсутствуют ПЗУ Spectrum.",
   "errBadSnapshot": "Снимок повреждён или недействителен.",
+  "errCpcSnapshot": "Это снимок Amstrad CPC, а не ZX Spectrum.",
   "errUnsupportedFormat": "Формат файла не поддерживается.",
   "errMachineFailed": "Не удалось запустить машину.",
   "errOpenFailed": "Не удалось открыть файл.",

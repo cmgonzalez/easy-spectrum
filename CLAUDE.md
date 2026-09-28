@@ -47,6 +47,13 @@ distribuirlas con emuladores. Se copian a `<appSupport>/roms` al primer arranque
 - Audio: el `Speaker` de CLK llama al delegate desde el hilo de su `AsyncTaskQueue`
   → ring buffer con mutex. `zx_run()` hace `run_for` + `flush_output(All)`.
 - No hay save states: CLK no expone captura de estado del Spectrum (solo carga de snapshots).
+- **SNA 128K**: CLK solo carga SNA de 48K (49179 bytes). `load_sna128()` en el bridge lee los de
+  131103/147487 bytes (arma `Sinclair::ZXSpectrum::State` con los 8 bancos en orden y `last_7ffd`).
+  Los `.sna` que empiezan con `MV - SNA` son de Amstrad CPC → error `cpc_snapshot`.
+- **Parche a CLK sin tocar el submódulo**: `ZXSpectrum.cpp` se compila desde una copia que genera
+  CMake (`ZXSpectrum_patched.cpp` en el dir de build). Bug upstream: al instalar un estado 128K no
+  llama a `set_video_address()` → se ignoraba la pantalla sombra (banco 7) en .sna/.z80/.szx 128K.
+  Si CLK cambia ese código, el configure falla con "Parche ZXSpectrum.cpp: no se encontró el texto".
 
 ## Probar el core sin Flutter
 
@@ -99,4 +106,5 @@ Firma release: `android/key.properties` (no va al repo). Primera compilación na
 - [ ] Save states (requiere parchear CLK o serializar State)
 - [ ] IDs AdMob reales / política de privacidad `www.easysoft.cl/easy-spectrum/privacy.html`
 - [x] Localización es/en/ru/it/pt
-- [ ] SNA de 128K (131 KB): CLK solo carga SNA de 48K → escribir cargador propio en el bridge
+- [x] SNA de 128K (cargador propio) + fix de pantalla sombra en snapshots 128K (verificado con SNA sintéticos)
+- [ ] Un juego que falla al cargar queda igual en "Mis juegos" (¿borrarlo o marcarlo?)

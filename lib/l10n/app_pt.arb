@@ -28,6 +28,7 @@
   "back": "Voltar",
   "errMissingRoms": "Faltam as ROMs do Spectrum.",
   "errBadSnapshot": "O snapshot está danificado ou é inválido.",
+  "errCpcSnapshot": "Este snapshot é do Amstrad CPC, não do ZX Spectrum.",
   "errUnsupportedFormat": "Formato de arquivo não suportado.",
   "errMachineFailed": "Não foi possível iniciar a máquina.",
   "errOpenFailed": "Não foi possível abrir o arquivo.",

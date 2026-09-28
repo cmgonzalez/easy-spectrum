@@ -38,7 +38,7 @@ typedef struct ZxHandle ZxHandle;
 ZxHandle* zx_create(const char* rom_dir, int model, const char* media_path, int audio_freq);
 
 /* Código del último error de zx_create (estático, no liberar):
- * bad_snapshot, unsupported_format, machine_failed, missing_roms, open_failed,
+ * bad_snapshot, cpc_snapshot, unsupported_format, machine_failed, missing_roms, open_failed,
  * o el texto de la excepción de CLK si no es ninguno de esos. */
 const char* zx_last_error(void);
 

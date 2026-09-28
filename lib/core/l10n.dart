@@ -12,6 +12,7 @@ extension L10nContext on BuildContext {
 String zxErrorText(AppLocalizations t, String code) => switch (code) {
       'missing_roms' => t.errMissingRoms,
       'bad_snapshot' => t.errBadSnapshot,
+      'cpc_snapshot' => t.errCpcSnapshot,
       'unsupported_format' => t.errUnsupportedFormat,
       'machine_failed' => t.errMachineFailed,
       'open_failed' => t.errOpenFailed,

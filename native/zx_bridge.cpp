@@ -27,6 +27,7 @@
 #include "Storage/State/Z80.hpp"
 #include "Storage/State/SNA.hpp"
 #include "Storage/State/SZX.hpp"
+#include "Machines/Sinclair/ZXSpectrum/State.hpp"
 
 #include <algorithm>
 #include <array>
@@ -264,6 +265,64 @@ std::string lower_ext(const std::string &path) {
 	return ext;
 }
 
+/*
+ * SNA de 128K. Storage::State::SNA de CLK solo acepta el de 48K (49179 bytes).
+ * Formato: cabecera de 27 bytes (igual que 48K) + 48K de RAM (bancos 5, 2 y el
+ * paginado en 0xC000) + PC (2) + puerto 7FFD (1) + TR-DOS (1) + resto de bancos
+ * en orden ascendente, omitiendo 5, 2 y el paginado (5 bancos; 6 si el paginado
+ * es el 2 o el 5, que entonces ya vino repetido dentro de los primeros 48K).
+ */
+std::unique_ptr<Analyser::Static::Target> load_sna128(const std::string &path) {
+	using Target = Analyser::Static::ZXSpectrum::Target;
+	constexpr size_t Bank = 16 * 1024;
+	constexpr size_t Header = 27;
+	constexpr size_t Tail = Header + 3 * Bank + 4;
+
+	std::vector<uint8_t> f;
+	if(!read_file(path, f)) return nullptr;
+	if(f.size() != Tail + 5 * Bank && f.size() != Tail + 6 * Bank) return nullptr;
+
+	const auto le16 = [&](size_t o) { return uint16_t(f[o] | (f[o + 1] << 8)); };
+	const uint8_t port7ffd = f[Header + 3 * Bank + 2];
+	const int paged = port7ffd & 7;
+	// Con el banco paginado igual a 2 o 5 el archivo trae 6 bancos más; si no, 5.
+	if((paged == 2 || paged == 5) != (f.size() == Tail + 6 * Bank)) return nullptr;
+
+	auto result = std::make_unique<Target>();
+	result->model = Target::Model::OneTwoEightK;
+	auto *const state = new Sinclair::ZXSpectrum::State();
+	result->state = std::unique_ptr<Reflection::Struct>(state);
+
+	auto &r = state->z80.registers;
+	r.ir = uint16_t((f[0x00] << 8) | f[0x14]);
+	r.hl_dash = le16(0x01); r.de_dash = le16(0x03); r.bc_dash = le16(0x05); r.af_dash = le16(0x07);
+	r.hl = le16(0x09); r.de = le16(0x0b); r.bc = le16(0x0d); r.iy = le16(0x0f); r.ix = le16(0x11);
+	r.iff1 = r.iff2 = (f[0x13] & 4) != 0;
+	r.flags = f[0x15]; r.a = f[0x16];
+	r.stack_pointer = le16(0x17);
+	r.interrupt_mode = f[0x19] & 3;
+	r.program_counter = le16(Header + 3 * Bank);
+	r.memptr = r.program_counter;
+	state->video.border_colour = f[0x1a] & 7;
+	state->last_7ffd = port7ffd;
+
+	// RAM de 128K en orden de banco 0..7.
+	state->ram.assign(8 * Bank, 0);
+	const auto put = [&](int bank, size_t offset) {
+		std::copy_n(&f[offset], Bank, &state->ram[size_t(bank) * Bank]);
+	};
+	put(5, Header);
+	put(2, Header + Bank);
+	put(paged, Header + 2 * Bank);
+	size_t offset = Tail;
+	for(int bank = 0; bank < 8; ++bank) {
+		if(bank == 5 || bank == 2 || bank == paged) continue;
+		put(bank, offset);
+		offset += Bank;
+	}
+	return result;
+}
+
 }	// namespace
 
 // ---------------------------------------------------------------------------
@@ -318,9 +377,18 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 		if(ext == "z80" || ext == "sna" || ext == "szx") {
 			std::unique_ptr<Analyser::Static::Target> t;
 			if(ext == "z80") t = Storage::State::Z80::load(path);
-			else if(ext == "sna") t = Storage::State::SNA::load(path);
+			else if(ext == "sna") {
+				t = Storage::State::SNA::load(path);
+				if(!t) t = load_sna128(path);
+			}
 			else t = Storage::State::SZX::load(path);
-			if(!t) { g_last_error = "bad_snapshot"; return nullptr; }
+			if(!t) {
+				// Los .sna de Amstrad CPC empiezan con "MV - SNA": avisar en vez de "dañado".
+				std::vector<uint8_t> head;
+				const bool cpc = read_file(path, head) && head.size() > 8 && std::memcmp(head.data(), "MV - SNA", 8) == 0;
+				g_last_error = cpc ? "cpc_snapshot" : "bad_snapshot";
+				return nullptr;
+			}
 			target.reset(static_cast<Target *>(t.release()));
 		} else {
 			target = std::make_unique<Target>();
