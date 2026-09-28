@@ -10,6 +10,10 @@ Uso: python tools/make_skins.py   (desde la raíz del proyecto; requiere Pillow 
   y un marco nuevo dibujado con el perfil de relieve real de cada lado (mezclado por dirección en
   las esquinas). Pegar trozos del marco original dejaba escalones en las curvas.
   Origen en la imagen original: (121, 146).
+- Botonera: sobre el pozo del botón de fuego se pega el arte de art/circles-optimized con 1-4
+  botones (rojo = fuego; amarillo, verde, azul = extra) → assets/skin/joystick_<n>.jpg. El anillo
+  (centro (627,627), radio 525 en el arte) queda centrado en (1163,542) con radio CLUSTER_R.
+  Imprime el centro y radio de cada botón en coordenadas de la original para joystick_pad.dart.
 Si cambian los orígenes, actualizar SkinImage(origin:) en zx_keyboard.dart / joystick_pad.dart.
 """
 import io
@@ -19,6 +23,11 @@ from PIL import Image, ImageCms, ImageOps
 
 KEYBOARD_SRC = 'art/Imagen de ChatGPT 28 sept 2026, 11_32_04.png'
 PAD_SRC = 'art/Imagen de ChatGPT 28 sept 2026, 11_23_12.png'
+CLUSTER_SRC = 'art/circles-optimized/circle-{n}-buttons-optimized.png'
+PAD_ORIGIN = (121, 146)
+FIRE_CENTER = (1163, 542)      # centro del pozo del fuego en la original
+CLUSTER_R = 230                # radio del anillo de la botonera en la original
+ART_CENTER, ART_R = (627, 627), 525
 
 
 def keyboard():
@@ -80,11 +89,44 @@ def pad():
     edge = (d > -1) & (d < 0)                        # antialias del borde exterior
     a = (d[edge] + 1)[..., None]
     out[edge] = frame[edge] * a + bg * (1 - a)
-    Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)).save(
-        'assets/skin/joystick.jpg', quality=88, optimize=True)
     print('mando', (w, h), 'origen', (x0 - t, y0 - t))
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
+
+
+def pad_buttons(base):
+    s = CLUSTER_R / ART_R
+    colours = {
+        'rojo': lambda r, g, b: (r > 180) & (g < 90) & (b < 90),
+        'amarillo': lambda r, g, b: (r > 200) & (g > 170) & (b < 80),
+        'verde': lambda r, g, b: (g > 150) & (r < 100) & (b < 130),
+        'azul': lambda r, g, b: (b > 200) & (g > 150) & (r < 80),
+    }
+    for n in range(1, 5):
+        art = Image.open(CLUSTER_SRC.format(n=n)).convert('RGBA')
+        a = np.asarray(art).astype(int)
+        size = round(art.width * s)
+        small = art.resize((size, size), Image.LANCZOS)
+        # Esquina del arte en la original → en el asset.
+        ox = FIRE_CENTER[0] - ART_CENTER[0] * s - PAD_ORIGIN[0]
+        oy = FIRE_CENTER[1] - ART_CENTER[1] * s - PAD_ORIGIN[1]
+        out = base.convert('RGBA')
+        out.alpha_composite(small, (round(ox), round(oy)))
+        out.convert('RGB').save(f'assets/skin/joystick_{n}.jpg', quality=88, optimize=True)
+        # Miniatura para elegir la botonera en la configuración del control.
+        box = art.getbbox()
+        art.crop(box).resize((200, 200), Image.LANCZOS).save(f'assets/skin/buttons_{n}.png', optimize=True)
+        found = []
+        for name, f in colours.items():
+            m = f(a[..., 0], a[..., 1], a[..., 2]) & (a[..., 3] > 250)
+            if m.sum() < 500:
+                continue
+            ys, xs = np.nonzero(m)
+            cx = FIRE_CENTER[0] + (xs.mean() - ART_CENTER[0]) * s
+            cy = FIRE_CENTER[1] + (ys.mean() - ART_CENTER[1]) * s
+            found.append(f'{name} ({cx:.0f}, {cy:.0f}) r{(m.sum() / np.pi) ** 0.5 * s:.0f}')
+        print(f'botonera {n}:', ', '.join(found))
 
 
 if __name__ == '__main__':
     keyboard()
-    pad()
+    pad_buttons(pad())

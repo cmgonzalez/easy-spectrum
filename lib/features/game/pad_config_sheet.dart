@@ -84,23 +84,39 @@ class _PadConfigSheetState extends State<_PadConfigSheet> {
                 ),
             ],
             const SizedBox(height: 16),
-            _Section(t.extraButtons),
-            for (var i = 0; i < PadConfig.maxExtra; i++)
+            _Section(t.actionButtons),
+            // Elegir la botonera por su dibujo: 1-4 botones.
+            Row(
+              children: [
+                for (var n = 1; n <= PadConfig.maxButtons; n++)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: _ButtonsOption(
+                        count: n,
+                        selected: _c.buttons == n,
+                        onTap: () => setState(() => _c.buttons = n),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (var i = 0; i < _c.buttons; i++)
               _Row(
-                leading: Switch(
-                  value: _c.extra[i] != null,
-                  onChanged: (on) {
-                    if (on) {
-                      _pickExtra(i);
-                    } else {
-                      setState(() => _c.extra[i] = null);
-                    }
-                  },
+                leading: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _buttonColours[i],
+                    border: Border.all(color: Colors.black54, width: 2),
+                  ),
                 ),
-                title: t.extraButton(i + 1),
-                trailing: _c.extra[i] == null
+                title: i == 0 ? t.fire : t.extraButton(i + 1),
+                trailing: i == 0
                     ? null
-                    : _KeyChip(zxKeyName(context, _c.extra[i]!), onTap: () => _pickExtra(i)),
+                    : _KeyChip(zxKeyName(context, _c.extra[i - 1]), onTap: () => _pickExtra(i - 1)),
               ),
             const SizedBox(height: 20),
             Row(
@@ -126,6 +142,40 @@ class _PadConfigSheetState extends State<_PadConfigSheet> {
       ),
     );
   }
+}
+
+/// Colores de la botonera (rojo = fuego, amarillo, verde, azul).
+const _buttonColours = [Color(0xFFE8322B), Color(0xFFF5C400), Color(0xFF1FBF3A), Color(0xFF12B5E8)];
+
+/// Opción de botonera: su dibujo y la cantidad de botones.
+class _ButtonsOption extends StatelessWidget {
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ButtonsOption({required this.count, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: selected ? ZxColors.cyan.withValues(alpha: 0.18) : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: selected ? ZxColors.cyan : Colors.white24, width: selected ? 3 : 1),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Column(
+              children: [
+                Image.asset('assets/skin/buttons_$count.png'),
+                const SizedBox(height: 4),
+                Text('$count', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 class _Section extends StatelessWidget {

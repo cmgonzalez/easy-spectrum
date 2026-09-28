@@ -79,5 +79,6 @@
   "extraButton": "Button {n}",
   "chooseKey": "Choose a key",
   "padReset": "Reset",
-  "padDone": "Done"
+  "padDone": "Done",
+  "actionButtons": "Action buttons"
 }

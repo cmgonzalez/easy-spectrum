@@ -128,5 +128,6 @@
         "type": "int"
       }
     }
-  }
+  },
+  "actionButtons": "Botones de acción"
 }

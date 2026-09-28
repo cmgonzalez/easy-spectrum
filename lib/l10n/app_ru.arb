@@ -79,5 +79,6 @@
   "extraButton": "Кнопка {n}",
   "chooseKey": "Выберите клавишу",
   "padReset": "Сбросить",
-  "padDone": "Готово"
+  "padDone": "Готово",
+  "actionButtons": "Кнопки действий"
 }

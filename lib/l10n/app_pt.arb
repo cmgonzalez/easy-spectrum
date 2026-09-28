@@ -79,5 +79,6 @@
   "extraButton": "Botão {n}",
   "chooseKey": "Escolha uma tecla",
   "padReset": "Restaurar",
-  "padDone": "Pronto"
+  "padDone": "Pronto",
+  "actionButtons": "Botões de ação"
 }

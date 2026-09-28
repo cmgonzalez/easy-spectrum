@@ -9,17 +9,29 @@ import '../../core/l10n.dart';
 import 'pad_config_sheet.dart';
 import 'skin.dart';
 
-/// Geometría medida sobre la imagen original del mando (art/, 1536×1024). El asset lo
-/// genera tools/make_skins.py: contenido sin el relleno entre marco y controles y un
-/// marco redibujado con el relieve original; empieza en (121, 146) de la original.
-const _skin = SkinImage('assets/skin/joystick.jpg', 1393, 799, origin: Offset(121, 146));
+/// Geometría medida sobre la imagen original del mando (art/, 1536×1024). Los assets
+/// los genera tools/make_skins.py: contenido sin el relleno entre marco y controles,
+/// marco redibujado con el relieve original y, sobre el pozo del fuego, la botonera de
+/// art/circles-optimized con 1-4 botones (joystick_<n>.jpg); empiezan en (121, 146).
+SkinImage _skinFor(int buttons) =>
+    SkinImage('assets/skin/joystick_$buttons.jpg', 1393, 799, origin: const Offset(121, 146));
 const _dpadCenter = Offset(367, 508);
 const _dpadArm = 107.0; // ancho de cada brazo de la cruz (bbox 206..528 / 3)
 const _dpadReach = 270.0; // radio de toque (más generoso que el dibujo)
-const _fireCenter = Offset(1163, 542);
-const _fireRadius = 128.0; // tapa del botón
-const _fireReach = 240.0;
 const _lcd = Rect.fromLTRB(484, 752, 1038, 858);
+
+/// Botonera: anillo centrado en el pozo del fuego; el toque va al botón más cercano.
+const _clusterCenter = Offset(1163, 542);
+const _clusterReach = 255.0;
+
+/// Botones de cada botonera (centro, radio de la tapa), medidos por make_skins.py.
+/// Orden: rojo (fuego), amarillo, verde, azul = PadConfig.extra[0..2].
+const _clusters = <List<(Offset, double)>>[
+  [(Offset(1161, 532), 140)],
+  [(Offset(1090, 597), 76), (Offset(1239, 473), 75)],
+  [(Offset(1162, 630), 68), (Offset(1075, 479), 68), (Offset(1249, 481), 68)],
+  [(Offset(1161, 648), 64), (Offset(1044, 533), 62), (Offset(1160, 427), 63), (Offset(1278, 534), 64)],
+];
 
 /// Botones de colores = acciones del mando (ver [PadAction]).
 const _buttons = <Rect>[
@@ -28,16 +40,6 @@ const _buttons = <Rect>[
   Rect.fromLTRB(1110, 191, 1247, 287),
   Rect.fromLTRB(1259, 191, 1397, 287),
 ];
-
-/// Botones extra (hasta 3), en el hueco entre los pozos de la cruceta y del fuego
-/// (x ≈ 567..963): 1 grande al centro, 2 lado a lado o 3 en triángulo. Se miran
-/// antes que la cruceta y el fuego, cuyos radios de toque llegan hasta aquí.
-List<(Offset, double)> _extraLayout(int n) => switch (n) {
-      1 => const [(Offset(765, 525), 88.0)],
-      2 => const [(Offset(683, 525), 74.0), (Offset(847, 525), 74.0)],
-      3 => const [(Offset(688, 440), 70.0), (Offset(842, 440), 70.0), (Offset(765, 600), 70.0)],
-      _ => const [],
-    };
 
 /// Acciones de los botones de colores, en orden: rojo, amarillo, verde, azul.
 enum PadAction {
@@ -50,11 +52,11 @@ enum PadAction {
   final IconData icon;
 }
 
-enum _Zone { dpad, fire, key, action }
+enum _Zone { dpad, button, key, action }
 
 /// Mando dibujado con la imagen: cruceta roja (8 direcciones, se puede deslizar),
-/// botón redondo = FUEGO, botones de colores = [PadAction], botones extra con la
-/// tecla que se les asignó y la pantalla LCD partida en ENTER | ESPACIO.
+/// botonera de 1-4 botones (rojo = FUEGO, los demás con la tecla asignada), botones
+/// de colores = [PadAction] y la pantalla LCD partida en ENTER | ESPACIO.
 class JoystickPad extends StatefulWidget {
   final void Function(int mask) onJoystick;
   final void Function(int code, bool pressed) onKey;
@@ -74,7 +76,7 @@ class JoystickPad extends StatefulWidget {
     this.lcdText = '',
   });
 
-  static double get aspectRatio => _skin.width / _skin.height;
+  static double get aspectRatio => _skinFor(1).width / _skinFor(1).height;
 
   @override
   State<JoystickPad> createState() => _JoystickPadState();
@@ -103,6 +105,9 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
   bool _fire = false;
   final Set<int> _keysDown = {};
   final Set<int> _actionsDown = {};
+  final Set<int> _buttonsDown = {}; // botones de la botonera (0 = fuego)
+
+  List<(Offset, double)> get _cluster => _clusters[widget.extraKeys.length.clamp(0, 3)];
 
   void _emit() => widget.onJoystick(_dir | (_fire ? ZxJoy.fire : 0));
 
@@ -145,13 +150,15 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
   }
 
   (_Zone, int)? _zoneAt(Offset p) {
-    final extras = _extraLayout(widget.extraKeys.length);
-    for (var i = 0; i < extras.length; i++) {
-      final (c, r) = extras[i];
-      if ((p - c).distance <= r + 12) return (_Zone.key, widget.extraKeys[i]);
+    if ((p - _clusterCenter).distance <= _clusterReach) {
+      var best = 0;
+      final cluster = _cluster;
+      for (var i = 1; i < cluster.length; i++) {
+        if ((p - cluster[i].$1).distance < (p - cluster[best].$1).distance) best = i;
+      }
+      return (_Zone.button, best);
     }
     if ((p - _dpadCenter).distance <= _dpadReach) return (_Zone.dpad, 0);
-    if ((p - _fireCenter).distance <= _fireReach) return (_Zone.fire, 0);
     for (var i = 0; i < _buttons.length; i++) {
       if (_buttons[i].inflate(18).contains(p)) return (_Zone.action, i);
     }
@@ -161,6 +168,16 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
     return null;
   }
 
+  void _setButton(int i, bool v) {
+    setState(() => v ? _buttonsDown.add(i) : _buttonsDown.remove(i));
+    if (i == 0) {
+      _setFire(v);
+    } else {
+      if (v && widget.haptics) Haptics.press();
+      widget.onKey(widget.extraKeys[i - 1], v);
+    }
+  }
+
   void _down(int id, Offset p) {
     final z = _zoneAt(p);
     if (z == null) return;
@@ -168,8 +185,8 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
     switch (z.$1) {
       case _Zone.dpad:
         _setDir(_dirFor(p));
-      case _Zone.fire:
-        _setFire(true);
+      case _Zone.button:
+        _setButton(z.$2, true);
       case _Zone.key:
         _setKey(z.$2, true);
       case _Zone.action:
@@ -189,8 +206,8 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
     switch (z.$1) {
       case _Zone.dpad:
         _setDir(0);
-      case _Zone.fire:
-        _setFire(false);
+      case _Zone.button:
+        _setButton(z.$2, false);
       case _Zone.key:
         _setKey(z.$2, false);
       case _Zone.action:
@@ -203,16 +220,16 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     return SkinView(
-      skin: _skin,
+      skin: _skinFor(widget.extraKeys.length + 1),
       onDown: _down,
       onMove: _move,
       onUp: _up,
       painter: _PadOverlay(
         dir: _dir,
-        fire: _fire,
-        keys: {..._keysDown},
+        cluster: _cluster,
+        buttonsDown: {..._buttonsDown},
         actions: {..._actionsDown},
-        extras: [for (final k in widget.extraKeys) (k, zxKeyName(context, k))],
+        labels: [for (final k in widget.extraKeys) zxKeyName(context, k)],
       ),
       foreground: _LcdPainter(
         clock: _clock,
@@ -227,16 +244,16 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
 
 class _PadOverlay extends SkinPainter {
   final int dir;
-  final bool fire;
-  final Set<int> keys;
+  final List<(Offset, double)> cluster;
+  final Set<int> buttonsDown;
   final Set<int> actions;
-  final List<(int, String)> extras; // (tecla, rótulo)
+  final List<String> labels; // teclas de amarillo, verde y azul
   _PadOverlay({
     required this.dir,
-    required this.fire,
-    required this.keys,
+    required this.cluster,
+    required this.buttonsDown,
     required this.actions,
-    required this.extras,
+    required this.labels,
   });
 
   void _text(Canvas canvas, String text, Offset center, TextStyle style, {double? maxWidth}) {
@@ -257,20 +274,6 @@ class _PadOverlay extends SkinPainter {
     tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
   }
 
-  void _label(Canvas canvas, String text, Offset center, double size, Color color, {double? maxWidth}) =>
-      _text(
-          canvas,
-          text,
-          center,
-          TextStyle(
-            fontSize: size,
-            fontWeight: FontWeight.w900,
-            color: color,
-            letterSpacing: size * 0.08,
-            fontFamily: 'monospace',
-          ),
-          maxWidth: maxWidth);
-
   void _icon(Canvas canvas, IconData icon, Offset center, double size, Color color) => _text(
         canvas,
         String.fromCharCode(icon.codePoint),
@@ -283,33 +286,6 @@ class _PadOverlay extends SkinPainter {
           height: 1,
         ),
       );
-
-  /// Botón extra: redondo y oscuro como el de fuego, con la tecla escrita.
-  void _extraButton(Canvas canvas, Offset c, double r, String label, bool pressed) {
-    canvas.drawCircle(c + const Offset(0, 6), r + 4, Paint()..color = Colors.black.withValues(alpha: 0.55));
-    canvas.drawCircle(c, r + 6, Paint()..color = const Color(0xFF141517));
-    canvas.drawCircle(
-      c,
-      r,
-      Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(-0.3, -0.4),
-          colors: pressed
-              ? const [Color(0xFF2A2D31), Color(0xFF16181A)]
-              : const [Color(0xFF55595F), Color(0xFF2A2C30)],
-        ).createShader(Rect.fromCircle(center: c, radius: r)),
-    );
-    if (pressed) {
-      canvas.drawCircle(
-          c,
-          r + 3,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 8
-            ..color = const Color(0xFF00C8D8));
-    }
-    _label(canvas, label, c, r * 0.72, Colors.white.withValues(alpha: 0.92), maxWidth: r * 1.6);
-  }
 
   @override
   void paintSkin(Canvas canvas) {
@@ -332,16 +308,34 @@ class _PadOverlay extends SkinPainter {
     armGlow(ZxJoy.left, const Offset(-reach, 0));
     armGlow(ZxJoy.right, const Offset(reach, 0));
 
-    // Fuego: hundido (más oscuro) con aro de color al pulsar.
-    if (fire) {
-      canvas.drawCircle(_fireCenter, _fireRadius, Paint()..color = Colors.black.withValues(alpha: 0.35));
-      canvas.drawCircle(
-          _fireCenter,
-          _fireRadius + 6,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 10
-            ..color = const Color(0xFFE8322B));
+    // Botonera: la tapa pulsada se hunde (más oscura) con un aro claro; amarillo,
+    // verde y azul llevan escrita su tecla.
+    for (var i = 0; i < cluster.length; i++) {
+      final (c, r) = cluster[i];
+      if (buttonsDown.contains(i)) {
+        canvas.drawCircle(c, r, Paint()..color = Colors.black.withValues(alpha: 0.35));
+        canvas.drawCircle(
+            c,
+            r + 4,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 7
+              ..color = Colors.white.withValues(alpha: 0.8));
+      }
+      if (i > 0 && i - 1 < labels.length) {
+        _text(
+          canvas,
+          labels[i - 1],
+          c + Offset(0, r * 0.04),
+          TextStyle(
+            fontSize: r * 0.62,
+            fontWeight: FontWeight.w900,
+            color: const Color(0xFF1B1B1B).withValues(alpha: 0.85),
+            fontFamily: 'monospace',
+          ),
+          maxWidth: r * 1.5,
+        );
+      }
     }
 
     // Botones de colores con el ícono de su acción.
@@ -352,23 +346,16 @@ class _PadOverlay extends SkinPainter {
       }
       _icon(canvas, PadAction.values[i].icon, r.center, 64, Colors.white.withValues(alpha: 0.92));
     }
-
-    // Botones extra.
-    final layout = _extraLayout(extras.length);
-    for (var i = 0; i < extras.length; i++) {
-      _extraButton(canvas, layout[i].$1, layout[i].$2, extras[i].$2, keys.contains(extras[i].$1));
-    }
   }
 
   @override
   bool shouldRepaint(_PadOverlay old) =>
       geometryChanged(old) ||
       old.dir != dir ||
-      old.fire != fire ||
-      !setEquals(old.keys, keys) ||
+      old.cluster != cluster ||
+      !setEquals(old.buttonsDown, buttonsDown) ||
       !setEquals(old.actions, actions) ||
-      old.extras.length != extras.length ||
-      !Iterable.generate(extras.length).every((i) => old.extras[i] == extras[i]);
+      old.labels.join('|') != labels.join('|');
 }
 
 /// Pantalla LCD: letrero que avanza en bucle y, al pulsar una mitad, ENTER o

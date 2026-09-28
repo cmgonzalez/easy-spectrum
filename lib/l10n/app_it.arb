@@ -79,5 +79,6 @@
   "extraButton": "Pulsante {n}",
   "chooseKey": "Scegli un tasto",
   "padReset": "Ripristina",
-  "padDone": "Fatto"
+  "padDone": "Fatto",
+  "actionButtons": "Pulsanti d'azione"
 }

@@ -5,26 +5,29 @@ import 'emulator/zx_types.dart';
 import 'storage/media_db.dart';
 
 /// Configuración del mando de un juego: tipo de joystick, teclas del modo
-/// "Teclado" y hasta 3 botones extra con cualquier tecla. Se guarda por juego en
-/// [MediaDb]; sin configuración propia se usa el tipo por defecto de Ajustes.
+/// "Teclado" y botonera de 1-4 botones (rojo = fuego; los demás, cualquier
+/// tecla). Se guarda por juego en [MediaDb]; sin configuración propia se usa el
+/// tipo por defecto de Ajustes.
 class PadConfig {
-  static const maxExtra = 3;
+  static const maxButtons = 4; // rojo (fuego) + amarillo, verde, azul
+  static const defaultExtra = [ZxKey.space, ZxKey.enter, ZxKey.y];
 
   JoyMapping type;
   final List<int> keys; // [arriba, abajo, izquierda, derecha, fuego] del modo Teclado
-  final List<int?> extra; // null = botón desactivado
+  int buttons; // 1-4 botones en la botonera (el rojo siempre es fuego)
+  final List<int> extra; // teclas de amarillo, verde y azul
 
-  PadConfig({required this.type, List<int>? keys, List<int?>? extra})
+  PadConfig({required this.type, List<int>? keys, this.buttons = 1, List<int>? extra})
       : keys = List.of(keys ?? defaultPadKeys),
-        extra = List.of(extra ?? List.filled(maxExtra, null));
+        extra = List.of(extra ?? defaultExtra);
 
-  PadConfig copy() => PadConfig(type: type, keys: keys, extra: extra);
+  PadConfig copy() => PadConfig(type: type, keys: keys, buttons: buttons, extra: extra);
 
   /// Teclas de cada dirección, o null si es Kempston (joystick real).
   List<int>? get directionKeys => type == JoyMapping.keyboard ? keys : type.keys;
 
-  /// Teclas de los botones extra activados, en orden.
-  List<int> get extraKeys => extra.whereType<int>().toList();
+  /// Teclas de los botones extra visibles (amarillo, verde, azul), en orden.
+  List<int> get extraKeys => extra.take(buttons - 1).toList();
 
   static Future<PadConfig> load(String gamePath, JoyMapping fallback) async {
     try {
@@ -32,11 +35,17 @@ class PadConfig {
       if (raw != null) {
         final j = jsonDecode(raw) as Map<String, Object?>;
         final keys = (j['keys'] as List).cast<int>();
-        final extra = (j['extra'] as List).cast<int?>();
+        // Formato anterior: 'extra' con null = botón apagado y sin 'buttons'. Las
+        // teclas usadas quedan primero (son los botones visibles).
+        final saved = (j['extra'] as List? ?? const []).cast<int?>();
+        final used = saved.whereType<int>().toList();
+        final extra = saved.length == used.length ? used : [...used, ...defaultExtra];
+        final buttons = (j['buttons'] as int?) ?? 1 + used.length;
         return PadConfig(
           type: JoyMapping.byName(j['type'] as String?) ?? fallback,
           keys: keys.length == 5 ? keys : null,
-          extra: extra.length == maxExtra ? extra : null,
+          buttons: buttons.clamp(1, maxButtons),
+          extra: extra.length >= 3 ? extra.take(3).toList() : null,
         );
       }
     } catch (_) {}
@@ -48,5 +57,6 @@ class PadConfig {
       (await MediaDb.get(gamePath, ['pad']))?['pad'] != null;
 
   Future<void> save(String gamePath) => MediaDb.put(
-      gamePath, {'pad': jsonEncode({'type': type.name, 'keys': keys, 'extra': extra})});
+      gamePath,
+      {'pad': jsonEncode({'type': type.name, 'keys': keys, 'buttons': buttons, 'extra': extra})});
 }
