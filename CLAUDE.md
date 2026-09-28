@@ -118,6 +118,9 @@ Pantalla de 6912 bytes ($4000) → imagen 256×192. Caché en `<appSupport>/thum
   `zx_keyboard.dart` / `joystick_pad.dart`): **si se cambia la imagen hay que re-medir**.
   - Teclado: 4 bandas de fila × 10 teclas; el toque va a la tecla de centro más cercano de su
     fila (los huecos cuentan). Verificado tecleando `PRINT 7*6` → 42 en 48 BASIC.
+  - Recortes: `SkinImage(..., origin:)` = esquina del recorte en la imagen original; la geometría
+    sigue en coordenadas de la original (el mando es el recorte (145,170)–(1500,885), sin marco,
+    para que los controles salgan ×1,13 más grandes).
   - Mando: cruceta (ángulo, 8 dir., se puede deslizar), botón redondo = FUEGO, botones de
     colores = teclas 1-4, LCD partido = ENTER | ESPACIO (rótulos pintados encima).
   - El área de controles mide justo la altura de su imagen a todo el ancho (máx. 50% de la

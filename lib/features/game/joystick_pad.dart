@@ -7,8 +7,9 @@ import '../../core/emulator/zx_types.dart';
 import '../../core/l10n.dart';
 import 'skin.dart';
 
-/// Geometría de `assets/skin/joystick.jpg` (1536×1024), medida sobre la imagen.
-const _skin = SkinImage('assets/skin/joystick.jpg', 1536, 1024);
+/// Geometría medida sobre la imagen original del mando (art/, 1536×1024). El asset
+/// es un recorte (145, 170)–(1500, 885) sin el marco, para agrandar los controles.
+const _skin = SkinImage('assets/skin/joystick.jpg', 1355, 715, origin: Offset(145, 170));
 const _dpadCenter = Offset(367, 508);
 const _dpadArm = 107.0; // ancho de cada brazo de la cruz (bbox 206..528 / 3)
 const _dpadReach = 270.0; // radio de toque (más generoso que el dibujo)

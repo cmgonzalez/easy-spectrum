@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 
 export 'package:flutter/foundation.dart' show setEquals;
 
-/// Imagen de fondo de un control y su tamaño original: toda la geometría de
-/// teclas y botones se expresa en píxeles de esta imagen.
+/// Imagen de fondo de un control. Toda la geometría de teclas y botones se expresa
+/// en píxeles de la imagen *original*; si el asset es un recorte, [origin] es la
+/// esquina del recorte en la original (así no hay que re-medir al recortar).
 class SkinImage {
   final String asset;
-  final double width;
+  final double width; // tamaño del asset (recortado)
   final double height;
-  const SkinImage(this.asset, this.width, this.height);
+  final Offset origin;
+  const SkinImage(this.asset, this.width, this.height, {this.origin = Offset.zero});
 }
 
 /// Dibuja un [SkinImage] ajustado (contain, centrado) y traduce los toques a
@@ -39,7 +41,7 @@ class SkinView extends StatelessWidget {
             : box.maxHeight / skin.height;
         final w = skin.width * scale, h = skin.height * scale;
         final origin = Offset((box.maxWidth - w) / 2, (box.maxHeight - h) / 2);
-        Offset toImage(Offset local) => (local - origin) / scale;
+        Offset toImage(Offset local) => (local - origin) / scale + skin.origin;
 
         return Listener(
           behavior: HitTestBehavior.opaque,
@@ -61,7 +63,9 @@ class SkinView extends StatelessWidget {
                 top: origin.dy,
                 width: w,
                 height: h,
-                child: CustomPaint(painter: painter..scale = scale),
+                child: CustomPaint(painter: painter
+                  ..scale = scale
+                  ..origin = skin.origin),
               ),
             ],
           ),
@@ -74,6 +78,7 @@ class SkinView extends StatelessWidget {
 /// Painter de overlays (pulsaciones, rótulos) en coordenadas de la imagen.
 abstract class SkinPainter extends CustomPainter {
   double scale = 1;
+  Offset origin = Offset.zero;
 
   void paintSkin(Canvas canvas);
 
@@ -81,6 +86,7 @@ abstract class SkinPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.save();
     canvas.scale(scale);
+    canvas.translate(-origin.dx, -origin.dy);
     paintSkin(canvas);
     canvas.restore();
   }
