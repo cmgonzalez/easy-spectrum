@@ -3,57 +3,85 @@ import 'package:flutter/services.dart';
 
 import '../../core/emulator/zx_types.dart';
 import '../../core/theme/easy_theme.dart';
+import 'skin.dart';
 
-/// Definición de una tecla: etiqueta, palabra clave (modo K) y símbolo (Symbol Shift).
-class _K {
-  final String label;
-  final int code;
-  final String keyword;
-  final String symbol;
-  final int flex;
-  const _K(this.label, this.code, [this.keyword = '', this.symbol = '', this.flex = 2]);
-}
+/// Geometría de `assets/skin/keyboard.jpg` (1536×959), medida sobre la imagen:
+/// bandas verticales de cada fila y tramos horizontales de cada tecla.
+const _skin = SkinImage('assets/skin/keyboard.jpg', 1536, 959);
 
-const _rows = <List<_K>>[
+const _rowBands = [(354.0, 421.0), (492.0, 560.0), (630.0, 698.0), (765.0, 837.0)];
+
+const _rowKeys = <List<(double, double, int)>>[
   [
-    _K('1', ZxKey.k1, '', '!'), _K('2', ZxKey.k2, '', '@'), _K('3', ZxKey.k3, '', '#'),
-    _K('4', ZxKey.k4, '', '\$'), _K('5', ZxKey.k5, '', '%'), _K('6', ZxKey.k6, '', '&'),
-    _K('7', ZxKey.k7, '', "'"), _K('8', ZxKey.k8, '', '('), _K('9', ZxKey.k9, '', ')'),
-    _K('0', ZxKey.k0, '', '_'),
+    (70, 162, ZxKey.k1), (200, 293, ZxKey.k2), (331, 424, ZxKey.k3), (462, 555, ZxKey.k4),
+    (593, 689, ZxKey.k5), (728, 824, ZxKey.k6), (863, 959, ZxKey.k7), (998, 1095, ZxKey.k8),
+    (1134, 1231, ZxKey.k9), (1270, 1365, ZxKey.k0),
   ],
   [
-    _K('Q', ZxKey.q, 'PLOT', '<='), _K('W', ZxKey.w, 'DRAW', '<>'), _K('E', ZxKey.e, 'REM', '>='),
-    _K('R', ZxKey.r, 'RUN', '<'), _K('T', ZxKey.t, 'RAND', '>'), _K('Y', ZxKey.y, 'RETURN', 'AND'),
-    _K('U', ZxKey.u, 'IF', 'OR'), _K('I', ZxKey.i, 'INPUT', 'AT'), _K('O', ZxKey.o, 'POKE', ';'),
-    _K('P', ZxKey.p, 'PRINT', '"'),
+    (132, 227, ZxKey.q), (265, 359, ZxKey.w), (397, 492, ZxKey.e), (530, 626, ZxKey.r),
+    (664, 760, ZxKey.t), (798, 893, ZxKey.y), (931, 1028, ZxKey.u), (1067, 1163, ZxKey.i),
+    (1202, 1299, ZxKey.o), (1337, 1434, ZxKey.p),
   ],
   [
-    _K('A', ZxKey.a, 'NEW', 'STOP'), _K('S', ZxKey.s, 'SAVE', 'NOT'), _K('D', ZxKey.d, 'DIM', 'STEP'),
-    _K('F', ZxKey.f, 'FOR', 'TO'), _K('G', ZxKey.g, 'GOTO', 'THEN'), _K('H', ZxKey.h, 'GOSUB', '↑'),
-    _K('J', ZxKey.j, 'LOAD', '-'), _K('K', ZxKey.k, 'LIST', '+'), _K('L', ZxKey.l, 'LET', '='),
-    _K('ENTER', ZxKey.enter),
+    (164, 260, ZxKey.a), (299, 394, ZxKey.s), (433, 529, ZxKey.d), (567, 662, ZxKey.f),
+    (700, 796, ZxKey.g), (834, 929, ZxKey.h), (967, 1064, ZxKey.j), (1102, 1200, ZxKey.k),
+    (1239, 1335, ZxKey.l), (1373, 1471, ZxKey.enter),
   ],
   [
-    _K('CAPS', ZxKey.caps, '', '', 3), _K('Z', ZxKey.z, 'COPY', ':'), _K('X', ZxKey.x, 'CLEAR', '£'),
-    _K('C', ZxKey.c, 'CONT', '?'), _K('V', ZxKey.v, 'CLS', '/'), _K('B', ZxKey.b, 'BORDER', '*'),
-    _K('N', ZxKey.n, 'NEXT', ','), _K('M', ZxKey.m, 'PAUSE', '.'), _K('SYM', ZxKey.sym, '', '', 3),
-    _K('SPACE', ZxKey.space, '', '', 3),
+    (56, 185, ZxKey.caps), (223, 320, ZxKey.z), (358, 455, ZxKey.x), (493, 591, ZxKey.c),
+    (628, 727, ZxKey.v), (764, 863, ZxKey.b), (900, 999, ZxKey.n), (1037, 1136, ZxKey.m),
+    (1174, 1275, ZxKey.sym), (1313, 1477, ZxKey.space),
   ],
 ];
 
-/// Teclado completo del Spectrum 48K. Multitáctil: cada tecla escucha sus
-/// propios punteros. CAPS SHIFT y SYMBOL SHIFT se fijan con un toque y se
-/// sueltan solos tras la siguiente tecla (o se mantienen pulsados a la vez).
+/// Rectángulo (en coordenadas de la imagen) de cada tecla, para dibujar la pulsación.
+final Map<int, Rect> _keyRects = {
+  for (var r = 0; r < _rowKeys.length; r++)
+    for (final (x0, x1, code) in _rowKeys[r])
+      code: Rect.fromLTRB(x0, _rowBands[r].$1, x1, _rowBands[r].$2),
+};
+
+/// Tecla bajo un punto de la imagen. Cada fila ocupa hasta la mitad del hueco con
+/// la vecina y, dentro de la fila, gana la tecla de centro más cercano: los
+/// espacios entre teclas también cuentan (más fácil de acertar con el dedo).
+int? _keyAt(Offset p) {
+  const top = 300.0, bottom = 900.0;
+  if (p.dy < top || p.dy > bottom || p.dx < 30 || p.dx > 1500) return null;
+  var row = _rowBands.length - 1;
+  for (var r = 0; r < _rowBands.length - 1; r++) {
+    if (p.dy < (_rowBands[r].$2 + _rowBands[r + 1].$1) / 2) {
+      row = r;
+      break;
+    }
+  }
+  int? best;
+  var bestDist = double.infinity;
+  for (final (x0, x1, code) in _rowKeys[row]) {
+    final d = (p.dx - (x0 + x1) / 2).abs();
+    if (d < bestDist) {
+      bestDist = d;
+      best = code;
+    }
+  }
+  return best;
+}
+
+/// Teclado del Spectrum 48K dibujado con la imagen real. Multitáctil: cada dedo
+/// queda asociado a la tecla que tocó. CAPS SHIFT y SYMBOL SHIFT se fijan con un
+/// toque y se sueltan solos tras la siguiente tecla (o se mantienen pulsados a la vez).
 class ZxKeyboard extends StatefulWidget {
   final void Function(int code, bool pressed) onKey;
   final bool haptics;
   const ZxKeyboard({super.key, required this.onKey, this.haptics = true});
+
+  static double get aspectRatio => _skin.width / _skin.height;
 
   @override
   State<ZxKeyboard> createState() => _ZxKeyboardState();
 }
 
 class _ZxKeyboardState extends State<ZxKeyboard> {
+  final Map<int, int> _pointers = {}; // puntero → tecla
   final Set<int> _down = {};
   final Set<int> _latched = {};
   final Set<int> _modifierHeld = {};
@@ -105,105 +133,41 @@ class _ZxKeyboardState extends State<ZxKeyboard> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: ZxColors.body,
-      padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
-      child: Column(
-        children: [
-          for (final row in _rows)
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final k in row)
-                    Expanded(
-                      flex: k.flex,
-                      child: _KeyCap(
-                        k: k,
-                        down: _down.contains(k.code),
-                        latched: _latched.contains(k.code),
-                        onDown: () => _press(k.code),
-                        onUp: () => _release(k.code),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-        ],
-      ),
+    return SkinView(
+      skin: _skin,
+      onDown: (id, p) {
+        final code = _keyAt(p);
+        if (code == null || _pointers.containsValue(code)) return;
+        _pointers[id] = code;
+        _press(code);
+      },
+      onUp: (id) {
+        final code = _pointers.remove(id);
+        if (code != null) _release(code);
+      },
+      painter: _KeyboardOverlay(down: {..._down}, latched: {..._latched}),
     );
   }
 }
 
-class _KeyCap extends StatelessWidget {
-  final _K k;
-  final bool down;
-  final bool latched;
-  final VoidCallback onDown;
-  final VoidCallback onUp;
-
-  const _KeyCap({
-    required this.k,
-    required this.down,
-    required this.latched,
-    required this.onDown,
-    required this.onUp,
-  });
+class _KeyboardOverlay extends SkinPainter {
+  final Set<int> down;
+  final Set<int> latched;
+  _KeyboardOverlay({required this.down, required this.latched});
 
   @override
-  Widget build(BuildContext context) {
-    final isWide = k.label.length > 1;
-    final bg = latched
-        ? ZxColors.cyan.withValues(alpha: 0.55)
-        : (down ? ZxColors.keyPressed : ZxColors.key);
-    return Listener(
-      onPointerDown: (_) => onDown(),
-      onPointerUp: (_) => onUp(),
-      onPointerCancel: (_) => onUp(),
-      child: Container(
-        margin: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.black, width: 1),
-        ),
-        child: Stack(
-          children: [
-            if (k.keyword.isNotEmpty)
-              Positioned(
-                top: 1,
-                left: 0,
-                right: 0,
-                child: Text(k.keyword,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    style: const TextStyle(fontSize: 7.5, color: ZxColors.textDim)),
-              ),
-            Center(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: Text(k.label,
-                      style: TextStyle(
-                        fontSize: isWide ? 13 : 20,
-                        fontWeight: FontWeight.bold,
-                        color: ZxColors.keyText,
-                      )),
-                ),
-              ),
-            ),
-            if (k.symbol.isNotEmpty)
-              Positioned(
-                bottom: 1,
-                right: 3,
-                child: Text(k.symbol,
-                    style: const TextStyle(
-                        fontSize: 9, color: ZxColors.keyRed, fontWeight: FontWeight.bold)),
-              ),
-          ],
-        ),
-      ),
-    );
+  void paintSkin(Canvas canvas) {
+    final pressed = Paint()..color = Colors.white.withValues(alpha: 0.35);
+    final lock = Paint()..color = ZxColors.cyan.withValues(alpha: 0.45);
+    for (final code in {...down, ...latched}) {
+      final r = _keyRects[code];
+      if (r == null) continue;
+      canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(10)),
+          latched.contains(code) ? lock : pressed);
+    }
   }
+
+  @override
+  bool shouldRepaint(_KeyboardOverlay old) =>
+      old.scale != scale || !setEquals(old.down, down) || !setEquals(old.latched, latched);
 }

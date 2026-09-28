@@ -5,10 +5,31 @@ import 'package:flutter/services.dart';
 
 import '../../core/emulator/zx_types.dart';
 import '../../core/l10n.dart';
-import '../../core/theme/easy_theme.dart';
+import 'skin.dart';
 
-/// Controles tipo mando: cruceta de 8 direcciones, botón FUEGO y una fila de
-/// teclas rápidas (números para menús, ENTER y ESPACIO).
+/// Geometría de `assets/skin/joystick.jpg` (1536×1024), medida sobre la imagen.
+const _skin = SkinImage('assets/skin/joystick.jpg', 1536, 1024);
+const _dpadCenter = Offset(367, 508);
+const _dpadArm = 107.0; // ancho de cada brazo de la cruz (bbox 206..528 / 3)
+const _dpadReach = 270.0; // radio de toque (más generoso que el dibujo)
+const _fireCenter = Offset(1163, 542);
+const _fireRadius = 128.0; // tapa del botón
+const _fireReach = 240.0;
+const _lcd = Rect.fromLTRB(484, 752, 1038, 858);
+
+/// Botones de colores → teclas 1-4 (las de los menús "1 teclado, 2 Kempston…").
+const _buttons = <(Rect, int, String)>[
+  (Rect.fromLTRB(813, 192, 949, 287), ZxKey.k1, '1'),
+  (Rect.fromLTRB(962, 191, 1098, 287), ZxKey.k2, '2'),
+  (Rect.fromLTRB(1110, 191, 1247, 287), ZxKey.k3, '3'),
+  (Rect.fromLTRB(1259, 191, 1397, 287), ZxKey.k4, '4'),
+];
+
+enum _Zone { dpad, fire, key }
+
+/// Mando dibujado con la imagen: cruceta roja (8 direcciones, se puede deslizar),
+/// botón redondo = FUEGO, botones de colores = teclas 1-4 y la pantalla LCD
+/// partida en ENTER | ESPACIO.
 class JoystickPad extends StatefulWidget {
   final void Function(int mask) onJoystick;
   final void Function(int code, bool pressed) onKey;
@@ -21,15 +42,37 @@ class JoystickPad extends StatefulWidget {
     this.haptics = true,
   });
 
+  static double get aspectRatio => _skin.width / _skin.height;
+
   @override
   State<JoystickPad> createState() => _JoystickPadState();
 }
 
 class _JoystickPadState extends State<JoystickPad> {
+  final Map<int, (_Zone, int)> _pointers = {}; // puntero → zona (+ tecla)
   int _dir = 0;
   bool _fire = false;
+  final Set<int> _keysDown = {};
 
   void _emit() => widget.onJoystick(_dir | (_fire ? ZxJoy.fire : 0));
+
+  static int _dirFor(Offset p) {
+    final d = p - _dpadCenter;
+    if (d.distance < 30) return 0;
+    final a = math.atan2(d.dy, d.dx); // 0 = derecha, positivo hacia abajo
+    final sector = ((a + math.pi) / (math.pi / 4) + 0.5).floor() % 8;
+    const masks = [
+      ZxJoy.left,
+      ZxJoy.left | ZxJoy.up,
+      ZxJoy.up,
+      ZxJoy.up | ZxJoy.right,
+      ZxJoy.right,
+      ZxJoy.right | ZxJoy.down,
+      ZxJoy.down,
+      ZxJoy.down | ZxJoy.left,
+    ];
+    return masks[sector];
+  }
 
   void _setDir(int dir) {
     if (dir == _dir) return;
@@ -45,220 +88,157 @@ class _JoystickPadState extends State<JoystickPad> {
     _emit();
   }
 
+  void _setKey(int code, bool v) {
+    if (v && widget.haptics) HapticFeedback.selectionClick();
+    setState(() => v ? _keysDown.add(code) : _keysDown.remove(code));
+    widget.onKey(code, v);
+  }
+
+  (_Zone, int)? _zoneAt(Offset p) {
+    if ((p - _dpadCenter).distance <= _dpadReach) return (_Zone.dpad, 0);
+    if ((p - _fireCenter).distance <= _fireReach) return (_Zone.fire, 0);
+    for (final (r, code, _) in _buttons) {
+      if (r.inflate(18).contains(p)) return (_Zone.key, code);
+    }
+    if (_lcd.inflate(18).contains(p)) {
+      return (_Zone.key, p.dx < _lcd.center.dx ? ZxKey.enter : ZxKey.space);
+    }
+    return null;
+  }
+
+  void _down(int id, Offset p) {
+    final z = _zoneAt(p);
+    if (z == null) return;
+    _pointers[id] = z;
+    switch (z.$1) {
+      case _Zone.dpad:
+        _setDir(_dirFor(p));
+      case _Zone.fire:
+        _setFire(true);
+      case _Zone.key:
+        _setKey(z.$2, true);
+    }
+  }
+
+  void _move(int id, Offset p) {
+    final z = _pointers[id];
+    if (z != null && z.$1 == _Zone.dpad) _setDir(_dirFor(p));
+  }
+
+  void _up(int id) {
+    final z = _pointers.remove(id);
+    if (z == null) return;
+    switch (z.$1) {
+      case _Zone.dpad:
+        _setDir(0);
+      case _Zone.fire:
+        _setFire(false);
+      case _Zone.key:
+        _setKey(z.$2, false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: ZxColors.body,
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 52,
-            child: Row(
-              children: [
-                for (final (label, code) in const [
-                  ('1', ZxKey.k1), ('2', ZxKey.k2), ('3', ZxKey.k3),
-                  ('4', ZxKey.k4), ('5', ZxKey.k5),
-                ])
-                  Expanded(child: _QuickKey(label: label, code: code, onKey: widget.onKey)),
-                Expanded(
-                    flex: 2,
-                    child: _QuickKey(label: 'ENTER', code: ZxKey.enter, onKey: widget.onKey)),
-                Expanded(
-                    flex: 2,
-                    child: _QuickKey(label: context.l10n.space, code: ZxKey.space, onKey: widget.onKey)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: Row(
-              children: [
-                Expanded(
-                  child: Center(
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: _DPad(direction: _dir, onDirection: _setDir),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Center(
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Listener(
-                          onPointerDown: (_) => _setFire(true),
-                          onPointerUp: (_) => _setFire(false),
-                          onPointerCancel: (_) => _setFire(false),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _fire ? ZxColors.yellow : ZxColors.red,
-                              border: Border.all(color: Colors.black, width: 3),
-                              boxShadow: const [
-                                BoxShadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 4)),
-                              ],
-                            ),
-                            child: Center(
-                              child: Text(context.l10n.fire,
-                                  style: const TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white)),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+    return SkinView(
+      skin: _skin,
+      onDown: _down,
+      onMove: _move,
+      onUp: _up,
+      painter: _PadOverlay(
+        dir: _dir,
+        fire: _fire,
+        keys: {..._keysDown},
+        space: context.l10n.space,
       ),
     );
   }
 }
 
-/// Cruceta: la dirección sale del ángulo del dedo respecto al centro
-/// (8 sectores), así se puede deslizar sin levantar el dedo.
-class _DPad extends StatelessWidget {
-  final int direction;
-  final ValueChanged<int> onDirection;
-  const _DPad({required this.direction, required this.onDirection});
-
-  int _dirFor(Offset local, Size size) {
-    final c = size.center(Offset.zero);
-    final d = local - c;
-    if (d.distance < size.shortestSide * 0.12) return 0;
-    final a = math.atan2(d.dy, d.dx); // 0 = derecha, positivo hacia abajo
-    final sector = ((a + math.pi) / (math.pi / 4) + 0.5).floor() % 8;
-    // sector 0 = izquierda, luego en sentido horario.
-    const masks = [
-      ZxJoy.left,
-      ZxJoy.left | ZxJoy.up,
-      ZxJoy.up,
-      ZxJoy.up | ZxJoy.right,
-      ZxJoy.right,
-      ZxJoy.right | ZxJoy.down,
-      ZxJoy.down,
-      ZxJoy.down | ZxJoy.left,
-    ];
-    return masks[sector];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, box) {
-      final size = box.biggest;
-      return Listener(
-        onPointerDown: (e) => onDirection(_dirFor(e.localPosition, size)),
-        onPointerMove: (e) => onDirection(_dirFor(e.localPosition, size)),
-        onPointerUp: (_) => onDirection(0),
-        onPointerCancel: (_) => onDirection(0),
-        child: CustomPaint(size: size, painter: _DPadPainter(direction)),
-      );
-    });
-  }
-}
-
-class _DPadPainter extends CustomPainter {
+class _PadOverlay extends SkinPainter {
   final int dir;
-  _DPadPainter(this.dir);
+  final bool fire;
+  final Set<int> keys;
+  final String space;
+  _PadOverlay({required this.dir, required this.fire, required this.keys, required this.space});
+
+  static const _lcdInk = Color(0xFF263022);
+
+  void _label(Canvas canvas, String text, Offset center, double size, Color color) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          fontSize: size,
+          fontWeight: FontWeight.w900,
+          color: color,
+          letterSpacing: size * 0.08,
+          fontFamily: 'monospace',
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+  }
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final s = size.shortestSide;
-    final c = size.center(Offset.zero);
-    final arm = s * 0.34;
-    final r = RRect.fromRectAndRadius(
-        Rect.fromCenter(center: c, width: arm, height: s * 0.94), const Radius.circular(10));
-    final h = RRect.fromRectAndRadius(
-        Rect.fromCenter(center: c, width: s * 0.94, height: arm), const Radius.circular(10));
-    final base = Paint()..color = ZxColors.key;
-    canvas.drawCircle(c, s * 0.5, Paint()..color = ZxColors.bodyLight);
-    canvas.drawRRect(r, base);
-    canvas.drawRRect(h, base);
+  void paintSkin(Canvas canvas) {
+    final glow = Paint()..color = Colors.white.withValues(alpha: 0.35);
 
-    final hi = Paint()..color = ZxColors.cyan;
-    final off = s * 0.31;
-    void arrow(int mask, Offset o, double angle) {
-      final on = dir & mask != 0;
-      if (on) {
-        canvas.drawRRect(
-            RRect.fromRectAndRadius(
-                Rect.fromCenter(center: c + o, width: arm, height: arm), const Radius.circular(8)),
-            hi);
-      }
-      canvas.save();
-      canvas.translate(c.dx + o.dx, c.dy + o.dy);
-      canvas.rotate(angle);
-      final p = Path()
-        ..moveTo(0, -arm * 0.22)
-        ..lineTo(arm * 0.2, arm * 0.12)
-        ..lineTo(-arm * 0.2, arm * 0.12)
-        ..close();
-      canvas.drawPath(p, Paint()..color = on ? Colors.black : ZxColors.textLight);
-      canvas.restore();
+    // Cruceta: ilumina los brazos activos.
+    const arm = _dpadArm;
+    const reach = arm; // del centro de la cruz al centro de cada brazo (322 px / 3)
+    void armGlow(int mask, Offset o) {
+      if (dir & mask == 0) return;
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(
+              Rect.fromCenter(center: _dpadCenter + o, width: arm, height: arm),
+              const Radius.circular(14)),
+          glow);
     }
 
-    arrow(ZxJoy.up, Offset(0, -off), 0);
-    arrow(ZxJoy.right, Offset(off, 0), math.pi / 2);
-    arrow(ZxJoy.down, Offset(0, off), math.pi);
-    arrow(ZxJoy.left, Offset(-off, 0), -math.pi / 2);
+    armGlow(ZxJoy.up, const Offset(0, -reach));
+    armGlow(ZxJoy.down, const Offset(0, reach));
+    armGlow(ZxJoy.left, const Offset(-reach, 0));
+    armGlow(ZxJoy.right, const Offset(reach, 0));
+
+    // Fuego: hundido (más oscuro) con aro de color al pulsar.
+    if (fire) {
+      canvas.drawCircle(_fireCenter, _fireRadius, Paint()..color = Colors.black.withValues(alpha: 0.35));
+      canvas.drawCircle(
+          _fireCenter,
+          _fireRadius + 6,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 10
+            ..color = const Color(0xFFE8322B));
+    }
+
+    // Botones de colores con su número.
+    for (final (r, code, label) in _buttons) {
+      if (keys.contains(code)) {
+        canvas.drawRRect(RRect.fromRectAndRadius(r.deflate(8), const Radius.circular(14)), glow);
+      }
+      _label(canvas, label, r.center, 52, Colors.white.withValues(alpha: 0.9));
+    }
+
+    // LCD: ENTER | ESPACIO, con la mitad pulsada en negativo.
+    final left = Rect.fromLTRB(_lcd.left, _lcd.top, _lcd.center.dx, _lcd.bottom);
+    final right = Rect.fromLTRB(_lcd.center.dx, _lcd.top, _lcd.right, _lcd.bottom);
+    final pressedLcd = Paint()..color = _lcdInk.withValues(alpha: 0.85);
+    final enter = keys.contains(ZxKey.enter), spc = keys.contains(ZxKey.space);
+    if (enter) canvas.drawRect(left.deflate(6), pressedLcd);
+    if (spc) canvas.drawRect(right.deflate(6), pressedLcd);
+    canvas.drawLine(Offset(_lcd.center.dx, _lcd.top + 14), Offset(_lcd.center.dx, _lcd.bottom - 14),
+        Paint()
+          ..color = _lcdInk.withValues(alpha: 0.6)
+          ..strokeWidth = 4);
+    const lcdLight = Color(0xFF9DAA8C);
+    _label(canvas, 'ENTER', left.center, 46, enter ? lcdLight : _lcdInk);
+    _label(canvas, space, right.center, 46, spc ? lcdLight : _lcdInk);
   }
 
   @override
-  bool shouldRepaint(_DPadPainter old) => old.dir != dir;
-}
-
-class _QuickKey extends StatefulWidget {
-  final String label;
-  final int code;
-  final void Function(int code, bool pressed) onKey;
-  const _QuickKey({required this.label, required this.code, required this.onKey});
-
-  @override
-  State<_QuickKey> createState() => _QuickKeyState();
-}
-
-class _QuickKeyState extends State<_QuickKey> {
-  bool _down = false;
-
-  void _set(bool v) {
-    if (v == _down) return;
-    setState(() => _down = v);
-    widget.onKey(widget.code, v);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: (_) => _set(true),
-      onPointerUp: (_) => _set(false),
-      onPointerCancel: (_) => _set(false),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 3),
-        decoration: BoxDecoration(
-          color: _down ? ZxColors.keyPressed : ZxColors.key,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Center(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(widget.label,
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold, color: ZxColors.keyText)),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  bool shouldRepaint(_PadOverlay old) =>
+      old.scale != scale || old.dir != dir || old.fire != fire || !setEquals(old.keys, keys) || old.space != space;
 }

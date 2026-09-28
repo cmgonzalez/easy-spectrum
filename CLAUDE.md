@@ -109,6 +109,16 @@ Pantalla de 6912 bytes ($4000) → imagen 256×192. Caché en `<appSupport>/thum
 - Loop: cada tick de vsync se llama `zx_run(delta real)`; delta >0,1 s se descarta (pausa).
 - Teclado: multitáctil con `Listener`; CAPS/SYM se fijan con un toque y se sueltan tras la siguiente tecla.
 - Joystick: Kempston (por defecto), Sinclair, Cursor o QAOP+Espacio (estos tres simulan teclas).
+- **Pieles** (`assets/skin/`, fuente en `art/` 11_32_04 teclado y 11_23_12 mando): `skin.dart`
+  (`SkinView`) ajusta la imagen (contain), traduce toques a píxeles de la imagen y `SkinPainter`
+  dibuja overlays en esas coordenadas. La geometría está medida sobre la imagen (constantes en
+  `zx_keyboard.dart` / `joystick_pad.dart`): **si se cambia la imagen hay que re-medir**.
+  - Teclado: 4 bandas de fila × 10 teclas; el toque va a la tecla de centro más cercano de su
+    fila (los huecos cuentan). Verificado tecleando `PRINT 7*6` → 42 en 48 BASIC.
+  - Mando: cruceta (ángulo, 8 dir., se puede deslizar), botón redondo = FUEGO, botones de
+    colores = teclas 1-4, LCD partido = ENTER | ESPACIO (rótulos pintados encima).
+  - El área de controles mide justo la altura de su imagen a todo el ancho (máx. 50% de la
+    pantalla); la pantalla del juego usa el resto.
 
 ## Idiomas
 

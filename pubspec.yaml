@@ -36,6 +36,7 @@ flutter:
   assets:
     - assets/roms/
     - assets/icon/
+    - assets/skin/
 
 # Ícono de la edición Free (android/app/src/main/res). La Pro: flutter_launcher_icons-pro.yaml.
 # Fuente: art/ (ilustración con fondo completo). Adaptativo en dos capas: fondo = la imagen

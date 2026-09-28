@@ -301,7 +301,6 @@ class _GameScreenState extends State<GameScreen>
                 onMenu: _showMenu,
               ),
               Expanded(
-                flex: 5,
                 child: _error != null
                     ? _ErrorView(message: zxErrorText(context.l10n, _error!), onBack: () => Navigator.pop(context))
                     : Stack(
@@ -319,15 +318,20 @@ class _GameScreenState extends State<GameScreen>
                         ],
                       ),
               ),
-              Expanded(
-                flex: 4,
-                child: _showKeyboard
-                    ? ZxKeyboard(onKey: _onKey, haptics: _settings.vibration)
-                    : JoystickPad(
-                        onJoystick: _onJoystick,
-                        onKey: _onKey,
-                        haptics: _settings.vibration,
-                      ),
+              // Los controles ocupan justo la altura de su imagen a todo el ancho
+              // (con tope de media pantalla); la pantalla del juego usa el resto.
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.5),
+                child: AspectRatio(
+                  aspectRatio: _showKeyboard ? ZxKeyboard.aspectRatio : JoystickPad.aspectRatio,
+                  child: _showKeyboard
+                      ? ZxKeyboard(onKey: _onKey, haptics: _settings.vibration)
+                      : JoystickPad(
+                          onJoystick: _onJoystick,
+                          onKey: _onKey,
+                          haptics: _settings.vibration,
+                        ),
+                ),
               ),
             ],
           ),
