@@ -26,7 +26,7 @@ enum VideoMode {
         VideoMode.monitor =>
           const CrtParams(scan: 0.45, mask: 0.2, vignette: 0.15, corner: 0.035, glow: 0.15),
         VideoMode.tv => const CrtParams(
-            curve: 0.09, scan: 0.75, mask: 0.45, vignette: 0.5, corner: 0.07, glow: 0.35),
+            curve: 0.035, scan: 0.75, mask: 0.45, vignette: 0.4, corner: 0.05, glow: 0.35),
         _ => null,
       };
 
