@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/emulator/zx_types.dart';
+import '../../core/l10n.dart';
 import '../../core/settings.dart';
 import '../../core/theme/easy_theme.dart';
 import '../about/about_screen.dart';
@@ -50,65 +51,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final s = _s;
+    final t = context.l10n;
+    String joyLabel(JoyMapping m) => m == JoyMapping.qaop ? t.joyQaop : m.label;
     return Scaffold(
-      appBar: AppBar(title: const Text('Ajustes')),
+      appBar: AppBar(title: Text(t.settings)),
       body: s == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.symmetric(vertical: 8),
               children: [
-                const _Header('Máquina'),
+                _Header(t.machine),
                 ListTile(
                   leading: const Icon(Icons.memory_rounded, size: 32),
-                  title: const Text('Modelo de Spectrum'),
-                  subtitle: Text('${s.model.label} — los snapshots (.z80, .sna) usan su propio modelo'),
+                  title: Text(t.spectrumModel),
+                  subtitle: Text(t.spectrumModelSubtitle(s.model.label)),
                   onTap: () async {
-                    final v = await _choose('Modelo', ZxModel.values, (m) => m.label, s.model);
+                    final v = await _choose(t.model, ZxModel.values, (m) => m.label, s.model);
                     if (v != null) _update((s) => s.model = v);
                   },
                 ),
                 SwitchListTile(
                   secondary: const Icon(Icons.fast_forward_rounded, size: 32),
-                  title: const Text('Carga rápida de cintas'),
-                  subtitle: const Text('Los juegos .tap/.tzx cargan al instante'),
+                  title: Text(t.quickLoad),
+                  subtitle: Text(t.quickLoadSubtitle),
                   value: s.quickLoad,
                   onChanged: (v) => _update((s) => s.quickLoad = v),
                 ),
-                const _Header('Controles'),
+                _Header(t.controls),
                 ListTile(
                   leading: const Icon(Icons.sports_esports_rounded, size: 32),
-                  title: const Text('Tipo de joystick'),
-                  subtitle: Text(s.joyMapping.label),
+                  title: Text(t.joystickType),
+                  subtitle: Text(joyLabel(s.joyMapping)),
                   onTap: () async {
                     final v = await _choose(
-                        'Joystick', JoyMapping.values, (m) => m.label, s.joyMapping);
+                        t.joystick, JoyMapping.values, joyLabel, s.joyMapping);
                     if (v != null) _update((s) => s.joyMapping = v);
                   },
                 ),
                 SwitchListTile(
                   secondary: const Icon(Icons.keyboard_rounded, size: 32),
-                  title: const Text('Empezar con el teclado'),
-                  subtitle: const Text('Si no, se muestra el mando'),
+                  title: Text(t.startWithKeyboard),
+                  subtitle: Text(t.startWithKeyboardSubtitle),
                   value: s.startWithKeyboard,
                   onChanged: (v) => _update((s) => s.startWithKeyboard = v),
                 ),
                 SwitchListTile(
                   secondary: const Icon(Icons.vibration_rounded, size: 32),
-                  title: const Text('Vibrar al pulsar'),
+                  title: Text(t.vibration),
                   value: s.vibration,
                   onChanged: (v) => _update((s) => s.vibration = v),
                 ),
-                const _Header('Pantalla'),
+                _Header(t.screen),
                 SwitchListTile(
                   secondary: const Icon(Icons.light_mode_rounded, size: 32),
-                  title: const Text('Mantener pantalla encendida'),
+                  title: Text(t.keepScreenOn),
                   value: s.keepScreenOn,
                   onChanged: (v) => _update((s) => s.keepScreenOn = v),
                 ),
                 const Divider(height: 32),
                 ListTile(
                   leading: const Icon(Icons.info_outline_rounded, size: 32),
-                  title: const Text('Acerca de'),
+                  title: Text(t.about),
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const AboutScreen()),

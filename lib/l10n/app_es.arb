@@ -1,0 +1,105 @@
+{
+  "@@locale": "es",
+  "settings": "Ajustes",
+  "loadGame": "Cargar juego",
+  "powerOnBasic": "Encender (BASIC)",
+  "myGames": "Mis juegos",
+  "emptyLibrary": "Carga un juego (.tap, .tzx, .z80, .sna, .dsk o .zip) y aparecerá aquí para jugarlo con un toque.",
+  "deleteGame": "Borrar juego",
+  "deleteGameConfirm": "¿Quitar \"{title}\" de la lista?",
+  "@deleteGameConfirm": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "cancel": "Cancelar",
+  "delete": "Borrar",
+  "pickerError": "No se pudo abrir el selector: {error}",
+  "@pickerError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "readFileError": "No se pudo leer el archivo.",
+  "zipWithoutGame": "El ZIP no contiene un juego de Spectrum.",
+  "unsupportedFormat": "Formato no soportado (.{ext}). Usa .tap, .tzx, .z80, .sna, .szx, .dsk o .zip.",
+  "@unsupportedFormat": {
+    "placeholders": {
+      "ext": {
+        "type": "String"
+      }
+    }
+  },
+  "importError": "Error al importar: {error}",
+  "@importError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "exit": "Salir",
+  "showJoystick": "Mostrar mando",
+  "showKeyboard": "Mostrar teclado",
+  "resume": "Continuar",
+  "pause": "Pausa",
+  "menu": "Menú",
+  "reset": "Reiniciar",
+  "playTape": "Reproducir cinta",
+  "stopTape": "Detener cinta",
+  "exitGame": "Salir del juego",
+  "loadFailed": "No se pudo cargar el juego:\n{reason}",
+  "@loadFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "back": "Volver",
+  "errMissingRoms": "Faltan las ROMs del Spectrum.",
+  "errBadSnapshot": "El snapshot está dañado o no es válido.",
+  "errUnsupportedFormat": "Formato de archivo no soportado.",
+  "errMachineFailed": "No se pudo iniciar la máquina.",
+  "errOpenFailed": "No se pudo abrir el archivo.",
+  "fire": "FUEGO",
+  "space": "ESPACIO",
+  "machine": "Máquina",
+  "spectrumModel": "Modelo de Spectrum",
+  "spectrumModelSubtitle": "{model} — los snapshots (.z80, .sna) usan su propio modelo",
+  "@spectrumModelSubtitle": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "model": "Modelo",
+  "quickLoad": "Carga rápida de cintas",
+  "quickLoadSubtitle": "Los juegos .tap/.tzx cargan al instante",
+  "controls": "Controles",
+  "joystickType": "Tipo de joystick",
+  "joystick": "Joystick",
+  "joyQaop": "Teclas Q-A-O-P + Espacio",
+  "startWithKeyboard": "Empezar con el teclado",
+  "startWithKeyboardSubtitle": "Si no, se muestra el mando",
+  "vibration": "Vibrar al pulsar",
+  "screen": "Pantalla",
+  "keepScreenOn": "Mantener pantalla encendida",
+  "about": "Acerca de",
+  "aboutDescription": "Emulador de ZX Spectrum simple y accesible.",
+  "developedBy": "Desarrollado por EasySoft SPA",
+  "engineTitle": "Motor de emulación",
+  "licenseMit": "Licencia MIT",
+  "engineBody": "Emula con precisión de ciclo los modelos 16K, 48K, 128K, +2, +2A y +3, con sonido AY y carga de cintas y discos.",
+  "romsTitle": "ROMs del Spectrum",
+  "romsBody": "Las ROMs del ZX Spectrum son copyright de Amstrad plc, que autoriza su distribución junto a emuladores. Amstrad no respalda ni da soporte a esta aplicación.",
+  "formatsTitle": "Formatos",
+  "formatTapes": "Cintas",
+  "formatDisks": "Discos +3",
+  "formatZip": "También dentro de archivos .zip"
+}

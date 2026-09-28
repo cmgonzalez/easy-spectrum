@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../../core/ads/ad_manager.dart';
+import '../../core/l10n.dart';
 import '../../core/storage/game_library.dart';
 import '../../core/theme/easy_theme.dart';
 import '../game/game_screen.dart';
@@ -62,11 +63,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _pickGame() async {
+    final t = context.l10n;
     FilePickerResult? result;
     try {
       result = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
     } catch (e) {
-      _snack('No se pudo abrir el selector: $e');
+      _snack(t.pickerError('$e'));
       return;
     }
     if (result == null || result.files.isEmpty) return;
@@ -77,30 +79,31 @@ class _HomeScreenState extends State<HomeScreen> {
       bytes = await File(file.path!).readAsBytes();
     }
     if (bytes == null) {
-      _snack('No se pudo leer el archivo.');
+      _snack(t.readFileError);
       return;
     }
 
     try {
       final path = await GameLibrary.import(file.name, bytes);
       await _play(path: path);
-    } on FormatException catch (e) {
-      _snack('${e.message}. Usa .tap, .tzx, .z80, .sna, .szx, .dsk o .zip');
+    } on GameImportException catch (e) {
+      _snack(e.extension == null ? t.zipWithoutGame : t.unsupportedFormat(e.extension!));
     } catch (e) {
-      _snack('Error al importar: $e');
+      _snack(t.importError('$e'));
     }
   }
 
   Future<void> _deleteGame(File f) async {
+    final t = context.l10n;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Borrar juego'),
-        content: Text('¿Quitar "${GameLibrary.titleOf(f.path)}" de la lista?',
+        title: Text(t.deleteGame),
+        content: Text(t.deleteGameConfirm(GameLibrary.titleOf(f.path)),
             style: const TextStyle(fontSize: 18)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Borrar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t.cancel)),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t.delete)),
         ],
       ),
     );
@@ -114,6 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.l10n;
     return Scaffold(
       appBar: AppBar(
         title: const Row(
@@ -127,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_rounded, size: 30),
-            tooltip: 'Ajustes',
+            tooltip: t.settings,
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const SettingsScreen()),
@@ -143,21 +147,21 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 _BigButton(
                   icon: Icons.folder_open_rounded,
-                  label: 'Cargar juego',
+                  label: t.loadGame,
                   color: ZxColors.cyan,
                   onTap: _pickGame,
                 ),
                 const SizedBox(height: 14),
                 _BigButton(
                   icon: Icons.keyboard_rounded,
-                  label: 'Encender (BASIC)',
+                  label: t.powerOnBasic,
                   color: ZxColors.yellow,
                   onTap: () => _play(),
                 ),
                 const SizedBox(height: 28),
                 if (_games.isNotEmpty) ...[
-                  const Text('Mis juegos',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  Text(t.myGames,
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   for (final g in _games)
                     Card(
@@ -173,19 +177,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         subtitle: Text(GameLibrary.extensionOf(g.path).toUpperCase()),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete_outline_rounded, size: 28),
-                          tooltip: 'Borrar',
+                          tooltip: t.delete,
                           onPressed: () => _deleteGame(g),
                         ),
                         onTap: () => _play(path: g.path),
                       ),
                     ),
                 ] else
-                  const Padding(
-                    padding: EdgeInsets.all(12),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
                     child: Text(
-                      'Carga un juego (.tap, .tzx, .z80, .sna, .dsk o .zip) '
-                      'y aparecerá aquí para jugarlo con un toque.',
-                      style: TextStyle(fontSize: 18, color: ZxColors.textDim),
+                      t.emptyLibrary,
+                      style: const TextStyle(fontSize: 18, color: ZxColors.textDim),
                       textAlign: TextAlign.center,
                     ),
                   ),

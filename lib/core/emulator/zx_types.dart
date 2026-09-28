@@ -43,7 +43,7 @@ enum JoyMapping {
   kempston('Kempston'),
   sinclair('Sinclair (6-7-8-9-0)'),
   cursor('Cursor (5-6-7-8-0)'),
-  qaop('Teclas Q-A-O-P + Espacio');
+  qaop('Q-A-O-P + Space'); // la UI usa AppLocalizations.joyQaop
 
   const JoyMapping(this.label);
   final String label;

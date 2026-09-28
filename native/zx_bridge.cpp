@@ -320,7 +320,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 			if(ext == "z80") t = Storage::State::Z80::load(path);
 			else if(ext == "sna") t = Storage::State::SNA::load(path);
 			else t = Storage::State::SZX::load(path);
-			if(!t) { g_last_error = "snapshot inválido"; return nullptr; }
+			if(!t) { g_last_error = "bad_snapshot"; return nullptr; }
 			target.reset(static_cast<Target *>(t.release()));
 		} else {
 			target = std::make_unique<Target>();
@@ -337,7 +337,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 					std::make_shared<Storage::Disk::DiskImageHolder<Storage::Disk::CPCDSK>>(path));
 				target->model = Target::Model::Plus3;
 			} else if(!path.empty()) {
-				g_last_error = "formato no soportado: " + ext;
+				g_last_error = "unsupported_format";
 				return nullptr;
 			}
 
@@ -367,7 +367,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 
 		auto h = std::make_unique<ZxHandle>();
 		h->machine = Sinclair::ZXSpectrum::Machine::create(*target, fetcher);
-		if(!h->machine) { g_last_error = "no se pudo crear la máquina"; return nullptr; }
+		if(!h->machine) { g_last_error = "machine_failed"; return nullptr; }
 
 		auto *const raw = h->machine.get();
 		h->timed = dynamic_cast<MachineTypes::TimedMachine *>(raw);
@@ -378,7 +378,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 		auto *const scan_producer = dynamic_cast<MachineTypes::ScanProducer *>(raw);
 		auto *const audio_producer = dynamic_cast<MachineTypes::AudioProducer *>(raw);
 
-		if(!h->timed || !scan_producer) { g_last_error = "interfaz de máquina incompleta"; return nullptr; }
+		if(!h->timed || !scan_producer) { g_last_error = "machine_failed"; return nullptr; }
 
 		scan_producer->set_scan_target(&h->scan_target);
 
@@ -405,11 +405,11 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 		LOGI("máquina creada: modelo %d, media '%s'", int(target->model), path.c_str());
 		return h.release();
 	} catch(ROMMachine::Error) {
-		g_last_error = "faltan ROMs";
+		g_last_error = "missing_roms";
 	} catch(const std::exception &e) {
 		g_last_error = e.what();
 	} catch(...) {
-		g_last_error = "error al abrir el archivo";
+		g_last_error = "open_failed";
 	}
 	LOGI("zx_create falló: %s", g_last_error.c_str());
 	return nullptr;

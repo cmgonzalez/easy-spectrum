@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/emulator/zx_types.dart';
+import '../../core/l10n.dart';
 import '../../core/theme/easy_theme.dart';
 
 /// Controles tipo mando: cruceta de 8 direcciones, botón FUEGO y una fila de
@@ -65,7 +66,7 @@ class _JoystickPadState extends State<JoystickPad> {
                     child: _QuickKey(label: 'ENTER', code: ZxKey.enter, onKey: widget.onKey)),
                 Expanded(
                     flex: 2,
-                    child: _QuickKey(label: 'ESPACIO', code: ZxKey.space, onKey: widget.onKey)),
+                    child: _QuickKey(label: context.l10n.space, code: ZxKey.space, onKey: widget.onKey)),
               ],
             ),
           ),
@@ -101,9 +102,9 @@ class _JoystickPadState extends State<JoystickPad> {
                                 BoxShadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 4)),
                               ],
                             ),
-                            child: const Center(
-                              child: Text('FUEGO',
-                                  style: TextStyle(
+                            child: Center(
+                              child: Text(context.l10n.fire,
+                                  style: const TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.white)),

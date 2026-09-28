@@ -6,6 +6,12 @@ import 'package:path_provider/path_provider.dart';
 
 import '../emulator/zx_types.dart';
 
+/// Error al importar: [extension] es null si el .zip no trae ningún juego.
+class GameImportException implements Exception {
+  final String? extension;
+  const GameImportException(this.extension);
+}
+
 /// Biblioteca local de juegos: los archivos elegidos se copian a
 /// <app documents>/games para poder relanzarlos sin volver a buscarlos.
 class GameLibrary {
@@ -27,7 +33,7 @@ class GameLibrary {
   }
 
   /// Guarda [bytes] (o el primer juego dentro de un .zip) y devuelve la ruta.
-  /// Lanza [FormatException] si no hay un formato soportado.
+  /// Lanza [GameImportException] si no hay un formato soportado.
   static Future<String> import(String fileName, Uint8List bytes) async {
     var name = fileName;
     var data = bytes;
@@ -35,13 +41,13 @@ class GameLibrary {
       final archive = ZipDecoder().decodeBytes(bytes);
       final entry = archive.files.where((f) => f.isFile).firstWhere(
             (f) => zxMediaExtensions.contains(extensionOf(f.name)),
-            orElse: () => throw const FormatException('El ZIP no contiene un juego de Spectrum'),
+            orElse: () => throw const GameImportException(null),
           );
       name = entry.name.split('/').last;
       data = entry.content;
     }
     if (!zxMediaExtensions.contains(extensionOf(name))) {
-      throw FormatException('Formato no soportado: .${extensionOf(name)}');
+      throw GameImportException(extensionOf(name));
     }
     final file = File('${(await _dir()).path}/$name');
     await file.writeAsBytes(data, flush: true);

@@ -7,6 +7,7 @@ import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/ads/ad_manager.dart';
+import '../../core/l10n.dart';
 import '../../core/emulator/zx_bridge.dart';
 import '../../core/emulator/zx_types.dart';
 import '../../core/settings.dart';
@@ -228,6 +229,7 @@ class _GameScreenState extends State<GameScreen>
 
   Future<void> _showMenu() async {
     final tape = _zx.tapePlaying;
+    final t = context.l10n;
     final choice = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: ZxColors.bodyLight,
@@ -235,15 +237,14 @@ class _GameScreenState extends State<GameScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const _MenuTile(icon: Icons.restart_alt_rounded, label: 'Reiniciar', value: 'reset'),
+            _MenuTile(icon: Icons.restart_alt_rounded, label: t.reset, value: 'reset'),
             if (widget.mediaPath.isNotEmpty)
               _MenuTile(
                 icon: tape ? Icons.stop_rounded : Icons.play_arrow_rounded,
-                label: tape ? 'Detener cinta' : 'Reproducir cinta',
+                label: tape ? t.stopTape : t.playTape,
                 value: 'tape',
               ),
-            const _MenuTile(
-                icon: Icons.exit_to_app_rounded, label: 'Salir del juego', value: 'exit'),
+            _MenuTile(icon: Icons.exit_to_app_rounded, label: t.exitGame, value: 'exit'),
           ],
         ),
       ),
@@ -286,7 +287,7 @@ class _GameScreenState extends State<GameScreen>
               Expanded(
                 flex: 5,
                 child: _error != null
-                    ? _ErrorView(message: _error!, onBack: () => Navigator.pop(context))
+                    ? _ErrorView(message: zxErrorText(context.l10n, _error!), onBack: () => Navigator.pop(context))
                     : Stack(
                         fit: StackFit.expand,
                         children: [
@@ -342,6 +343,7 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const iconSize = 30.0;
+    final t = context.l10n;
     return Container(
       color: ZxColors.body,
       height: 56,
@@ -349,7 +351,7 @@ class _TopBar extends StatelessWidget {
         children: [
           IconButton(
             icon: const Icon(Icons.arrow_back_rounded, size: iconSize),
-            tooltip: 'Salir',
+            tooltip: t.exit,
             onPressed: onBack,
           ),
           Expanded(
@@ -360,17 +362,17 @@ class _TopBar extends StatelessWidget {
           IconButton(
             icon: Icon(keyboard ? Icons.sports_esports_rounded : Icons.keyboard_rounded,
                 size: iconSize),
-            tooltip: keyboard ? 'Mostrar mando' : 'Mostrar teclado',
+            tooltip: keyboard ? t.showJoystick : t.showKeyboard,
             onPressed: onToggleInput,
           ),
           IconButton(
             icon: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: iconSize),
-            tooltip: paused ? 'Continuar' : 'Pausa',
+            tooltip: paused ? t.resume : t.pause,
             onPressed: onPause,
           ),
           IconButton(
             icon: const Icon(Icons.more_vert_rounded, size: iconSize),
-            tooltip: 'Menú',
+            tooltip: t.menu,
             onPressed: onMenu,
           ),
         ],
@@ -410,10 +412,10 @@ class _ErrorView extends StatelessWidget {
         children: [
           const Icon(Icons.error_outline_rounded, size: 64, color: ZxColors.red),
           const SizedBox(height: 12),
-          Text('No se pudo cargar el juego:\n$message',
+          Text(context.l10n.loadFailed(message),
               textAlign: TextAlign.center, style: const TextStyle(fontSize: 18)),
           const SizedBox(height: 20),
-          ElevatedButton(onPressed: onBack, child: const Text('Volver')),
+          ElevatedButton(onPressed: onBack, child: Text(context.l10n.back)),
         ],
       ),
     );

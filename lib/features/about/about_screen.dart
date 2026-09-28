@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/l10n.dart';
 import '../../core/theme/easy_theme.dart';
 
 class AboutScreen extends StatelessWidget {
@@ -7,38 +8,32 @@ class AboutScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.l10n;
     return Scaffold(
-      appBar: AppBar(title: const Text('Acerca de')),
+      appBar: AppBar(title: Text(t.about)),
       body: ListView(
         padding: const EdgeInsets.all(24),
-        children: const [
-          Center(child: RainbowStripes(height: 40)),
-          SizedBox(height: 16),
+        children: [
+          const Center(child: RainbowStripes(height: 40)),
+          const SizedBox(height: 16),
           _Section(
             title: 'Easy Spectrum v1.0',
-            body: 'Emulador de ZX Spectrum simple y accesible.\n\n'
-                'Desarrollado por EasySoft SPA\nsoporte@easysoft.cl',
+            body: '${t.aboutDescription}\n\n${t.developedBy}\nsoporte@easysoft.cl',
           ),
           _Section(
-            title: 'Motor de emulación',
+            title: t.engineTitle,
             body: 'Clock Signal (CLK) — Thomas Harte\n'
-                'Licencia MIT\n'
+                '${t.licenseMit}\n'
                 'github.com/TomHarte/CLK\n\n'
-                'Emula con precisión de ciclo los modelos 16K, 48K, 128K, '
-                '+2, +2A y +3, con sonido AY y carga de cintas y discos.',
+                '${t.engineBody}',
           ),
+          _Section(title: t.romsTitle, body: t.romsBody),
           _Section(
-            title: 'ROMs del Spectrum',
-            body: 'Las ROMs del ZX Spectrum son copyright de Amstrad plc, '
-                'que autoriza su distribución junto a emuladores. '
-                'Amstrad no respalda ni da soporte a esta aplicación.',
-          ),
-          _Section(
-            title: 'Formatos',
-            body: 'Cintas: .tap .tzx .csw\n'
+            title: t.formatsTitle,
+            body: '${t.formatTapes}: .tap .tzx .csw\n'
                 'Snapshots: .z80 .sna .szx\n'
-                'Discos +3: .dsk\n'
-                'También dentro de archivos .zip',
+                '${t.formatDisks}: .dsk\n'
+                '${t.formatZip}',
           ),
         ],
       ),

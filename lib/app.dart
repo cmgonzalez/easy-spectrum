@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'core/l10n.dart';
 import 'core/theme/easy_theme.dart';
 import 'features/home/home_screen.dart';
 
@@ -12,12 +12,9 @@ class EasySpectrumApp extends StatelessWidget {
       title: 'Easy Spectrum',
       theme: EasyTheme.theme,
       debugShowCheckedModeBanner: false,
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [Locale('es'), Locale('en'), Locale('pt')],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      // El primero (en) es el idioma de reserva para locales no soportados.
+      supportedLocales: AppLocalizations.supportedLocales,
       home: const HomeScreen(),
     );
   }

@@ -71,6 +71,16 @@ lib/features/game/                 game_screen (Ticker, reloj de pared), zx_keyb
 - Teclado: multitáctil con `Listener`; CAPS/SYM se fijan con un toque y se sueltan tras la siguiente tecla.
 - Joystick: Kempston (por defecto), Sinclair, Cursor o QAOP+Espacio (estos tres simulan teclas).
 
+## Idiomas
+
+`gen-l10n` con ARB en `lib/l10n/`: **es** (plantilla), en, ru, it, pt. Los `app_localizations*.dart`
+se generan al compilar (están en `.gitignore`). Acceso con `context.l10n` (`lib/core/l10n.dart`).
+El inglés es el idioma de reserva para locales no soportados.
+- Añadir un texto: agregarlo a los 5 ARB (con `@clave`/placeholders solo en `app_es.arb`) y `flutter gen-l10n`.
+- `zx_last_error()` devuelve códigos (`missing_roms`, `bad_snapshot`…) que traduce `zxErrorText()`.
+- Probar un idioma en el emulador sin cambiar el sistema:
+  `adb shell cmd locale set-app-locales cl.easysoft.easyspectrum --locales ru`
+
 ## Build
 
 ```powershell
@@ -88,4 +98,5 @@ Firma release: `android/key.properties` (no va al repo). Primera compilación na
 - [ ] Probar en SM S926B (audio real)
 - [ ] Save states (requiere parchear CLK o serializar State)
 - [ ] IDs AdMob reales / política de privacidad `www.easysoft.cl/easy-spectrum/privacy.html`
-- [ ] Localización en/pt
+- [x] Localización es/en/ru/it/pt
+- [ ] SNA de 128K (131 KB): CLK solo carga SNA de 48K → escribir cargador propio en el bridge
