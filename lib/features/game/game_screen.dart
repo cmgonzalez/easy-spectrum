@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -23,6 +24,12 @@ class GameScreen extends StatefulWidget {
   final String mediaPath;
   const GameScreen({super.key, this.mediaPath = ''});
 
+  // Para abrir un archivo recibido con un juego en marcha: la pantalla anterior
+  // debe terminar su dispose (libera la máquina nativa) antes de crear otra.
+  static Completer<void>? _alive;
+  static bool get isOpen => _alive != null && !_alive!.isCompleted;
+  static Future<void> whenClosed() => _alive?.future ?? Future.value();
+
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
@@ -32,6 +39,7 @@ class _GameScreenState extends State<GameScreen>
   static const _sampleRate = 48000;
 
   final _zx = ZxBridge.instance;
+  final _alive = Completer<void>();
   late final Ticker _ticker;
   AppSettings _settings = AppSettings();
 
@@ -57,6 +65,7 @@ class _GameScreenState extends State<GameScreen>
   @override
   void initState() {
     super.initState();
+    GameScreen._alive = _alive;
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _ticker = createTicker(_onTick);
@@ -238,6 +247,7 @@ class _GameScreenState extends State<GameScreen>
     _disposeAudio();
     _zx.dispose();
     _frame?.dispose();
+    _alive.complete();
     super.dispose();
   }
 

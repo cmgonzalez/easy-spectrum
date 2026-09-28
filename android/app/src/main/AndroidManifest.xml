@@ -32,6 +32,54 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- "Abrir con": casi todas las apps entregan un content:// sin extensión y
+                 con tipo genérico (octet-stream); por eso se filtra por tipo MIME. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="content"/>
+                <data android:scheme="file"/>
+                <data android:mimeType="application/octet-stream"/>
+                <data android:mimeType="application/zip"/>
+                <data android:mimeType="application/x-zip-compressed"/>
+                <data android:mimeType="application/x-spectrum-tap"/>
+                <data android:mimeType="application/x-spectrum-tzx"/>
+                <data android:mimeType="application/x-tzx"/>
+                <data android:mimeType="application/x-zx-spectrum-snapshot"/>
+            </intent-filter>
+            <!-- Rutas que sí traen la extensión (algunos gestores de archivos). El
+                 patrón se repite porque pathPattern no busca el último punto. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="content"/>
+                <data android:scheme="file"/>
+                <data android:host="*"/>
+                <data android:mimeType="*/*"/>
+                <data android:pathPattern=".*\\.tap"/>
+                <data android:pathPattern=".*\\..*\\.tap"/>
+                <data android:pathPattern=".*\\.TAP"/>
+                <data android:pathPattern=".*\\.tzx"/>
+                <data android:pathPattern=".*\\..*\\.tzx"/>
+                <data android:pathPattern=".*\\.TZX"/>
+                <data android:pathPattern=".*\\.z80"/>
+                <data android:pathPattern=".*\\.Z80"/>
+                <data android:pathPattern=".*\\.sna"/>
+                <data android:pathPattern=".*\\.SNA"/>
+                <data android:pathPattern=".*\\.szx"/>
+                <data android:pathPattern=".*\\.SZX"/>
+                <data android:pathPattern=".*\\.csw"/>
+                <data android:pathPattern=".*\\.dsk"/>
+                <data android:pathPattern=".*\\.DSK"/>
+            </intent-filter>
+            <!-- "Compartir" desde otras apps (Telegram, WhatsApp, navegador…). -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="application/*"/>
+            </intent-filter>
         </activity>
         <!-- AdMob App ID — reemplazar con ID real antes de publicar -->
         <meta-data

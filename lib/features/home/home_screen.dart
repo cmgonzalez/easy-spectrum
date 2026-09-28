@@ -11,6 +11,7 @@ import '../../core/edition.dart';
 import '../../core/l10n.dart';
 import '../../core/storage/game_library.dart';
 import '../../core/storage/game_thumbnail.dart';
+import '../../core/storage/incoming_files.dart';
 import '../../core/theme/easy_theme.dart';
 import '../game/game_screen.dart';
 import '../settings/settings_screen.dart';
@@ -35,6 +36,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     AdManager.instance.preloadInterstitial();
     _refresh();
+    IncomingFiles.listen(_openIncoming);
+  }
+
+  /// Archivo abierto desde otra app: se importa y se juega. Si había un juego (u
+  /// otra pantalla) abierto, se vuelve al inicio y se espera a que se libere.
+  Future<void> _openIncoming(IncomingFile file) async {
+    if (!mounted) return;
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    await GameScreen.whenClosed();
+    if (!mounted) return;
+    if (file.bytes == null) {
+      _snack(context.l10n.readFileError);
+      return;
+    }
+    await _importAndPlay(file.name, file.bytes!);
   }
 
   @override
@@ -86,8 +102,13 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    await _importAndPlay(file.name, bytes);
+  }
+
+  Future<void> _importAndPlay(String name, Uint8List bytes) async {
+    final t = context.l10n;
     try {
-      final path = await GameLibrary.import(file.name, bytes);
+      final path = await GameLibrary.import(name, bytes);
       await _play(path: path);
     } on GameImportException catch (e) {
       _snack(e.extension == null ? t.zipWithoutGame : t.unsupportedFormat(e.extension!));

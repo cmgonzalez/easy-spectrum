@@ -131,6 +131,23 @@ Pantalla de 6912 bytes ($4000) → imagen 256×192. Caché en `<appSupport>/thum
     (recortado desde y=283, solo la placa de teclas, 2,27:1) se dibuja con `SkinView(stretch: true)`,
     estirado ~20% en vertical (teclas más altas); escala x/y independientes en toques y overlays.
 
+## Abrir archivos desde otras apps
+
+`AndroidManifest.xml` declara `VIEW` (por tipo MIME: `application/octet-stream`, zip… y por
+`pathPattern` de extensión cuando la URI la trae) y `SEND` (`application/*`). Casi todas las apps
+entregan `content://` sin extensión y con tipo genérico: por eso la app aparece también en
+"Abrir con" de otros archivos desconocidos (si no es de Spectrum, sale el error de formato).
+- `MainActivity.kt`: canal `cl.easysoft.easyspectrum/open`; Dart pide `initial` al arrancar y
+  recibe `open` con la app abierta (`onNewIntent`, `singleTop`). Lee nombre (`DISPLAY_NAME`) y
+  bytes en un hilo; el intent se marca consumido (action → MAIN).
+- `lib/core/storage/incoming_files.dart`: si el nombre perdió la extensión (WhatsApp/Telegram)
+  se deduce del contenido (`ZXTape!`, `PK`, `ZXST`, tamaños de SNA).
+- `HomeScreen._openIncoming`: vuelve al inicio, espera `GameScreen.whenClosed()` (el dispose de
+  la pantalla anterior libera la máquina nativa, que es única) e importa + juega.
+- Probar en el AVD: `adb shell am start -a android.intent.action.VIEW -t application/zip
+  --grant-read-uri-permission -d content://media/external/downloads/<id> -n cl.easysoft.easyspectrum/.MainActivity`
+  (`<id>` con `content query --uri content://media/external/downloads`).
+
 ## Idiomas
 
 `gen-l10n` con ARB en `lib/l10n/`: **es** (plantilla), en, ru, it, pt. Los `app_localizations*.dart`

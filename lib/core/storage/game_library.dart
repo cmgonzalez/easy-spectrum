@@ -26,6 +26,8 @@ class GameLibrary {
     return dot < 0 ? '' : name.substring(dot + 1).toLowerCase();
   }
 
+  static bool isSupported(String ext) => zxMediaExtensions.contains(ext);
+
   static String titleOf(String path) {
     final name = path.split(Platform.pathSeparator).last.split('/').last;
     final dot = name.lastIndexOf('.');
