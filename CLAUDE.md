@@ -123,8 +123,10 @@ Pantalla de 6912 bytes ($4000) → imagen 256×192. Caché en `<appSupport>/thum
     para que los controles salgan ×1,13 más grandes).
   - Mando: cruceta (ángulo, 8 dir., se puede deslizar), botón redondo = FUEGO, botones de
     colores = teclas 1-4, LCD partido = ENTER | ESPACIO (rótulos pintados encima).
-  - El área de controles mide justo la altura de su imagen a todo el ancho (máx. 50% de la
-    pantalla); la pantalla del juego usa el resto.
+  - El área de controles tiene **siempre la proporción del mando** a todo el ancho (máx. 50% de
+    la pantalla): así la pantalla del juego no se mueve al cambiar teclado ↔ mando. El teclado
+    (recortado desde y=283, solo la placa de teclas, 2,27:1) se dibuja con `SkinView(stretch: true)`,
+    estirado ~20% en vertical (teclas más altas); escala x/y independientes en toques y overlays.
 
 ## Idiomas
 

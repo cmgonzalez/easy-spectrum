@@ -241,5 +241,5 @@ class _PadOverlay extends SkinPainter {
 
   @override
   bool shouldRepaint(_PadOverlay old) =>
-      old.scale != scale || old.dir != dir || old.fire != fire || !setEquals(old.keys, keys) || old.space != space;
+      geometryChanged(old) || old.dir != dir || old.fire != fire || !setEquals(old.keys, keys) || old.space != space;
 }

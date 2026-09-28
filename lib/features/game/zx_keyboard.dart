@@ -5,9 +5,10 @@ import '../../core/emulator/zx_types.dart';
 import '../../core/theme/easy_theme.dart';
 import 'skin.dart';
 
-/// Geometría de `assets/skin/keyboard.jpg` (1536×959), medida sobre la imagen:
-/// bandas verticales de cada fila y tramos horizontales de cada tecla.
-const _skin = SkinImage('assets/skin/keyboard.jpg', 1536, 959);
+/// Geometría medida sobre la imagen original del teclado (art/, 1536×959): bandas
+/// verticales de cada fila y tramos horizontales de cada tecla. El asset es un
+/// recorte desde y=283 (sin la cabecera "sinclair", solo la placa de teclas).
+const _skin = SkinImage('assets/skin/keyboard.jpg', 1536, 676, origin: Offset(0, 283));
 
 const _rowBands = [(354.0, 421.0), (492.0, 560.0), (630.0, 698.0), (765.0, 837.0)];
 
@@ -45,7 +46,7 @@ final Map<int, Rect> _keyRects = {
 /// la vecina y, dentro de la fila, gana la tecla de centro más cercano: los
 /// espacios entre teclas también cuentan (más fácil de acertar con el dedo).
 int? _keyAt(Offset p) {
-  const top = 300.0, bottom = 900.0;
+  const top = 283.0, bottom = 959.0; // todo el recorte
   if (p.dy < top || p.dy > bottom || p.dx < 30 || p.dx > 1500) return null;
   var row = _rowBands.length - 1;
   for (var r = 0; r < _rowBands.length - 1; r++) {
@@ -73,8 +74,6 @@ class ZxKeyboard extends StatefulWidget {
   final void Function(int code, bool pressed) onKey;
   final bool haptics;
   const ZxKeyboard({super.key, required this.onKey, this.haptics = true});
-
-  static double get aspectRatio => _skin.width / _skin.height;
 
   @override
   State<ZxKeyboard> createState() => _ZxKeyboardState();
@@ -135,6 +134,9 @@ class _ZxKeyboardState extends State<ZxKeyboard> {
   Widget build(BuildContext context) {
     return SkinView(
       skin: _skin,
+      // Rellena el área del mando (se estira ~20% en vertical): al cambiar entre
+      // teclado y mando la pantalla del juego no se mueve.
+      stretch: true,
       onDown: (id, p) {
         final code = _keyAt(p);
         if (code == null || _pointers.containsValue(code)) return;
@@ -169,5 +171,5 @@ class _KeyboardOverlay extends SkinPainter {
 
   @override
   bool shouldRepaint(_KeyboardOverlay old) =>
-      old.scale != scale || !setEquals(old.down, down) || !setEquals(old.latched, latched);
+      geometryChanged(old) || !setEquals(old.down, down) || !setEquals(old.latched, latched);
 }

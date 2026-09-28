@@ -13,14 +13,17 @@ class SkinImage {
   const SkinImage(this.asset, this.width, this.height, {this.origin = Offset.zero});
 }
 
-/// Dibuja un [SkinImage] ajustado (contain, centrado) y traduce los toques a
-/// coordenadas de la imagen. Multitáctil: cada puntero llega con su id.
+/// Dibuja un [SkinImage] y traduce los toques a coordenadas de la imagen.
+/// [stretch] = false: ajuste proporcional (contain, centrado). true: rellena todo el
+/// espacio aunque deforme (el teclado se estira en vertical para ocupar la misma área
+/// que el mando). Multitáctil: cada puntero llega con su id.
 class SkinView extends StatelessWidget {
   final SkinImage skin;
   final void Function(int pointer, Offset imagePos) onDown;
   final void Function(int pointer, Offset imagePos)? onMove;
   final void Function(int pointer) onUp;
   final SkinPainter painter;
+  final bool stretch;
 
   const SkinView({
     super.key,
@@ -29,6 +32,7 @@ class SkinView extends StatelessWidget {
     required this.onUp,
     required this.painter,
     this.onMove,
+    this.stretch = false,
   });
 
   @override
@@ -36,12 +40,14 @@ class SkinView extends StatelessWidget {
     return ColoredBox(
       color: Colors.black,
       child: LayoutBuilder(builder: (context, box) {
-        final scale = (box.maxWidth / skin.width) < (box.maxHeight / skin.height)
-            ? box.maxWidth / skin.width
-            : box.maxHeight / skin.height;
-        final w = skin.width * scale, h = skin.height * scale;
+        var sx = box.maxWidth / skin.width, sy = box.maxHeight / skin.height;
+        if (!stretch) sx = sy = sx < sy ? sx : sy;
+        final w = skin.width * sx, h = skin.height * sy;
         final origin = Offset((box.maxWidth - w) / 2, (box.maxHeight - h) / 2);
-        Offset toImage(Offset local) => (local - origin) / scale + skin.origin;
+        Offset toImage(Offset local) {
+          final d = local - origin;
+          return Offset(d.dx / sx, d.dy / sy) + skin.origin;
+        }
 
         return Listener(
           behavior: HitTestBehavior.opaque,
@@ -63,9 +69,12 @@ class SkinView extends StatelessWidget {
                 top: origin.dy,
                 width: w,
                 height: h,
-                child: CustomPaint(painter: painter
-                  ..scale = scale
-                  ..origin = skin.origin),
+                child: CustomPaint(
+                  painter: painter
+                    ..sx = sx
+                    ..sy = sy
+                    ..origin = skin.origin,
+                ),
               ),
             ],
           ),
@@ -75,17 +84,20 @@ class SkinView extends StatelessWidget {
   }
 }
 
-/// Painter de overlays (pulsaciones, rótulos) en coordenadas de la imagen.
+/// Painter de overlays (pulsaciones, rótulos) en coordenadas de la imagen original.
 abstract class SkinPainter extends CustomPainter {
-  double scale = 1;
+  double sx = 1, sy = 1;
   Offset origin = Offset.zero;
 
   void paintSkin(Canvas canvas);
 
+  /// Para los shouldRepaint de las subclases: cambió la escala o el recorte.
+  bool geometryChanged(SkinPainter old) => old.sx != sx || old.sy != sy || old.origin != origin;
+
   @override
   void paint(Canvas canvas, Size size) {
     canvas.save();
-    canvas.scale(scale);
+    canvas.scale(sx, sy);
     canvas.translate(-origin.dx, -origin.dy);
     paintSkin(canvas);
     canvas.restore();

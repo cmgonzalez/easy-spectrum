@@ -318,12 +318,13 @@ class _GameScreenState extends State<GameScreen>
                         ],
                       ),
               ),
-              // Los controles ocupan justo la altura de su imagen a todo el ancho
-              // (con tope de media pantalla); la pantalla del juego usa el resto.
+              // Los controles ocupan la altura del mando a todo el ancho (tope: media
+              // pantalla); el teclado se estira a esa misma área, así la pantalla del
+              // juego no se mueve al cambiar de uno a otro. La pantalla usa el resto.
               ConstrainedBox(
                 constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.5),
                 child: AspectRatio(
-                  aspectRatio: _showKeyboard ? ZxKeyboard.aspectRatio : JoystickPad.aspectRatio,
+                  aspectRatio: JoystickPad.aspectRatio,
                   child: _showKeyboard
                       ? ZxKeyboard(onKey: _onKey, haptics: _settings.vibration)
                       : JoystickPad(
