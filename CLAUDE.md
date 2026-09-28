@@ -192,6 +192,16 @@ entregan `content://` sin extensión y con tipo genérico: por eso la app aparec
   --grant-read-uri-permission -d content://media/external/downloads/<id> -n cl.easysoft.easyspectrum/.MainActivity`
   (`<id>` con `content query --uri content://media/external/downloads`).
 
+## Modos de video (`lib/core/video_mode.dart`)
+
+Nítido (por defecto), Suave (bilineal), Bordes redondeados (ClipRRect), Monitor y TV CRT. Se eligen
+en el menú ⋮ del juego (se aplican al momento) o en Ajustes › Pantalla; `video_mode` en
+SharedPreferences. Monitor y TV usan `shaders/crt.frag` (técnica del CRT de Timothy Lottes, dominio
+público, reescrita): curvatura, haz gaussiano por línea con ancho según brillo, máscara RGB en px
+físicos (`uDpr`), resplandor, viñeta y esquinas redondeadas, en espacio lineal (gamma 2). El
+sampler va con `FilterQuality.none` y el filtrado lo hace el shader. Orden de uniforms = orden de
+`setFloat` en `game_display.dart`: si se agrega uno, actualizar ambos.
+
 ## Idiomas
 
 `gen-l10n` con ARB en `lib/l10n/`: **es** (plantilla), en, ru, it, pt. Los `app_localizations*.dart`

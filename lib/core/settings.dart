@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'emulator/zx_types.dart';
+import 'video_mode.dart';
 
 /// Ajustes persistentes de la app.
 class AppSettings {
@@ -10,6 +11,7 @@ class AppSettings {
   bool keepScreenOn = true;
   bool startWithKeyboard = false;
   bool onlineInfo = true;
+  VideoMode videoMode = VideoMode.sharp;
 
   static Future<AppSettings> load() async {
     final p = await SharedPreferences.getInstance();
@@ -25,6 +27,7 @@ class AppSettings {
     s.keepScreenOn = p.getBool('keep_screen_on') ?? true;
     s.startWithKeyboard = p.getBool('start_keyboard') ?? false;
     s.onlineInfo = p.getBool('online_info') ?? true;
+    s.videoMode = VideoMode.byName(p.getString('video_mode'));
     return s;
   }
 
@@ -37,5 +40,6 @@ class AppSettings {
     await p.setBool('keep_screen_on', keepScreenOn);
     await p.setBool('start_keyboard', startWithKeyboard);
     await p.setBool('online_info', onlineInfo);
+    await p.setString('video_mode', videoMode.name);
   }
 }

@@ -131,5 +131,11 @@
   },
   "actionButtons": "Botones de acción",
   "systemButtons": "Botones Select / Start",
-  "none": "Ninguno"
+  "none": "Ninguno",
+  "videoMode": "Modo de video",
+  "videoSharp": "Nítido",
+  "videoSmooth": "Suave",
+  "videoRounded": "Bordes redondeados",
+  "videoMonitor": "Monitor",
+  "videoTv": "TV CRT"
 }

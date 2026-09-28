@@ -82,5 +82,11 @@
   "padDone": "Pronto",
   "actionButtons": "Botões de ação",
   "systemButtons": "Botões Select / Start",
-  "none": "Nenhum"
+  "none": "Nenhum",
+  "videoMode": "Modo de vídeo",
+  "videoSharp": "Nítido",
+  "videoSmooth": "Suave",
+  "videoRounded": "Cantos arredondados",
+  "videoMonitor": "Monitor",
+  "videoTv": "TV CRT"
 }

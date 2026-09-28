@@ -82,5 +82,11 @@
   "padDone": "Fatto",
   "actionButtons": "Pulsanti d'azione",
   "systemButtons": "Pulsanti Select / Start",
-  "none": "Nessuno"
+  "none": "Nessuno",
+  "videoMode": "Modalità video",
+  "videoSharp": "Nitido",
+  "videoSmooth": "Morbido",
+  "videoRounded": "Angoli arrotondati",
+  "videoMonitor": "Monitor",
+  "videoTv": "TV CRT"
 }

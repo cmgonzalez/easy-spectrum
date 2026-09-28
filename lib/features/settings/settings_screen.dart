@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/emulator/zx_types.dart';
 import '../../core/l10n.dart';
 import '../../core/settings.dart';
+import '../../core/video_mode.dart';
 import '../../core/theme/easy_theme.dart';
 import '../about/about_screen.dart';
 
@@ -103,6 +104,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (v) => _update((s) => s.vibration = v),
                 ),
                 _Header(t.screen),
+                ListTile(
+                  leading: const Icon(Icons.tv_rounded, size: 32),
+                  title: Text(t.videoMode),
+                  subtitle: Text(s.videoMode.label(t)),
+                  onTap: () async {
+                    final v = await _choose(t.videoMode, VideoMode.values, (m) => m.label(t), s.videoMode);
+                    if (v != null) _update((s) => s.videoMode = v);
+                  },
+                ),
                 SwitchListTile(
                   secondary: const Icon(Icons.light_mode_rounded, size: 32),
                   title: Text(t.keepScreenOn),

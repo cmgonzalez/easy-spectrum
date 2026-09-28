@@ -82,5 +82,11 @@
   "padDone": "Готово",
   "actionButtons": "Кнопки действий",
   "systemButtons": "Кнопки Select / Start",
-  "none": "Нет"
+  "none": "Нет",
+  "videoMode": "Режим видео",
+  "videoSharp": "Чёткий",
+  "videoSmooth": "Сглаженный",
+  "videoRounded": "Скруглённые углы",
+  "videoMonitor": "Монитор",
+  "videoTv": "ЭЛТ-телевизор"
 }

@@ -13,6 +13,7 @@ import '../../core/emulator/zx_bridge.dart';
 import '../../core/emulator/zx_types.dart';
 import '../../core/pad_config.dart';
 import '../../core/settings.dart';
+import '../../core/video_mode.dart';
 import '../../core/storage/game_info.dart';
 import '../../core/storage/game_library.dart';
 import '../../core/storage/game_thumbnail.dart';
@@ -402,6 +403,7 @@ class _GameScreenState extends State<GameScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            _MenuTile(icon: Icons.tv_rounded, label: t.videoMode, value: 'video'),
             _MenuTile(icon: Icons.restart_alt_rounded, label: t.reset, value: 'reset'),
             if (widget.mediaPath.isNotEmpty)
               _MenuTile(
@@ -415,6 +417,8 @@ class _GameScreenState extends State<GameScreen>
       ),
     );
     switch (choice) {
+      case 'video':
+        _chooseVideo();
       case 'reset':
         _zx.reset();
       case 'tape':
@@ -422,6 +426,40 @@ class _GameScreenState extends State<GameScreen>
       case 'exit':
         _exit();
     }
+  }
+
+  /// Modo de video: se aplica al elegirlo (el juego sigue de fondo) y se guarda.
+  Future<void> _chooseVideo() async {
+    final t = context.l10n;
+    final v = await showModalBottomSheet<VideoMode>(
+      context: context,
+      backgroundColor: ZxColors.bodyLight,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(t.videoMode, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            ),
+            for (final m in VideoMode.values)
+              ListTile(
+                minTileHeight: 64,
+                leading: Icon(
+                  m == _settings.videoMode ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                  size: 28,
+                  color: m == _settings.videoMode ? ZxColors.cyan : null,
+                ),
+                title: Text(m.label(t), style: const TextStyle(fontSize: 20)),
+                onTap: () => Navigator.pop(ctx, m),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (v == null || !mounted) return;
+    setState(() => _settings.videoMode = v);
+    await _settings.save();
   }
 
   @override
@@ -451,7 +489,7 @@ class _GameScreenState extends State<GameScreen>
                     : Stack(
                         fit: StackFit.expand,
                         children: [
-                          GameDisplay(frame: _frame, turbo: _turbo),
+                          GameDisplay(frame: _frame, turbo: _turbo, mode: _settings.videoMode),
                           if (_paused)
                             const ColoredBox(
                               color: Colors.black54,
