@@ -80,5 +80,7 @@
   "chooseKey": "Escolha uma tecla",
   "padReset": "Restaurar",
   "padDone": "Pronto",
-  "actionButtons": "Botões de ação"
+  "actionButtons": "Botões de ação",
+  "systemButtons": "Botões Select / Start",
+  "none": "Nenhum"
 }

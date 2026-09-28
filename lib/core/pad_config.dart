@@ -11,23 +11,38 @@ import 'storage/media_db.dart';
 class PadConfig {
   static const maxButtons = 4; // rojo (fuego) + amarillo, verde, azul
   static const defaultExtra = [ZxKey.space, ZxKey.enter, ZxKey.y];
+  static const maxSystem = 2; // botones Select / Start sobre el LCD
+  static const defaultSystem = [ZxKey.enter, ZxKey.space];
 
   JoyMapping type;
   final List<int> keys; // [arriba, abajo, izquierda, derecha, fuego] del modo Teclado
   int buttons; // 1-4 botones en la botonera (el rojo siempre es fuego)
   final List<int> extra; // teclas de amarillo, verde y azul
+  int system; // 0-2 botones Select / Start
+  final List<int> systemKeys;
 
-  PadConfig({required this.type, List<int>? keys, this.buttons = 1, List<int>? extra})
-      : keys = List.of(keys ?? defaultPadKeys),
-        extra = List.of(extra ?? defaultExtra);
+  PadConfig({
+    required this.type,
+    List<int>? keys,
+    this.buttons = 1,
+    List<int>? extra,
+    this.system = 0,
+    List<int>? systemKeys,
+  })  : keys = List.of(keys ?? defaultPadKeys),
+        extra = List.of(extra ?? defaultExtra),
+        systemKeys = List.of(systemKeys ?? defaultSystem);
 
-  PadConfig copy() => PadConfig(type: type, keys: keys, buttons: buttons, extra: extra);
+  PadConfig copy() => PadConfig(
+      type: type, keys: keys, buttons: buttons, extra: extra, system: system, systemKeys: systemKeys);
 
   /// Teclas de cada dirección, o null si es Kempston (joystick real).
   List<int>? get directionKeys => type == JoyMapping.keyboard ? keys : type.keys;
 
   /// Teclas de los botones extra visibles (amarillo, verde, azul), en orden.
   List<int> get extraKeys => extra.take(buttons - 1).toList();
+
+  /// Teclas de los botones Select / Start visibles.
+  List<int> get selectKeys => systemKeys.take(system).toList();
 
   static Future<PadConfig> load(String gamePath, JoyMapping fallback) async {
     try {
@@ -46,6 +61,8 @@ class PadConfig {
           keys: keys.length == 5 ? keys : null,
           buttons: buttons.clamp(1, maxButtons),
           extra: extra.length >= 3 ? extra.take(3).toList() : null,
+          system: ((j['system'] as int?) ?? 0).clamp(0, maxSystem),
+          systemKeys: (j['systemKeys'] as List?)?.cast<int>(),
         );
       }
     } catch (_) {}
@@ -58,5 +75,12 @@ class PadConfig {
 
   Future<void> save(String gamePath) => MediaDb.put(
       gamePath,
-      {'pad': jsonEncode({'type': type.name, 'keys': keys, 'buttons': buttons, 'extra': extra})});
+      {'pad': jsonEncode({
+        'type': type.name,
+        'keys': keys,
+        'buttons': buttons,
+        'extra': extra,
+        'system': system,
+        'systemKeys': systemKeys,
+      })});
 }

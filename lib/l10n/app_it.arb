@@ -80,5 +80,7 @@
   "chooseKey": "Scegli un tasto",
   "padReset": "Ripristina",
   "padDone": "Fatto",
-  "actionButtons": "Pulsanti d'azione"
+  "actionButtons": "Pulsanti d'azione",
+  "systemButtons": "Pulsanti Select / Start",
+  "none": "Nessuno"
 }

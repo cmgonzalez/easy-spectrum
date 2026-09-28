@@ -25,6 +25,8 @@ class SkinView extends StatelessWidget {
   final SkinPainter painter;
   /// Capa encima de [painter] que se repinta sola (animaciones: ver SkinPainter.repaint).
   final SkinPainter? foreground;
+  /// Imágenes pegadas sobre la piel (asset, rectángulo en coordenadas de la original).
+  final List<(String, Rect)> decals;
   final bool stretch;
 
   const SkinView({
@@ -34,6 +36,7 @@ class SkinView extends StatelessWidget {
     required this.onUp,
     required this.painter,
     this.foreground,
+    this.decals = const [],
     this.onMove,
     this.stretch = false,
   });
@@ -67,6 +70,14 @@ class SkinView extends StatelessWidget {
                 height: h,
                 child: Image.asset(skin.asset, fit: BoxFit.fill, gaplessPlayback: true),
               ),
+              for (final (asset, r) in decals)
+                Positioned(
+                  left: origin.dx + (r.left - skin.origin.dx) * sx,
+                  top: origin.dy + (r.top - skin.origin.dy) * sy,
+                  width: r.width * sx,
+                  height: r.height * sy,
+                  child: Image.asset(asset, fit: BoxFit.fill, gaplessPlayback: true),
+                ),
               Positioned(
                 left: origin.dx,
                 top: origin.dy,

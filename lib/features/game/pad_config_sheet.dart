@@ -37,6 +37,11 @@ class _PadConfigSheetState extends State<_PadConfigSheet> {
     if (k != null) setState(() => _c.keys[i] = k);
   }
 
+  Future<void> _pickSystem(int i) async {
+    final k = await showZxKeyPicker(context, _c.systemKeys[i]);
+    if (k != null) setState(() => _c.systemKeys[i] = k);
+  }
+
   Future<void> _pickExtra(int i) async {
     final k = await showZxKeyPicker(context, _c.extra[i]);
     if (k != null) setState(() => _c.extra[i] = k);
@@ -93,7 +98,8 @@ class _PadConfigSheetState extends State<_PadConfigSheet> {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: _ButtonsOption(
-                        count: n,
+                        asset: 'assets/skin/buttons_$n.png',
+                        label: '$n',
                         selected: _c.buttons == n,
                         onTap: () => setState(() => _c.buttons = n),
                       ),
@@ -117,6 +123,40 @@ class _PadConfigSheetState extends State<_PadConfigSheet> {
                 trailing: i == 0
                     ? null
                     : _KeyChip(zxKeyName(context, _c.extra[i - 1]), onTap: () => _pickExtra(i - 1)),
+              ),
+            const SizedBox(height: 16),
+            _Section(t.systemButtons),
+            // Ninguno / 1 / 2 botones Select-Start sobre el LCD.
+            Row(
+              children: [
+                for (var n = 0; n <= PadConfig.maxSystem; n++)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: _ButtonsOption(
+                        asset: n == 0 ? null : 'assets/skin/select_$n.png',
+                        label: n == 0 ? t.none : '$n',
+                        selected: _c.system == n,
+                        onTap: () => setState(() => _c.system = n),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (var i = 0; i < _c.system; i++)
+              _Row(
+                leading: Container(
+                  width: 40,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF9BA0A8),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.black54, width: 2),
+                  ),
+                ),
+                title: t.extraButton(i + 1),
+                trailing: _KeyChip(zxKeyName(context, _c.systemKeys[i]), onTap: () => _pickSystem(i)),
               ),
             const SizedBox(height: 20),
             Row(
@@ -147,12 +187,13 @@ class _PadConfigSheetState extends State<_PadConfigSheet> {
 /// Colores de la botonera (rojo = fuego, amarillo, verde, azul).
 const _buttonColours = [Color(0xFFE8322B), Color(0xFFF5C400), Color(0xFF1FBF3A), Color(0xFF12B5E8)];
 
-/// Opción de botonera: su dibujo y la cantidad de botones.
+/// Opción de botonera: su dibujo (o nada) y un rótulo.
 class _ButtonsOption extends StatelessWidget {
-  final int count;
+  final String? asset;
+  final String label;
   final bool selected;
   final VoidCallback onTap;
-  const _ButtonsOption({required this.count, required this.selected, required this.onTap});
+  const _ButtonsOption({this.asset, required this.label, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) => Material(
@@ -168,9 +209,15 @@ class _ButtonsOption extends StatelessWidget {
             padding: const EdgeInsets.all(6),
             child: Column(
               children: [
-                Image.asset('assets/skin/buttons_$count.png'),
+                SizedBox(
+                  height: 64,
+                  child: Center(child: asset == null ? null : Image.asset(asset!)),
+                ),
                 const SizedBox(height: 4),
-                Text('$count', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
           ),

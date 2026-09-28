@@ -111,7 +111,10 @@ defecto) + botonera de 1-4 botones (rojo = fuego; amarillo, verde y azul = cualq
 La botonera es arte de `art/circles-optimized` pegado sobre el pozo del fuego por
 `make_skins.py` → una piel por cantidad (`assets/skin/joystick_<n>.jpg`) y miniaturas
 `buttons_<n>.png` para elegirla en el panel; el script imprime centro y radio de cada botón
-(tabla `_clusters` en joystick_pad.dart). El toque dentro del anillo va al botón más cercano. Se guarda
+(tabla `_clusters` en joystick_pad.dart). El toque dentro del anillo va al botón más cercano. 
+Select / Start: 0-2 botones (cada uno con su tecla) sobre el LCD; arte `art/…19_44_24` (1) y
+`…19_42_20` (2) → `assets/skin/select_<n>.png`, dibujado como calcomanía (`SkinView.decals`, sin
+multiplicar las pieles); rectángulos en `_selects`. Con 0 no se dibuja nada. Se guarda
 por juego en `MediaDb.pad`; sin configuración propia vale el "Control por defecto" de Ajustes
 (`joy_type` en SharedPreferences; `joy_mapping` era el índice del formato antiguo).
 LCD del mando: letrero en bucle (`_LcdPainter`, capa `SkinView.foreground` que se repinta con

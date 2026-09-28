@@ -257,6 +257,7 @@ class _GameScreenState extends State<GameScreen>
       if (info?.genre != null) info!.genre!,
       control,
       if (extras.isNotEmpty) '${t.extraButtons} ${extras.map(zxKeyLabel).join(' ')}',
+      if (_pad.selectKeys.isNotEmpty) 'SELECT/START ${_pad.selectKeys.map(zxKeyLabel).join(' ')}',
       '<< ENTER | ${t.space} >>',
     ].join('  ·  ').toUpperCase();
   }
@@ -476,6 +477,7 @@ class _GameScreenState extends State<GameScreen>
                           onKey: _onKey,
                           onAction: _onPadAction,
                           extraKeys: _pad.extraKeys,
+                          selectKeys: _pad.selectKeys,
                           lcdText: _lcdText(),
                           haptics: _settings.vibration,
                         ),

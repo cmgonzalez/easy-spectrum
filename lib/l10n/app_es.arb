@@ -129,5 +129,7 @@
       }
     }
   },
-  "actionButtons": "Botones de acción"
+  "actionButtons": "Botones de acción",
+  "systemButtons": "Botones Select / Start",
+  "none": "Ninguno"
 }

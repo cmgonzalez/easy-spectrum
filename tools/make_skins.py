@@ -14,6 +14,9 @@ Uso: python tools/make_skins.py   (desde la raíz del proyecto; requiere Pillow 
   botones (rojo = fuego; amarillo, verde, azul = extra) → assets/skin/joystick_<n>.jpg. El anillo
   (centro (627,627), radio 525 en el arte) queda centrado en (1163,542) con radio CLUSTER_R.
   Imprime el centro y radio de cada botón en coordenadas de la original para joystick_pad.dart.
+- Select/Start: arte de 1 o 2 botones → assets/skin/select_<n>.png, que la app dibuja encima del
+  LCD (centrado en x=761, cuerpo de SELECT_H de alto con la base en y=SELECT_BOTTOM). Imprime el
+  rectángulo del PNG y de cada tecla en coordenadas de la original.
 Si cambian los orígenes, actualizar SkinImage(origin:) en zx_keyboard.dart / joystick_pad.dart.
 """
 import io
@@ -28,6 +31,9 @@ PAD_ORIGIN = (121, 146)
 FIRE_CENTER = (1163, 542)      # centro del pozo del fuego en la original
 CLUSTER_R = 230                # radio del anillo de la botonera en la original
 ART_CENTER, ART_R = (627, 627), 525
+SELECT_SRC = {1: 'art/Imagen de ChatGPT 28 sept 2026, 19_44_24.png',
+              2: 'art/Imagen de ChatGPT 28 sept 2026, 19_42_20.png'}
+SELECT_CX, SELECT_BOTTOM, SELECT_H = 761, 738, 118
 
 
 def keyboard():
@@ -127,6 +133,39 @@ def pad_buttons(base):
         print(f'botonera {n}:', ', '.join(found))
 
 
+def select_buttons():
+    for n, src in SELECT_SRC.items():
+        art = Image.open(src).convert('RGBA')
+        a = np.asarray(art).astype(int)
+        body = a[..., 3] > 250
+        ys, xs = np.nonzero(body)
+        bx0, by0, bx1, by1 = xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
+        s = SELECT_H / (by1 - by0)
+        crop = art.getbbox()                                # con la sombra
+        out = art.crop(crop)
+        out = out.resize((round(out.width * s), round(out.height * s)), Image.LANCZOS)
+        out.save(f'assets/skin/select_{n}.png', optimize=True)
+        # Esquina del cuerpo en la original → esquina del PNG.
+        left = SELECT_CX - (bx1 - bx0) * s / 2 - (bx0 - crop[0]) * s
+        top = SELECT_BOTTOM - SELECT_H - (by0 - crop[1]) * s
+        # Teclas grises: componentes claros y poco saturados.
+        from scipy import ndimage
+        r, g, b = a[..., 0], a[..., 1], a[..., 2]
+        caps = body & (r > 110) & (b > 110) & (np.abs(r - b) < 40)
+        lab, _ = ndimage.label(caps)
+        rects = []
+        for sl in ndimage.find_objects(lab):
+            w, h = sl[1].stop - sl[1].start, sl[0].stop - sl[0].start
+            if w * h < 20000 or w < 300:
+                continue                                    # brillos del marco
+            rects.append(tuple(round(v) for v in (
+                left + (sl[1].start - crop[0]) * s, top + (sl[0].start - crop[1]) * s,
+                left + (sl[1].stop - crop[0]) * s, top + (sl[0].stop - crop[1]) * s)))
+        rects.sort()
+        print(f'select {n}: png ({left:.0f}, {top:.0f}) {out.size}, teclas {rects}')
+
+
 if __name__ == '__main__':
     keyboard()
     pad_buttons(pad())
+    select_buttons()

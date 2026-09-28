@@ -33,6 +33,16 @@ const _clusters = <List<(Offset, double)>>[
   [(Offset(1161, 648), 64), (Offset(1044, 533), 62), (Offset(1160, 427), 63), (Offset(1278, 534), 64)],
 ];
 
+/// Select / Start sobre el LCD (make_skins.py): PNG y teclas grises, por cantidad.
+const _selects = <int, (String, Rect, List<Rect>)>{
+  1: ('assets/skin/select_1.png', Rect.fromLTWH(643, 618, 236, 136), [Rect.fromLTRB(673, 644, 847, 711)]),
+  2: (
+    'assets/skin/select_2.png',
+    Rect.fromLTWH(563, 606, 397, 146),
+    [Rect.fromLTRB(593, 645, 750, 709), Rect.fromLTRB(768, 645, 925, 710)]
+  ),
+};
+
 /// Botones de colores = acciones del mando (ver [PadAction]).
 const _buttons = <Rect>[
   Rect.fromLTRB(813, 192, 949, 287),
@@ -52,7 +62,7 @@ enum PadAction {
   final IconData icon;
 }
 
-enum _Zone { dpad, button, key, action }
+enum _Zone { dpad, button, key, action, select }
 
 /// Mando dibujado con la imagen: cruceta roja (8 direcciones, se puede deslizar),
 /// botonera de 1-4 botones (rojo = FUEGO, los demás con la tecla asignada), botones
@@ -62,6 +72,8 @@ class JoystickPad extends StatefulWidget {
   final void Function(int code, bool pressed) onKey;
   final void Function(PadAction action) onAction;
   final List<int> extraKeys;
+  /// Teclas de los botones Select / Start (0-2; sin botones no se dibuja nada).
+  final List<int> selectKeys;
   final bool haptics;
   /// Letrero que avanza por la pantalla LCD (juego, datos, control…).
   final String lcdText;
@@ -72,6 +84,7 @@ class JoystickPad extends StatefulWidget {
     required this.onKey,
     required this.onAction,
     this.extraKeys = const [],
+    this.selectKeys = const [],
     this.haptics = true,
     this.lcdText = '',
   });
@@ -106,6 +119,9 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
   final Set<int> _keysDown = {};
   final Set<int> _actionsDown = {};
   final Set<int> _buttonsDown = {}; // botones de la botonera (0 = fuego)
+  final Set<int> _selectDown = {};
+
+  List<Rect> get _selectCaps => _selects[widget.selectKeys.length]?.$3 ?? const [];
 
   List<(Offset, double)> get _cluster => _clusters[widget.extraKeys.length.clamp(0, 3)];
 
@@ -150,6 +166,17 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
   }
 
   (_Zone, int)? _zoneAt(Offset p) {
+    // Select / Start primero: están pegados a la cruceta y al LCD. Con dos, el
+    // límite entre ambos es la mitad del hueco que los separa.
+    final caps = _selectCaps;
+    for (var i = 0; i < caps.length; i++) {
+      var r = caps[i].inflate(18);
+      if (caps.length == 2) {
+        final mid = (caps[0].right + caps[1].left) / 2;
+        r = i == 0 ? Rect.fromLTRB(r.left, r.top, mid, r.bottom) : Rect.fromLTRB(mid, r.top, r.right, r.bottom);
+      }
+      if (r.contains(p)) return (_Zone.select, i);
+    }
     if ((p - _clusterCenter).distance <= _clusterReach) {
       var best = 0;
       final cluster = _cluster;
@@ -187,6 +214,10 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
         _setDir(_dirFor(p));
       case _Zone.button:
         _setButton(z.$2, true);
+      case _Zone.select:
+        if (widget.haptics) Haptics.press();
+        setState(() => _selectDown.add(z.$2));
+        widget.onKey(widget.selectKeys[z.$2], true);
       case _Zone.key:
         _setKey(z.$2, true);
       case _Zone.action:
@@ -208,6 +239,9 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
         _setDir(0);
       case _Zone.button:
         _setButton(z.$2, false);
+      case _Zone.select:
+        setState(() => _selectDown.remove(z.$2));
+        widget.onKey(widget.selectKeys[z.$2], false);
       case _Zone.key:
         _setKey(z.$2, false);
       case _Zone.action:
@@ -221,6 +255,9 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
   Widget build(BuildContext context) {
     return SkinView(
       skin: _skinFor(widget.extraKeys.length + 1),
+      decals: [
+        if (_selects[widget.selectKeys.length] case final s?) (s.$1, s.$2),
+      ],
       onDown: _down,
       onMove: _move,
       onUp: _up,
@@ -230,6 +267,9 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
         buttonsDown: {..._buttonsDown},
         actions: {..._actionsDown},
         labels: [for (final k in widget.extraKeys) zxKeyName(context, k)],
+        selectCaps: _selectCaps,
+        selectDown: {..._selectDown},
+        selectLabels: [for (final k in widget.selectKeys) zxKeyName(context, k)],
       ),
       foreground: _LcdPainter(
         clock: _clock,
@@ -248,12 +288,18 @@ class _PadOverlay extends SkinPainter {
   final Set<int> buttonsDown;
   final Set<int> actions;
   final List<String> labels; // teclas de amarillo, verde y azul
+  final List<Rect> selectCaps;
+  final Set<int> selectDown;
+  final List<String> selectLabels;
   _PadOverlay({
     required this.dir,
     required this.cluster,
     required this.buttonsDown,
     required this.actions,
     required this.labels,
+    required this.selectCaps,
+    required this.selectDown,
+    required this.selectLabels,
   });
 
   void _text(Canvas canvas, String text, Offset center, TextStyle style, {double? maxWidth}) {
@@ -338,6 +384,33 @@ class _PadOverlay extends SkinPainter {
       }
     }
 
+    // Select / Start: tecla escrita en gris oscuro; pulsada, más oscura con borde.
+    for (var i = 0; i < selectCaps.length && i < selectLabels.length; i++) {
+      final r = selectCaps[i];
+      final rr = RRect.fromRectAndRadius(r, const Radius.circular(12));
+      if (selectDown.contains(i)) {
+        canvas.drawRRect(rr, Paint()..color = Colors.black.withValues(alpha: 0.35));
+        canvas.drawRRect(
+            rr.inflate(3),
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 6
+              ..color = Colors.white.withValues(alpha: 0.8));
+      }
+      _text(
+        canvas,
+        selectLabels[i],
+        r.center,
+        TextStyle(
+          fontSize: r.height * 0.55,
+          fontWeight: FontWeight.w900,
+          color: const Color(0xFF2A2D31).withValues(alpha: 0.9),
+          fontFamily: 'monospace',
+        ),
+        maxWidth: r.width * 0.85,
+      );
+    }
+
     // Botones de colores con el ícono de su acción.
     for (var i = 0; i < _buttons.length; i++) {
       final r = _buttons[i];
@@ -355,7 +428,10 @@ class _PadOverlay extends SkinPainter {
       old.cluster != cluster ||
       !setEquals(old.buttonsDown, buttonsDown) ||
       !setEquals(old.actions, actions) ||
-      old.labels.join('|') != labels.join('|');
+      old.labels.join('|') != labels.join('|') ||
+      old.selectCaps != selectCaps ||
+      !setEquals(old.selectDown, selectDown) ||
+      old.selectLabels.join('|') != selectLabels.join('|');
 }
 
 /// Pantalla LCD: letrero que avanza en bucle y, al pulsar una mitad, ENTER o
