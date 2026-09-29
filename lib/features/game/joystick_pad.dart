@@ -13,9 +13,10 @@ import 'skin.dart';
 /// los genera tools/make_skins.py: contenido sin el relleno entre marco y controles,
 /// marco redibujado con el relieve original y, sobre el pozo del fuego, la botonera de
 /// art/circles-optimized con 1-4 botones (joystick_<n>.jpg). Abiertos arriba (sin
-/// canto superior) para unirse con el cuerpo de la consola; empiezan en (121, 170).
+/// canto superior) para unirse con el cuerpo de la consola y con 110 px de plástico
+/// abajo (los controles no quedan pegados al borde); empiezan en (121, 170).
 SkinImage _skinFor(int buttons) =>
-    SkinImage('assets/skin/joystick_$buttons.jpg', 1393, 775, origin: const Offset(121, 170));
+    SkinImage('assets/skin/joystick_$buttons.jpg', 1393, 885, origin: const Offset(121, 170));
 const _dpadCenter = Offset(367, 508);
 const _dpadArm = 107.0; // ancho de cada brazo de la cruz (bbox 206..528 / 3)
 const _dpadReach = 270.0; // radio de toque (más generoso que el dibujo)
@@ -54,7 +55,7 @@ const _buttons = <Rect>[
 
 /// Acciones de los botones de colores, en orden: rojo, amarillo, verde, azul.
 enum PadAction {
-  config(Icons.sports_esports_rounded), // configurar el control
+  config(Icons.tune_rounded), // configurar el control
   settings(Icons.settings_rounded), // ajustes de la app
   keyboard(Icons.keyboard_rounded), // cambiar al teclado
   exit(Icons.format_list_bulleted_rounded); // volver a la lista

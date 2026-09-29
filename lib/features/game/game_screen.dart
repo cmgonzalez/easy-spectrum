@@ -514,7 +514,7 @@ class _GameScreenState extends State<GameScreen>
                 child: AspectRatio(
                   aspectRatio: JoystickPad.aspectRatio,
                   child: _showKeyboard
-                      ? ZxKeyboard(onKey: _onKey, haptics: _settings.vibration)
+                      ? ZxKeyboard(onKey: _onKey, onAction: _onPadAction, haptics: _settings.vibration)
                       : JoystickPad(
                           onJoystick: _onJoystick,
                           onKey: _onKey,

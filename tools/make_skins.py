@@ -36,23 +36,25 @@ SELECT_SRC = {1: 'art/Imagen de ChatGPT 28 sept 2026, 19_44_24.png',
 SELECT_CX, SELECT_BOTTOM, SELECT_H = 761, 738, 118
 
 
+KB_HEADER_END, KB_PLATE_FROM = 175, 235   # se quitan 60 filas de plástico liso de la cabecera
+
+
 def keyboard():
+    """Teclado con su cabecera ("sinclair ZX Spectrum" + hueco a la derecha para los 4
+    botones de acción), acortada quitando plástico liso: filas 0-175 + 235-959 de la
+    original. Origen (0, 60): desde y=235 el asset coincide con la original - 60."""
     src = Image.open(KEYBOARD_SRC)
     prof = ImageCms.ImageCmsProfile(io.BytesIO(src.info['icc_profile']))
     full = ImageCms.profileToProfile(src.convert('RGB'), prof, ImageCms.createProfile('sRGB'),
                                      renderingIntent=ImageCms.Intent.PERCEPTUAL)
     w, h = full.size
-    half = full.crop((0, 944, w // 2, 959))       # 3 px negro + franja metálica + 1 px negro
-    edge = Image.new('RGB', (w, 15))
-    edge.paste(half, (0, 0))
-    edge.paste(ImageOps.mirror(half), (w // 2, 0))
-    top = ImageOps.flip(edge)
-    body = full.crop((0, 283, w, h))
-    kb = Image.new('RGB', (w, top.height + body.height))
-    kb.paste(top, (0, 0))
-    kb.paste(body, (0, top.height))
+    head = full.crop((0, 0, w, KB_HEADER_END))
+    rest = full.crop((0, KB_PLATE_FROM, w, h))
+    kb = Image.new('RGB', (w, head.height + rest.height))
+    kb.paste(head, (0, 0))
+    kb.paste(rest, (0, head.height))
     kb.save('assets/skin/keyboard.jpg', quality=88, optimize=True)
-    print('teclado', kb.size, 'origen', (0, 283 - top.height))
+    print('teclado', kb.size, 'origen', (0, KB_PLATE_FROM - KB_HEADER_END))
 
 
 T = 24                                              # grosor del marco
@@ -113,11 +115,35 @@ def framed(c, prof, open_top=False, open_bottom=False):
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
 
 
+PAD_FOOT = 110                     # plástico extra bajo los controles (los sube)
+
+
 def pad():
-    """Mando abierto arriba: se une sin costura con el cuerpo de la pantalla."""
+    """Mando abierto arriba (se une sin costura con el cuerpo de la pantalla) y
+    alargado por abajo [PAD_FOOT] filas: los controles no quedan pegados al borde
+    del teléfono. Las rayas del arcoíris siguen su diagonal (1 px a la izquierda
+    por fila) sobre plástico liso."""
     o = np.asarray(Image.open(PAD_SRC).convert('RGB')).astype(float)
     x0, y0, x1, y1 = 145, 170, 1490, 921
-    img = framed(o[y0:y1, x0:x1], profiles(o), open_top=True)
+    c = o[y0:y1, x0:x1]
+    # Plástico del pie: reflejo de las últimas filas del mando (continúa la textura),
+    # con la zona de las rayas cambiada por su espejo desde la izquierda (lisa).
+    below = c[-30:]                                   # plástico bajo el LCD
+    strip = np.concatenate([below[::-1], below])      # vaivén: continuo en las uniones
+    plain = np.concatenate([strip] * (PAD_FOOT // len(strip) + 1))[:PAD_FOOT].copy()
+    cut = 850
+    cols = np.arange(cut, c.shape[1])
+    plain[:, cols] = plain[:, 2 * cut - cols]
+    last = c[-1]
+    sat = last.max(axis=1) - last.min(axis=1)
+    alpha = np.clip((sat - 40) / 80, 0, 1)            # rayas (bordes suaves)
+    foot = np.empty((PAD_FOOT, c.shape[1], 3))
+    for k in range(PAD_FOOT):
+        base = plain[k]
+        shifted = np.roll(last, -(k + 1), axis=0)
+        a = np.roll(alpha, -(k + 1))[:, None]
+        foot[k] = shifted * a + base * (1 - a)
+    img = framed(np.concatenate([c, foot]), profiles(o), open_top=True)
     print('mando', img.size, 'origen', (x0 - T, y0))
     return img
 

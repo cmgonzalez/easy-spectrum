@@ -199,7 +199,11 @@ consola: `body_top.jpg` (tapa con esquinas), `body_mid.jpg` repetido en vertical
 teclado abajo, `body_bottom.jpg`. Encima: LED POWER + rejilla del altavoz y la pantalla del juego en
 un vidrio negro, lo más grande posible y centrada. Las piezas y el mando las genera
 `make_skins.py` con `framed(..., open_top/open_bottom)`: el mando va **abierto arriba** (origen
-(121,170), 1393×775) y el cuerpo usa los mismos perfiles de canto → se unen sin costura.
+(121,170), 1393×885: +110 px de pie de plástico para subir los controles, con las rayas del
+arcoíris continuadas en diagonal) y el cuerpo usa los mismos perfiles de canto → sin costura.
+Teclado: vuelve la cabecera "sinclair ZX Spectrum" acortada (filas 0-175 + 235-959 → 1536×899,
+origen (0,60)); en su hueco derecho van los 4 botones de acción (`_actionRects`; el verde vuelve
+al mando). Configurar usa el ícono `tune`.
 Salto: `PadConfig.jump` = botón de color (1-3) que envía "arriba"; la cruceta deja de enviarlo.
 
 ## Modos de video (`lib/core/video_mode.dart`)
