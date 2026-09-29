@@ -19,6 +19,7 @@ import '../../core/storage/game_library.dart';
 import '../../core/storage/game_thumbnail.dart';
 import '../../core/theme/easy_theme.dart';
 import 'game_display.dart';
+import 'handheld_body.dart';
 import '../settings/settings_screen.dart';
 import 'joystick_pad.dart';
 import 'pad_config_sheet.dart';
@@ -258,6 +259,7 @@ class _GameScreenState extends State<GameScreen>
       if (info?.genre != null) info!.genre!,
       control,
       if (extras.isNotEmpty) '${t.extraButtons} ${extras.map(zxKeyLabel).join(' ')}',
+      if (_pad.jumpButton != null) '${t.jumpButton} ${_pad.jumpButton! + 1}',
       if (_pad.selectKeys.isNotEmpty) 'SELECT/START ${_pad.selectKeys.map(zxKeyLabel).join(' ')}',
       '<< ENTER | ${t.space} >>',
     ].join('  ·  ').toUpperCase();
@@ -486,7 +488,9 @@ class _GameScreenState extends State<GameScreen>
               Expanded(
                 child: _error != null
                     ? _ErrorView(message: zxErrorText(context.l10n, _error!), onBack: () => Navigator.pop(context))
-                    : Stack(
+                    : HandheldBody(
+                        closedBottom: _showKeyboard,
+                        screen: Stack(
                         fit: StackFit.expand,
                         children: [
                           GameDisplay(frame: _frame, turbo: _turbo, mode: _settings.videoMode),
@@ -499,6 +503,7 @@ class _GameScreenState extends State<GameScreen>
                               ),
                             ),
                         ],
+                        ),
                       ),
               ),
               // Los controles ocupan la altura del mando a todo el ancho (tope: media
@@ -516,6 +521,8 @@ class _GameScreenState extends State<GameScreen>
                           onAction: _onPadAction,
                           extraKeys: _pad.extraKeys,
                           selectKeys: _pad.selectKeys,
+                          jumpButton: _pad.jumpButton,
+                          jumpLabel: context.l10n.jump.toUpperCase(),
                           lcdText: _lcdText(),
                           haptics: _settings.vibration,
                         ),

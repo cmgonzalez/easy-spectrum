@@ -88,5 +88,8 @@
   "videoSmooth": "Smooth",
   "videoRounded": "Rounded corners",
   "videoMonitor": "Monitor",
-  "videoTv": "CRT TV"
+  "videoTv": "CRT TV",
+  "jumpToButton": "Assign jump (up) to a button",
+  "jumpButton": "Jump button",
+  "jump": "Jump"
 }

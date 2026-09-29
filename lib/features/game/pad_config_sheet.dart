@@ -122,7 +122,52 @@ class _PadConfigSheetState extends State<_PadConfigSheet> {
                 title: i == 0 ? t.fire : t.extraButton(i + 1),
                 trailing: i == 0
                     ? null
-                    : _KeyChip(zxKeyName(context, _c.extra[i - 1]), onTap: () => _pickExtra(i - 1)),
+                    : i == _c.jumpButton
+                        ? Text(t.jump.toUpperCase(),
+                            style: const TextStyle(
+                                fontSize: 20, fontWeight: FontWeight.bold, color: ZxColors.cyan))
+                        : _KeyChip(zxKeyName(context, _c.extra[i - 1]), onTap: () => _pickExtra(i - 1)),
+              ),
+            // Salto: la cruceta deja de enviar arriba y un botón de color lo hace.
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _c.jumpButton != null,
+              activeColor: ZxColors.cyan,
+              title: Text(t.jumpToButton, style: const TextStyle(fontSize: 20)),
+              onChanged: (on) => setState(() {
+                if (on == true) {
+                  if (_c.buttons < 2) _c.buttons = 2;
+                  _c.jump = _c.buttons - 1; // el último botón (el más a mano)
+                } else {
+                  _c.jump = null;
+                }
+              }),
+            ),
+            if (_c.jumpButton != null)
+              _Row(
+                title: t.jumpButton,
+                trailing: Wrap(
+                  spacing: 8,
+                  children: [
+                    for (var i = 1; i < _c.buttons; i++)
+                      InkResponse(
+                        onTap: () => setState(() => _c.jump = i),
+                        radius: 28,
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _buttonColours[i],
+                            border: Border.all(
+                                color: i == _c.jumpButton ? Colors.white : Colors.black54,
+                                width: i == _c.jumpButton ? 4 : 2),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             const SizedBox(height: 16),
             _Section(t.systemButtons),

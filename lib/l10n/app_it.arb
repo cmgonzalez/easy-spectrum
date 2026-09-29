@@ -88,5 +88,8 @@
   "videoSmooth": "Morbido",
   "videoRounded": "Angoli arrotondati",
   "videoMonitor": "Monitor",
-  "videoTv": "TV CRT"
+  "videoTv": "TV CRT",
+  "jumpToButton": "Assegna salto (su) a un pulsante",
+  "jumpButton": "Pulsante salto",
+  "jump": "Salto"
 }

@@ -19,6 +19,7 @@ class PadConfig {
   int buttons; // 1-4 botones en la botonera (el rojo siempre es fuego)
   final List<int> extra; // teclas de amarillo, verde y azul
   int system; // 0-2 botones Select / Start
+  int? jump; // botón (1-3 = amarillo, verde, azul) que hace de "arriba"; null = cruceta
   final List<int> systemKeys;
 
   PadConfig({
@@ -28,18 +29,28 @@ class PadConfig {
     List<int>? extra,
     this.system = 0,
     List<int>? systemKeys,
+    this.jump,
   })  : keys = List.of(keys ?? defaultPadKeys),
         extra = List.of(extra ?? defaultExtra),
         systemKeys = List.of(systemKeys ?? defaultSystem);
 
   PadConfig copy() => PadConfig(
-      type: type, keys: keys, buttons: buttons, extra: extra, system: system, systemKeys: systemKeys);
+      type: type,
+      keys: keys,
+      buttons: buttons,
+      extra: extra,
+      system: system,
+      systemKeys: systemKeys,
+      jump: jump);
 
   /// Teclas de cada dirección, o null si es Kempston (joystick real).
   List<int>? get directionKeys => type == JoyMapping.keyboard ? keys : type.keys;
 
   /// Teclas de los botones extra visibles (amarillo, verde, azul), en orden.
   List<int> get extraKeys => extra.take(buttons - 1).toList();
+
+  /// Botón de salto si está activo y visible: la cruceta deja de enviar arriba.
+  int? get jumpButton => jump != null && jump! >= 1 && jump! < buttons ? jump : null;
 
   /// Teclas de los botones Select / Start visibles.
   List<int> get selectKeys => systemKeys.take(system).toList();
@@ -63,6 +74,7 @@ class PadConfig {
           extra: extra.length >= 3 ? extra.take(3).toList() : null,
           system: ((j['system'] as int?) ?? 0).clamp(0, maxSystem),
           systemKeys: (j['systemKeys'] as List?)?.cast<int>(),
+          jump: j['jump'] as int?,
         );
       }
     } catch (_) {}
@@ -82,5 +94,6 @@ class PadConfig {
         'extra': extra,
         'system': system,
         'systemKeys': systemKeys,
+        'jump': jump,
       })});
 }

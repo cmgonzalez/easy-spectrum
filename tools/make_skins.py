@@ -27,7 +27,7 @@ from PIL import Image, ImageCms, ImageOps
 KEYBOARD_SRC = 'art/Imagen de ChatGPT 28 sept 2026, 11_32_04.png'
 PAD_SRC = 'art/Imagen de ChatGPT 28 sept 2026, 11_23_12.png'
 CLUSTER_SRC = 'art/circles-optimized/circle-{n}-buttons-optimized.png'
-PAD_ORIGIN = (121, 146)
+PAD_ORIGIN = (121, 170)          # mando abierto arriba (sin marco superior)
 FIRE_CENTER = (1163, 542)      # centro del pozo del fuego en la original
 CLUSTER_R = 230                # radio del anillo de la botonera en la original
 ART_CENTER, ART_R = (627, 627), 525
@@ -55,18 +55,31 @@ def keyboard():
     print('teclado', kb.size, 'origen', (0, 283 - top.height))
 
 
-def pad():
-    o = np.asarray(Image.open(PAD_SRC).convert('RGB')).astype(float)
-    t = 24                                          # grosor del marco
-    top = o[80:80 + t, 600:900].mean(axis=1)        # perfiles de afuera hacia adentro
-    bottom = o[944:944 - t:-1, 600:900].mean(axis=1)
-    left = o[400:700, 22:22 + t].mean(axis=0)
-    right = o[300:500, 1514:1514 - t:-1].mean(axis=0)
-    bg = o[5:20, 600:900].reshape(-1, 3).mean(axis=0)
-    x0, y0, x1, y1 = 145, 170, 1490, 921
-    c = o[y0:y1, x0:x1]
+T = 24                                              # grosor del marco
+FRAME_R = 56.0                                      # radio de las esquinas
+
+
+def profiles(o):
+    """Perfiles de relieve del marco (de afuera hacia adentro) y color de fondo."""
+    return {
+        'top': o[80:80 + T, 600:900].mean(axis=1),
+        'bottom': o[944:944 - T:-1, 600:900].mean(axis=1),
+        'left': o[400:700, 22:22 + T].mean(axis=0),
+        'right': o[300:500, 1514:1514 - T:-1].mean(axis=0),
+        'bg': o[5:20, 600:900].reshape(-1, 3).mean(axis=0),
+    }
+
+
+def framed(c, prof, open_top=False, open_bottom=False):
+    """Contenido [c] con el marco redibujado (SDF de rectángulo redondeado, perfil
+    mezclado por dirección). Un lado abierto no lleva marco ni esquinas: las piezas
+    se apilan sin costura (cuerpo de la pantalla + mando)."""
+    ext = int(FRAME_R + T) + 8
+    top_pad = ext if open_top else 0
+    bot_pad = ext if open_bottom else 0
+    c = np.concatenate([np.repeat(c[:1], top_pad, 0), c, np.repeat(c[-1:], bot_pad, 0)])
+    t, r = T, FRAME_R
     h, w = c.shape[0] + 2 * t, c.shape[1] + 2 * t
-    r = 56.0
     yy, xx = np.mgrid[0:h, 0:w].astype(float) + 0.5
     cx, cy = w / 2, h / 2
     qx = np.abs(xx - cx) - (w / 2 - r)
@@ -77,16 +90,17 @@ def pad():
     norm = np.maximum(np.hypot(mx, my), 1e-6)
     nx = np.where(corner, mx / norm, (qx >= qy).astype(float)) * np.sign(xx - cx)
     ny = np.where(corner, my / norm, (qy > qx).astype(float)) * np.sign(yy - cy)
-    weights = [(top, np.maximum(0, -ny) ** 2), (bottom, np.maximum(0, ny) ** 2),
-               (left, np.maximum(0, -nx) ** 2), (right, np.maximum(0, nx) ** 2)]
+    weights = [(prof['top'], np.maximum(0, -ny) ** 2), (prof['bottom'], np.maximum(0, ny) ** 2),
+               (prof['left'], np.maximum(0, -nx) ** 2), (prof['right'], np.maximum(0, nx) ** 2)]
 
-    def sample(prof, dist):
+    def sample(pr, dist):
         i = np.clip(dist, 0, t - 1.001)
         i0 = np.floor(i).astype(int)
         f = (i - i0)[..., None]
-        return prof[i0] * (1 - f) + prof[np.minimum(i0 + 1, t - 1)] * f
+        return pr[i0] * (1 - f) + pr[np.minimum(i0 + 1, t - 1)] * f
 
-    frame = sum(sample(p, d) * wgt[..., None] for p, wgt in weights)
+    frame = sum(sample(pr, d) * wgt[..., None] for pr, wgt in weights)
+    bg = prof['bg']
     out = np.empty((h, w, 3))
     out[:] = bg
     out[t:t + c.shape[0], t:t + c.shape[1]] = c
@@ -95,8 +109,34 @@ def pad():
     edge = (d > -1) & (d < 0)                        # antialias del borde exterior
     a = (d[edge] + 1)[..., None]
     out[edge] = frame[edge] * a + bg * (1 - a)
-    print('mando', (w, h), 'origen', (x0 - t, y0 - t))
+    out = out[(top_pad + t if open_top else 0):h - (bot_pad + t if open_bottom else 0)]
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
+
+
+def pad():
+    """Mando abierto arriba: se une sin costura con el cuerpo de la pantalla."""
+    o = np.asarray(Image.open(PAD_SRC).convert('RGB')).astype(float)
+    x0, y0, x1, y1 = 145, 170, 1490, 921
+    img = framed(o[y0:y1, x0:x1], profiles(o), open_top=True)
+    print('mando', img.size, 'origen', (x0 - T, y0))
+    return img
+
+
+def body():
+    """Cuerpo de la consola sobre el mando (pantalla del juego): tapa superior con
+    esquinas, tramo central que se repite en vertical y tapa inferior (cuando abajo
+    va el teclado en vez del mando). Mismo plástico y cantos que el mando."""
+    o = np.asarray(Image.open(PAD_SRC).convert('RGB')).astype(float)
+    prof = profiles(o)
+    w = 1490 - 145
+    src = o[176:301, 160:760]                          # plástico liso
+    half = np.concatenate([src, src[:, ::-1]], axis=1)
+    row = np.concatenate([half] * (w // half.shape[1] + 1), axis=1)[:, :w]
+    tile = np.concatenate([row, row[::-1]])            # periódico en vertical (250 filas)
+    framed(tile[:40], prof, open_bottom=True).save('assets/skin/body_top.jpg', quality=88)
+    framed(tile, prof, open_top=True, open_bottom=True).save('assets/skin/body_mid.jpg', quality=88)
+    framed(tile[-40:], prof, open_top=True).save('assets/skin/body_bottom.jpg', quality=88)
+    print('cuerpo', Image.open('assets/skin/body_mid.jpg').size)
 
 
 def pad_buttons(base):
@@ -168,4 +208,5 @@ def select_buttons():
 if __name__ == '__main__':
     keyboard()
     pad_buttons(pad())
+    body()
     select_buttons()

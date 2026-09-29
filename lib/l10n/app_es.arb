@@ -137,5 +137,8 @@
   "videoSmooth": "Suave",
   "videoRounded": "Bordes redondeados",
   "videoMonitor": "Monitor",
-  "videoTv": "TV CRT"
+  "videoTv": "TV CRT",
+  "jumpToButton": "Asignar salto (arriba) a un botón",
+  "jumpButton": "Botón de salto",
+  "jump": "Salto"
 }

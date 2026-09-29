@@ -192,6 +192,16 @@ entregan `content://` sin extensión y con tipo genérico: por eso la app aparec
   --grant-read-uri-permission -d content://media/external/downloads/<id> -n cl.easysoft.easyspectrum/.MainActivity`
   (`<id>` con `content query --uri content://media/external/downloads`).
 
+## Consola portátil (pantalla del juego)
+
+`HandheldBody` (handheld_body.dart) llena el espacio sobre los controles con el cuerpo de la
+consola: `body_top.jpg` (tapa con esquinas), `body_mid.jpg` repetido en vertical y, solo con el
+teclado abajo, `body_bottom.jpg`. Encima: LED POWER + rejilla del altavoz y la pantalla del juego en
+un vidrio negro, lo más grande posible y centrada. Las piezas y el mando las genera
+`make_skins.py` con `framed(..., open_top/open_bottom)`: el mando va **abierto arriba** (origen
+(121,170), 1393×775) y el cuerpo usa los mismos perfiles de canto → se unen sin costura.
+Salto: `PadConfig.jump` = botón de color (1-3) que envía "arriba"; la cruceta deja de enviarlo.
+
 ## Modos de video (`lib/core/video_mode.dart`)
 
 Nítido (por defecto), Suave (bilineal), Bordes redondeados (ClipRRect), Monitor y TV CRT. Se eligen

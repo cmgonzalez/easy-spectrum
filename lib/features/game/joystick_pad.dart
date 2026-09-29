@@ -12,9 +12,10 @@ import 'skin.dart';
 /// Geometría medida sobre la imagen original del mando (art/, 1536×1024). Los assets
 /// los genera tools/make_skins.py: contenido sin el relleno entre marco y controles,
 /// marco redibujado con el relieve original y, sobre el pozo del fuego, la botonera de
-/// art/circles-optimized con 1-4 botones (joystick_<n>.jpg); empiezan en (121, 146).
+/// art/circles-optimized con 1-4 botones (joystick_<n>.jpg). Abiertos arriba (sin
+/// canto superior) para unirse con el cuerpo de la consola; empiezan en (121, 170).
 SkinImage _skinFor(int buttons) =>
-    SkinImage('assets/skin/joystick_$buttons.jpg', 1393, 799, origin: const Offset(121, 146));
+    SkinImage('assets/skin/joystick_$buttons.jpg', 1393, 775, origin: const Offset(121, 170));
 const _dpadCenter = Offset(367, 508);
 const _dpadArm = 107.0; // ancho de cada brazo de la cruz (bbox 206..528 / 3)
 const _dpadReach = 270.0; // radio de toque (más generoso que el dibujo)
@@ -74,6 +75,9 @@ class JoystickPad extends StatefulWidget {
   final List<int> extraKeys;
   /// Teclas de los botones Select / Start (0-2; sin botones no se dibuja nada).
   final List<int> selectKeys;
+  /// Botón de la botonera (1-3) que envía "arriba"; la cruceta deja de hacerlo.
+  final int? jumpButton;
+  final String jumpLabel;
   final bool haptics;
   /// Letrero que avanza por la pantalla LCD (juego, datos, control…).
   final String lcdText;
@@ -85,6 +89,8 @@ class JoystickPad extends StatefulWidget {
     required this.onAction,
     this.extraKeys = const [],
     this.selectKeys = const [],
+    this.jumpButton,
+    this.jumpLabel = 'JUMP',
     this.haptics = true,
     this.lcdText = '',
   });
@@ -125,7 +131,15 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
 
   List<(Offset, double)> get _cluster => _clusters[widget.extraKeys.length.clamp(0, 3)];
 
-  void _emit() => widget.onJoystick(_dir | (_fire ? ZxJoy.fire : 0));
+  bool _jump = false;
+
+  /// Dirección enviada: con botón de salto, arriba sale de ese botón y no de la cruceta.
+  int get _sentDir {
+    if (widget.jumpButton == null) return _dir;
+    return (_dir & ~ZxJoy.up) | (_jump ? ZxJoy.up : 0);
+  }
+
+  void _emit() => widget.onJoystick(_sentDir | (_fire ? ZxJoy.fire : 0));
 
   static int _dirFor(Offset p) {
     final d = p - _dpadCenter;
@@ -199,6 +213,10 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
     setState(() => v ? _buttonsDown.add(i) : _buttonsDown.remove(i));
     if (i == 0) {
       _setFire(v);
+    } else if (i == widget.jumpButton) {
+      if (v && widget.haptics) Haptics.press();
+      _jump = v;
+      _emit();
     } else {
       if (v && widget.haptics) Haptics.press();
       widget.onKey(widget.extraKeys[i - 1], v);
@@ -262,11 +280,14 @@ class _JoystickPadState extends State<JoystickPad> with SingleTickerProviderStat
       onMove: _move,
       onUp: _up,
       painter: _PadOverlay(
-        dir: _dir,
+        dir: widget.jumpButton == null ? _dir : _dir & ~ZxJoy.up,
         cluster: _cluster,
         buttonsDown: {..._buttonsDown},
         actions: {..._actionsDown},
-        labels: [for (final k in widget.extraKeys) zxKeyName(context, k)],
+        labels: [
+          for (var i = 0; i < widget.extraKeys.length; i++)
+            i + 1 == widget.jumpButton ? widget.jumpLabel : zxKeyName(context, widget.extraKeys[i]),
+        ],
         selectCaps: _selectCaps,
         selectDown: {..._selectDown},
         selectLabels: [for (final k in widget.selectKeys) zxKeyName(context, k)],

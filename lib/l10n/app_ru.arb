@@ -88,5 +88,8 @@
   "videoSmooth": "Сглаженный",
   "videoRounded": "Скруглённые углы",
   "videoMonitor": "Монитор",
-  "videoTv": "ЭЛТ-телевизор"
+  "videoTv": "ЭЛТ-телевизор",
+  "jumpToButton": "Назначить прыжок (вверх) кнопке",
+  "jumpButton": "Кнопка прыжка",
+  "jump": "Прыжок"
 }

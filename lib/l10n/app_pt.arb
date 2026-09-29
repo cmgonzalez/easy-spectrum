@@ -88,5 +88,8 @@
   "videoSmooth": "Suave",
   "videoRounded": "Cantos arredondados",
   "videoMonitor": "Monitor",
-  "videoTv": "TV CRT"
+  "videoTv": "TV CRT",
+  "jumpToButton": "Atribuir pulo (cima) a um botão",
+  "jumpButton": "Botão de pulo",
+  "jump": "Pulo"
 }
