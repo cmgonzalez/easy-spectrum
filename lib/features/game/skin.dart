@@ -43,8 +43,8 @@ class SkinView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: Colors.black,
+    // Sin fondo: alrededor de la imagen se ve el cuerpo de la consola.
+    return SizedBox.expand(
       child: LayoutBuilder(builder: (context, box) {
         var sx = box.maxWidth / skin.width, sy = box.maxHeight / skin.height;
         if (!stretch) sx = sy = sx < sy ? sx : sy;

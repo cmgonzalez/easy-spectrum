@@ -22,7 +22,7 @@ Si cambian los orígenes, actualizar SkinImage(origin:) en zx_keyboard.dart / jo
 import io
 
 import numpy as np
-from PIL import Image, ImageCms, ImageOps
+from PIL import Image, ImageCms, ImageDraw, ImageFilter, ImageOps
 
 KEYBOARD_SRC = 'art/Imagen de ChatGPT 28 sept 2026, 11_32_04.png'
 PAD_SRC = 'art/Imagen de ChatGPT 28 sept 2026, 11_23_12.png'
@@ -115,39 +115,6 @@ def framed(c, prof, open_top=False, open_bottom=False):
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
 
 
-PAD_FOOT = 110                     # plástico extra bajo los controles (los sube)
-
-
-def pad():
-    """Mando abierto arriba (se une sin costura con el cuerpo de la pantalla) y
-    alargado por abajo [PAD_FOOT] filas: los controles no quedan pegados al borde
-    del teléfono. Las rayas del arcoíris siguen su diagonal (1 px a la izquierda
-    por fila) sobre plástico liso."""
-    o = np.asarray(Image.open(PAD_SRC).convert('RGB')).astype(float)
-    x0, y0, x1, y1 = 145, 170, 1490, 921
-    c = o[y0:y1, x0:x1]
-    # Plástico del pie: reflejo de las últimas filas del mando (continúa la textura),
-    # con la zona de las rayas cambiada por su espejo desde la izquierda (lisa).
-    below = c[-30:]                                   # plástico bajo el LCD
-    strip = np.concatenate([below[::-1], below])      # vaivén: continuo en las uniones
-    plain = np.concatenate([strip] * (PAD_FOOT // len(strip) + 1))[:PAD_FOOT].copy()
-    cut = 850
-    cols = np.arange(cut, c.shape[1])
-    plain[:, cols] = plain[:, 2 * cut - cols]
-    last = c[-1]
-    sat = last.max(axis=1) - last.min(axis=1)
-    alpha = np.clip((sat - 40) / 80, 0, 1)            # rayas (bordes suaves)
-    foot = np.empty((PAD_FOOT, c.shape[1], 3))
-    for k in range(PAD_FOOT):
-        base = plain[k]
-        shifted = np.roll(last, -(k + 1), axis=0)
-        a = np.roll(alpha, -(k + 1))[:, None]
-        foot[k] = shifted * a + base * (1 - a)
-    img = framed(np.concatenate([c, foot]), profiles(o), open_top=True)
-    print('mando', img.size, 'origen', (x0 - T, y0))
-    return img
-
-
 def body():
     """Cuerpo de la consola sobre el mando (pantalla del juego): tapa superior con
     esquinas, tramo central que se repite en vertical y tapa inferior (cuando abajo
@@ -165,8 +132,23 @@ def body():
     print('cuerpo', Image.open('assets/skin/body_mid.jpg').size)
 
 
-def pad_buttons(base):
-    s = CLUSTER_R / ART_R
+def controls():
+    """Piezas del mando, que la app coloca por código (console_view.dart):
+    - dpad.png: la cruceta con su pozo (círculo de la original, bordes difuminados).
+    - cluster_<n>.png: botonera de n botones (arte completo, 600 px); imprime centro y
+      radio de cada botón como fracción del lado (tabla _clusters en joystick_pad.dart).
+    - buttons_<n>.png: miniaturas para el panel de configuración.
+    - lcd.png: pantalla LCD con su marco; imprime el rectángulo del vidrio.
+    """
+    o = Image.open(PAD_SRC).convert('RGB')
+    cx, cy, r = 367, 508, 215
+    dpad = o.crop((cx - r, cy - r, cx + r, cy + r)).convert('RGBA')
+    m = Image.new('L', dpad.size, 0)
+    ImageDraw.Draw(m).ellipse((6, 6, 2 * r - 6, 2 * r - 6), fill=255)
+    dpad.putalpha(m.filter(ImageFilter.GaussianBlur(4)))
+    dpad.save('assets/skin/dpad.png', optimize=True)
+    print('cruceta: centro (0.5, 0.5), brazo', round(107 / (2 * r), 4), 'de lado')
+
     colours = {
         'rojo': lambda r, g, b: (r > 180) & (g < 90) & (b < 90),
         'amarillo': lambda r, g, b: (r > 200) & (g > 170) & (b < 80),
@@ -176,27 +158,27 @@ def pad_buttons(base):
     for n in range(1, 5):
         art = Image.open(CLUSTER_SRC.format(n=n)).convert('RGBA')
         a = np.asarray(art).astype(int)
-        size = round(art.width * s)
-        small = art.resize((size, size), Image.LANCZOS)
-        # Esquina del arte en la original → en el asset.
-        ox = FIRE_CENTER[0] - ART_CENTER[0] * s - PAD_ORIGIN[0]
-        oy = FIRE_CENTER[1] - ART_CENTER[1] * s - PAD_ORIGIN[1]
-        out = base.convert('RGBA')
-        out.alpha_composite(small, (round(ox), round(oy)))
-        out.convert('RGB').save(f'assets/skin/joystick_{n}.jpg', quality=88, optimize=True)
-        # Miniatura para elegir la botonera en la configuración del control.
+        side = art.width
+        art.resize((600, 600), Image.LANCZOS).save(f'assets/skin/cluster_{n}.png', optimize=True)
         box = art.getbbox()
         art.crop(box).resize((200, 200), Image.LANCZOS).save(f'assets/skin/buttons_{n}.png', optimize=True)
         found = []
         for name, f in colours.items():
-            m = f(a[..., 0], a[..., 1], a[..., 2]) & (a[..., 3] > 250)
-            if m.sum() < 500:
+            mk = f(a[..., 0], a[..., 1], a[..., 2]) & (a[..., 3] > 250)
+            if mk.sum() < 500:
                 continue
-            ys, xs = np.nonzero(m)
-            cx = FIRE_CENTER[0] + (xs.mean() - ART_CENTER[0]) * s
-            cy = FIRE_CENTER[1] + (ys.mean() - ART_CENTER[1]) * s
-            found.append(f'{name} ({cx:.0f}, {cy:.0f}) r{(m.sum() / np.pi) ** 0.5 * s:.0f}')
-        print(f'botonera {n}:', ', '.join(found))
+            ys, xs = np.nonzero(mk)
+            found.append(f'{name} ({xs.mean() / side:.4f}, {ys.mean() / side:.4f}) '
+                         f'r{(mk.sum() / np.pi) ** 0.5 / side:.4f}')
+        print(f'botonera {n}:', ', '.join(found), f'anillo r{ART_R / side:.4f}')
+
+    lx0, ly0, lx1, ly1 = 470, 738, 1052, 872
+    lcd = o.crop((lx0, ly0, lx1, ly1)).convert('RGBA')
+    m = Image.new('L', lcd.size, 0)
+    ImageDraw.Draw(m).rounded_rectangle((3, 3, lcd.width - 4, lcd.height - 4), 14, fill=255)
+    lcd.putalpha(m.filter(ImageFilter.GaussianBlur(2)))
+    lcd.save('assets/skin/lcd.png', optimize=True)
+    print('lcd', lcd.size, 'vidrio', (484 - lx0, 752 - ly0, 1038 - lx0, 858 - ly0))
 
 
 def select_buttons():
@@ -233,6 +215,6 @@ def select_buttons():
 
 if __name__ == '__main__':
     keyboard()
-    pad_buttons(pad())
+    controls()
     body()
     select_buttons()

@@ -156,10 +156,7 @@ Pantalla de 6912 bytes ($4000) → imagen 256×192. Guardadas en `MediaDb`.
     escalones y muescas en las curvas de las esquinas.
   - Mando: cruceta (ángulo, 8 dir., se puede deslizar), botón redondo = FUEGO, botones de
     colores = teclas 1-4, LCD partido = ENTER | ESPACIO (rótulos pintados encima).
-  - El área de controles tiene **siempre la proporción del mando** a todo el ancho (máx. 50% de
-    la pantalla): así la pantalla del juego no se mueve al cambiar teclado ↔ mando. El teclado
-    (recortado desde y=283, solo la placa de teclas, 2,27:1) se dibuja con `SkinView(stretch: true)`,
-    estirado ~20% en vertical (teclas más altas); escala x/y independientes en toques y overlays.
+  - Distribución actual: ver "Consola portátil" más abajo.
 
 ## Fichas de ZXDB (ajuste "Buscar datos de los juegos en internet", activado por defecto)
 
@@ -194,16 +191,19 @@ entregan `content://` sin extensión y con tipo genérico: por eso la app aparec
 
 ## Consola portátil (pantalla del juego)
 
-`HandheldBody` (handheld_body.dart) llena el espacio sobre los controles con el cuerpo de la
-consola: `body_top.jpg` (tapa con esquinas), `body_mid.jpg` repetido en vertical y, solo con el
-teclado abajo, `body_bottom.jpg`. Encima: LED POWER + rejilla del altavoz y la pantalla del juego en
-un vidrio negro, lo más grande posible y centrada. Las piezas y el mando las genera
-`make_skins.py` con `framed(..., open_top/open_bottom)`: el mando va **abierto arriba** (origen
-(121,170), 1393×885: +110 px de pie de plástico para subir los controles, con las rayas del
-arcoíris continuadas en diagonal) y el cuerpo usa los mismos perfiles de canto → sin costura.
-Teclado: vuelve la cabecera "sinclair ZX Spectrum" acortada (filas 0-175 + 235-959 → 1536×899,
-origen (0,60)); en su hueco derecho van los 4 botones de acción (`_actionRects`; el verde vuelve
-al mando). Configurar usa el ícono `tune`.
+`ConsoleView` (console_view.dart) ocupa todo bajo la barra superior: cuerpo con `body_top.jpg`,
+`body_mid.jpg` repetido y `body_bottom.jpg` (mismos cantos que el arte del mando) y, de arriba
+abajo: LED POWER + rejilla, la pantalla del juego en un vidrio (ancho útil, tope 40% del alto),
+el LCD (`LcdPanel`: letrero + mitades ENTER | ESPACIO), la fila de `ActionButtons` (los 4 de
+colores, **misma posición con mando y teclado**; con teclado el verde lleva el ícono de mando) y
+el área de controles. La pantalla mide lo mismo en ambos modos.
+- Mando (`JoystickPad`): piezas colocadas por código (`_Layout`), nunca deformadas: `dpad.png`
+  a la izquierda, `cluster_<n>.png` a la derecha (botones en fracciones del lado, tabla
+  `_clusters`), `select_<n>.png` centrado debajo; el alto sobrante se reparte en los huecos.
+  Arcoíris dibujado (`_RainbowPainter`) con el ángulo y ancho del teclado (25 px por 60 de alto).
+- Teclado: su arte con cabecera, sin estirar (contain), centrado en el área; `SkinView` sin fondo.
+- Piezas generadas por `make_skins.py` (`controls()`, `body()`, `select_buttons()`); el mando ya
+  no es una sola imagen (se borraron `joystick_<n>.jpg`).
 Salto: `PadConfig.jump` = botón de color (1-3) que envía "arriba"; la cruceta deja de enviarlo.
 
 ## Modos de video (`lib/core/video_mode.dart`)

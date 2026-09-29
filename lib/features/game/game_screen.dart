@@ -19,7 +19,8 @@ import '../../core/storage/game_library.dart';
 import '../../core/storage/game_thumbnail.dart';
 import '../../core/theme/easy_theme.dart';
 import 'game_display.dart';
-import 'handheld_body.dart';
+import 'console_parts.dart';
+import 'console_view.dart';
 import '../settings/settings_screen.dart';
 import 'joystick_pad.dart';
 import 'pad_config_sheet.dart';
@@ -485,48 +486,49 @@ class _GameScreenState extends State<GameScreen>
                 onToggleInput: _toggleInput,
                 onMenu: _showMenu,
               ),
+              // Consola portátil: pantalla, LCD y botones de acción arriba (misma
+              // posición con mando y con teclado) y los controles en el resto.
               Expanded(
                 child: _error != null
                     ? _ErrorView(message: zxErrorText(context.l10n, _error!), onBack: () => Navigator.pop(context))
-                    : HandheldBody(
-                        closedBottom: _showKeyboard,
+                    : ConsoleView(
+                        rainbow: !_showKeyboard,
                         screen: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          GameDisplay(frame: _frame, turbo: _turbo, mode: _settings.videoMode),
-                          if (_paused)
-                            const ColoredBox(
-                              color: Colors.black54,
-                              child: Center(
-                                child: Icon(Icons.pause_circle_filled_rounded,
-                                    size: 96, color: Colors.white70),
+                          fit: StackFit.expand,
+                          children: [
+                            GameDisplay(frame: _frame, turbo: _turbo, mode: _settings.videoMode),
+                            if (_paused)
+                              const ColoredBox(
+                                color: Colors.black54,
+                                child: Center(
+                                  child: Icon(Icons.pause_circle_filled_rounded, size: 96, color: Colors.white70),
+                                ),
                               ),
-                            ),
-                        ],
+                          ],
                         ),
-                      ),
-              ),
-              // Los controles ocupan la altura del mando a todo el ancho (tope: media
-              // pantalla); el teclado se estira a esa misma área, así la pantalla del
-              // juego no se mueve al cambiar de uno a otro. La pantalla usa el resto.
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.5),
-                child: AspectRatio(
-                  aspectRatio: JoystickPad.aspectRatio,
-                  child: _showKeyboard
-                      ? ZxKeyboard(onKey: _onKey, onAction: _onPadAction, haptics: _settings.vibration)
-                      : JoystickPad(
-                          onJoystick: _onJoystick,
+                        lcd: LcdPanel(
+                          text: _lcdText(),
+                          spaceLabel: context.l10n.space,
                           onKey: _onKey,
-                          onAction: _onPadAction,
-                          extraKeys: _pad.extraKeys,
-                          selectKeys: _pad.selectKeys,
-                          jumpButton: _pad.jumpButton,
-                          jumpLabel: context.l10n.jump.toUpperCase(),
-                          lcdText: _lcdText(),
                           haptics: _settings.vibration,
                         ),
-                ),
+                        actions: ActionButtons(
+                          onAction: _onPadAction,
+                          keyboardMode: _showKeyboard,
+                          haptics: _settings.vibration,
+                        ),
+                        controls: _showKeyboard
+                            ? ZxKeyboard(onKey: _onKey, haptics: _settings.vibration)
+                            : JoystickPad(
+                                onJoystick: _onJoystick,
+                                onKey: _onKey,
+                                extraKeys: _pad.extraKeys,
+                                selectKeys: _pad.selectKeys,
+                                jumpButton: _pad.jumpButton,
+                                jumpLabel: context.l10n.jump.toUpperCase(),
+                                haptics: _settings.vibration,
+                              ),
+                      ),
               ),
             ],
           ),
