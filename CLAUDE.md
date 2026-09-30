@@ -295,6 +295,12 @@ con `window_manager`, audio con la misma `ZxAudio` que Android.
   la barra entera en cada build y solo se reenvía si cambió; un cambio con un menú abierto se aplica
   al cerrarlo. `WM_COMMAND` → `select(id)`. Alt solo no activa la barra (es el fuego del joystick);
   Alt + letra sí. En pantalla completa se quita con `setVisible(false)`.
+  **Colores Spectrum** (owner-draw): fondo negro, texto blanco, opción marcada en cian como el menú
+  del 128K y arcoíris a la derecha de la barra (opción `MFT_RIGHTJUSTIFY` deshabilitada). Owner-draw
+  obliga a: letra de Alt por `WM_MENUCHAR`, flecha de submenú propia (+ `ExcludeClipRect` para que
+  Windows no pinte la suya), tapar la línea blanca bajo la barra en `WM_NCPAINT`/`WM_NCACTIVATE`, y
+  `SetPreferredAppMode(ForceDark)` (uxtheme, ordinal 135, no documentado) para bordes oscuros.
+  Barra de título negra con texto blanco siempre (`UpdateTheme` en `win32_window.cpp`, Windows 11).
 - **Instancia única** (`windows/runner/single_instance.cpp`): mutex `Local\EasySpectrum.SingleInstance`;
   si ya hay una ventana (marcada con la propiedad `EasySpectrum.MainWindow`), la nueva instancia le
   manda sus argumentos por `WM_COPYDATA` (rutas ya absolutas), la trae al frente y sale. El runner
