@@ -9,6 +9,7 @@ class ZxAudio {
   static const sampleRate = 48000;
 
   AudioSource? _stream;
+  bool _muted = false;
   SoundHandle? _handle;
 
   Future<void> start() async {
@@ -22,7 +23,7 @@ class ZxAudio {
         bufferingType: BufferingType.released,
         bufferingTimeNeeds: 0.08,
       );
-      _handle = SoLoud.instance.play(_stream!);
+      _handle = SoLoud.instance.play(_stream!, volume: _muted ? 0 : 1);
     } catch (e) {
       debugPrint('Audio init error: $e');
     }
@@ -41,6 +42,16 @@ class ZxAudio {
         break;
       }
     }
+  }
+
+  /// Silencia sin detener el stream (el emulador sigue igual).
+  void setMuted(bool muted) {
+    _muted = muted;
+    final h = _handle;
+    if (h == null) return;
+    try {
+      SoLoud.instance.setVolume(h, muted ? 0 : 1);
+    } catch (_) {}
   }
 
   void setPaused(bool paused) {

@@ -33,9 +33,30 @@ class ConsoleView extends StatelessWidget {
   static const _frame = 24.0; // grosor del canto en la piel
   static const _cap = 64.0; // alto de las tapas superior e inferior
 
+  /// Alto/ancho mínimo con el que se compone la consola. En pantallas casi cuadradas
+  /// (plegables abiertos, tabletas) se estrecha y se centra, en vez de ensancharse.
+  static const _minAspect = 1.75;
+
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, box) {
+    return LayoutBuilder(builder: (context, outer) {
+      final cw = math.min(outer.maxWidth, outer.maxHeight / _minAspect);
+      if (cw >= outer.maxWidth) return _console(outer);
+      return ColoredBox(
+        color: Colors.black,
+        child: Center(
+          child: SizedBox(
+            width: cw,
+            height: outer.maxHeight,
+            child: LayoutBuilder(builder: (context, box) => _console(box)),
+          ),
+        ),
+      );
+    });
+  }
+
+  Widget _console(BoxConstraints box) {
+    {
       final w = box.maxWidth, h = box.maxHeight;
       final k = w / _skinWidth;
       final frame = _frame * k, cap = _cap * k;
@@ -104,7 +125,7 @@ class ConsoleView extends StatelessWidget {
           ),
         ],
       );
-    });
+    }
   }
 }
 

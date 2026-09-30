@@ -111,5 +111,10 @@
   "menuHelp": "Help",
   "dropHint": "Drop the game to load it",
   "keyMapText": "Letters, numbers, Enter and Space: same keys as the Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nBackspace = DELETE · Esc = BREAK\nSymbols (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + their key\nArrows = selected joystick (or cursor keys with \"None\") · Alt or Tab = fire\n\nF2 reload · F3 open · F5 reset · F6 tape · F8 pause · F11 full screen\nDouble click: full screen · Drag a file onto the window to load it",
-  "gigascreenSubtitle": "Blends each frame with the previous one: more colours in programs that alternate two screens."
+  "gigascreenSubtitle": "Blends each frame with the previous one: more colours in programs that alternate two screens.",
+  "tabGame": "Controls",
+  "tabGeneral": "General",
+  "sound": "Sound",
+  "configThisGame": "This game only",
+  "configDefaults": "Default for new games"
 }

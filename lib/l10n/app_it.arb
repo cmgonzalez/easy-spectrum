@@ -111,5 +111,10 @@
   "menuHelp": "Aiuto",
   "dropHint": "Rilascia il gioco per caricarlo",
   "keyMapText": "Lettere, numeri, Invio e Spazio: gli stessi tasti dello Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nBackspace = DELETE · Esc = BREAK\nSimboli (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + il loro tasto\nFrecce = joystick scelto (o cursori con «Nessuno») · Alt o Tab = fuoco\n\nF2 ricarica · F3 apri · F5 reset · F6 nastro · F8 pausa · F11 schermo intero\nDoppio clic: schermo intero · Trascina un file sulla finestra per caricarlo",
-  "gigascreenSubtitle": "Fonde ogni fotogramma con il precedente: più colori nei programmi che alternano due schermate."
+  "gigascreenSubtitle": "Fonde ogni fotogramma con il precedente: più colori nei programmi che alternano due schermate.",
+  "tabGame": "Controlli",
+  "tabGeneral": "Generale",
+  "sound": "Suono",
+  "configThisGame": "Solo per questo gioco",
+  "configDefaults": "Predefinito per i nuovi giochi"
 }

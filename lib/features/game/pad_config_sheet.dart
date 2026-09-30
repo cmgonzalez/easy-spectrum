@@ -9,28 +9,26 @@ import '../../core/theme/easy_theme.dart';
 String zxKeyName(BuildContext context, int key) =>
     key == ZxKey.space ? context.l10n.space.toUpperCase() : zxKeyLabel(key);
 
-/// Panel del botón rojo del mando: tipo de control, teclas del modo Teclado y
-/// botones extra. Devuelve la configuración nueva, o null si se cierra sin tocar "Listo".
-Future<PadConfig?> showPadConfig(BuildContext context, PadConfig current, JoyMapping fallback) {
-  return showModalBottomSheet<PadConfig>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: ZxColors.bodyLight,
-    builder: (_) => _PadConfigSheet(initial: current, fallback: fallback),
-  );
-}
-
-class _PadConfigSheet extends StatefulWidget {
+/// Editor de la configuración del control de un juego (pestaña "Juego" de la
+/// configuración). Cada cambio se notifica de inmediato con [onChanged].
+class PadConfigEditor extends StatefulWidget {
   final PadConfig initial;
   final JoyMapping fallback;
-  const _PadConfigSheet({required this.initial, required this.fallback});
+  final ValueChanged<PadConfig> onChanged;
+  const PadConfigEditor({super.key, required this.initial, required this.fallback, required this.onChanged});
 
   @override
-  State<_PadConfigSheet> createState() => _PadConfigSheetState();
+  State<PadConfigEditor> createState() => _PadConfigEditorState();
 }
 
-class _PadConfigSheetState extends State<_PadConfigSheet> {
+class _PadConfigEditorState extends State<PadConfigEditor> {
   late PadConfig _c = widget.initial.copy();
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    widget.onChanged(_c);
+  }
 
   Future<void> _pickDirection(int i) async {
     final k = await showZxKeyPicker(context, _c.keys[i]);
@@ -53,14 +51,9 @@ class _PadConfigSheetState extends State<_PadConfigSheet> {
     final dirs = [t.dirUp, t.dirDown, t.dirLeft, t.dirRight, t.fire];
     String typeLabel(JoyMapping m) => m == JoyMapping.keyboard ? t.joyKeyboard : m.label;
 
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.9),
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+    return ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           children: [
-            Text(t.padConfig, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
             Text(t.padConfigNote, style: const TextStyle(fontSize: 16, color: ZxColors.textDim)),
             const SizedBox(height: 16),
             _Section(t.controlType),
@@ -203,28 +196,12 @@ class _PadConfigSheetState extends State<_PadConfigSheet> {
                 title: t.extraButton(i + 1),
                 trailing: _KeyChip(zxKeyName(context, _c.systemKeys[i]), onTap: () => _pickSystem(i)),
               ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: () => setState(() => _c = PadConfig(type: widget.fallback)),
-                  child: Text(t.padReset, style: const TextStyle(fontSize: 18)),
-                ),
-                const Spacer(),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: ZxColors.cyan,
-                    foregroundColor: Colors.black,
-                    minimumSize: const Size(140, 56),
-                  ),
-                  onPressed: () => Navigator.pop(context, _c),
-                  child: Text(t.padDone, style: const TextStyle(fontSize: 20)),
-                ),
-              ],
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => setState(() => _c = PadConfig(type: widget.fallback)),
+              child: Text(t.padReset, style: const TextStyle(fontSize: 18)),
             ),
           ],
-        ),
-      ),
     );
   }
 }

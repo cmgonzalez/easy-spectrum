@@ -6,8 +6,8 @@ import '../../core/haptics.dart';
 
 /// Acciones de los botones de colores, en orden: rojo, amarillo, verde, azul.
 enum PadAction {
-  config(Icons.tune_rounded), // configurar el control
-  settings(Icons.settings_rounded), // ajustes de la app
+  config(Icons.tune_rounded), // configuración (juego + general)
+  sound(Icons.volume_up_rounded), // sonido sí/no
   keyboard(Icons.keyboard_rounded), // cambiar mando ↔ teclado
   exit(Icons.format_list_bulleted_rounded); // volver a la lista
 
@@ -41,8 +41,10 @@ class ActionButtons extends StatefulWidget {
   final void Function(PadAction action) onAction;
   /// Con el teclado a la vista, el verde vuelve al mando (ícono de mando).
   final bool keyboardMode;
+  final bool soundOn;
   final bool haptics;
-  const ActionButtons({super.key, required this.onAction, this.keyboardMode = false, this.haptics = true});
+  const ActionButtons(
+      {super.key, required this.onAction, this.keyboardMode = false, this.soundOn = true, this.haptics = true});
 
   @override
   State<ActionButtons> createState() => _ActionButtonsState();
@@ -83,7 +85,7 @@ class _ActionButtonsState extends State<ActionButtons> {
         onPointerCancel: (e) => setState(() => _pointers.remove(e.pointer)),
         child: CustomPaint(
           size: Size(box.maxWidth, h),
-          painter: _ActionsPainter(rects, {..._pointers.values}, widget.keyboardMode),
+          painter: _ActionsPainter(rects, {..._pointers.values}, widget.keyboardMode, widget.soundOn),
         ),
       );
     });
@@ -94,7 +96,8 @@ class _ActionsPainter extends CustomPainter {
   final List<Rect> rects;
   final Set<int> down;
   final bool keyboardMode;
-  _ActionsPainter(this.rects, this.down, this.keyboardMode);
+  final bool soundOn;
+  _ActionsPainter(this.rects, this.down, this.keyboardMode, this.soundOn);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -120,7 +123,11 @@ class _ActionsPainter extends CustomPainter {
             ..strokeWidth = r.height * 0.07
             ..color = padActionColours[i]);
       final action = PadAction.values[i];
-      final icon = keyboardMode && action == PadAction.keyboard ? Icons.sports_esports_rounded : action.icon;
+      final icon = keyboardMode && action == PadAction.keyboard
+          ? Icons.sports_esports_rounded
+          : !soundOn && action == PadAction.sound
+              ? Icons.volume_off_rounded
+              : action.icon;
       paintIcon(canvas, icon, r.center, r.height * 0.6, Colors.white.withValues(alpha: 0.92));
     }
   }
@@ -130,6 +137,7 @@ class _ActionsPainter extends CustomPainter {
       old.rects.length != rects.length ||
       old.rects.first != rects.first ||
       old.keyboardMode != keyboardMode ||
+      old.soundOn != soundOn ||
       old.down.length != down.length ||
       !old.down.containsAll(down);
 }

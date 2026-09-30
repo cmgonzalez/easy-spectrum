@@ -23,7 +23,6 @@ import 'console_parts.dart';
 import 'console_view.dart';
 import '../settings/settings_screen.dart';
 import 'joystick_pad.dart';
-import 'pad_config_sheet.dart';
 import 'zx_keyboard.dart';
 
 class GameScreen extends StatefulWidget {
@@ -89,7 +88,7 @@ class _GameScreenState extends State<GameScreen>
   }
 
   Future<void> _boot() async {
-    _settings = await AppSettings.load();
+    _settings = await _loadSettings();
     _pad = await PadConfig.load(widget.mediaPath, _settings.joyMapping);
     if (widget.mediaPath.isNotEmpty) {
       // La ficha de ZXDB (si ya está) da título real y datos para el LCD.
@@ -115,11 +114,14 @@ class _GameScreenState extends State<GameScreen>
       _wantCapture = await GameThumbnail.needsCapture(widget.mediaPath);
     }
     _zx.setGigascreen(_settings.gigascreen);
+    _audio.setMuted(!_settings.soundOn);
     await _audio.start();
     if (!mounted) return;
     setState(() => _started = true);
     _ticker.start();
   }
+
+  Future<AppSettings> _loadSettings() => AppSettings.loadForGame(widget.mediaPath);
 
   Future<void> _onTick(Duration now) async {
     if (_exiting || _paused || !_zx.isRunning) {
@@ -249,9 +251,9 @@ class _GameScreenState extends State<GameScreen>
   void _onPadAction(PadAction action) {
     switch (action) {
       case PadAction.config:
-        _whilePaused(_configurePad);
-      case PadAction.settings:
         _whilePaused(_openSettings);
+      case PadAction.sound:
+        _toggleSound();
       case PadAction.keyboard:
         _toggleInput();
       case PadAction.exit:
@@ -268,22 +270,33 @@ class _GameScreenState extends State<GameScreen>
     if (mounted && !wasPaused && !_exiting) _setPaused(false);
   }
 
-  Future<void> _configurePad() async {
-    final c = await showPadConfig(context, _pad, _settings.joyMapping);
-    if (c == null || !mounted) return;
-    setState(() => _pad = c);
-    await c.save(widget.mediaPath);
+  void _toggleSound() {
+    setState(() => _settings.soundOn = !_settings.soundOn);
+    _audio.setMuted(!_settings.soundOn);
+    _settings.save();
   }
 
   Future<void> _openSettings() async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
-    final s = await AppSettings.load();
+    await Navigator.push(context, MaterialPageRoute(
+      builder: (_) => SettingsScreen(
+        pad: _pad,
+        padFallback: _settings.joyMapping,
+        gamePath: widget.mediaPath,
+        gameName: _title,
+        onPadChanged: (c) {
+          _pad = c;
+          c.save(widget.mediaPath);
+        },
+      ),
+    ));
+    final s = await _loadSettings();
     // Sin configuración propia, el juego sigue el tipo de control de Ajustes.
     final pad = await PadConfig.load(widget.mediaPath, s.joyMapping);
     if (!mounted) return;
     s.keepScreenOn ? WakelockPlus.enable() : WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _zx.setGigascreen(s.gigascreen);
+    _audio.setMuted(!s.soundOn);
     setState(() {
       _settings = s;
       _pad = pad;
@@ -470,6 +483,7 @@ class _GameScreenState extends State<GameScreen>
                         actions: ActionButtons(
                           onAction: _onPadAction,
                           keyboardMode: _showKeyboard,
+                          soundOn: _settings.soundOn,
                           haptics: _settings.vibration,
                         ),
                         controls: _showKeyboard

@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'emulator/zx_types.dart';
 import 'screen_border.dart';
+import 'storage/media_db.dart';
 import 'video_mode.dart';
 
 /// Ajustes persistentes de la app.
@@ -9,12 +12,38 @@ class AppSettings {
   JoyMapping joyMapping = JoyMapping.kempston;
   bool quickLoad = true;
   bool vibration = true;
+  bool soundOn = true;
   bool keepScreenOn = true;
   bool startWithKeyboard = false;
   bool onlineInfo = true;
   VideoMode videoMode = VideoMode.sharp;
   bool gigascreen = false;
   ScreenBorder screenBorder = ScreenBorder.half;
+
+  /// Juego al que pertenecen estos ajustes (null = valores por defecto, que usan
+  /// los juegos nuevos). Los ajustes por juego se guardan en [MediaDb].
+  String? gamePath;
+
+  /// Ajustes de un juego: los por defecto con lo que ese juego haya cambiado encima.
+  /// Por juego: modelo, carga rápida, sonido, vibración, video, borde y Gigascreen.
+  static Future<AppSettings> loadForGame(String gamePath) async {
+    final s = await load();
+    s.gamePath = gamePath;
+    try {
+      final raw = (await MediaDb.get(gamePath, ['cfg']))?['cfg'] as String?;
+      if (raw == null) return s;
+      final j = jsonDecode(raw) as Map<String, Object?>;
+      final m = j['model'] as int?;
+      if (m != null) s.model = ZxModel.values[m.clamp(0, ZxModel.values.length - 1)];
+      s.quickLoad = j['quick_load'] as bool? ?? s.quickLoad;
+      s.soundOn = j['sound_on'] as bool? ?? s.soundOn;
+      s.vibration = j['vibration'] as bool? ?? s.vibration;
+      if (j['video_mode'] != null) s.videoMode = VideoMode.byName(j['video_mode'] as String?);
+      if (j['screen_border'] != null) s.screenBorder = ScreenBorder.byName(j['screen_border'] as String?);
+      s.gigascreen = j['gigascreen'] as bool? ?? s.gigascreen;
+    } catch (_) {}
+    return s;
+  }
 
   static Future<AppSettings> load() async {
     final p = await SharedPreferences.getInstance();
@@ -27,6 +56,7 @@ class AppSettings {
         legacy[(p.getInt('joy_mapping') ?? 0).clamp(0, legacy.length - 1)];
     s.quickLoad = p.getBool('quick_load') ?? true;
     s.vibration = p.getBool('vibration') ?? true;
+    s.soundOn = p.getBool('sound_on') ?? true;
     s.keepScreenOn = p.getBool('keep_screen_on') ?? true;
     s.startWithKeyboard = p.getBool('start_keyboard') ?? false;
     s.onlineInfo = p.getBool('online_info') ?? true;
@@ -37,11 +67,27 @@ class AppSettings {
   }
 
   Future<void> save() async {
+    final g = gamePath;
+    if (g != null) {
+      await MediaDb.put(g, {
+        'cfg': jsonEncode({
+          'model': model.index,
+          'quick_load': quickLoad,
+          'sound_on': soundOn,
+          'vibration': vibration,
+          'video_mode': videoMode.name,
+          'screen_border': screenBorder.name,
+          'gigascreen': gigascreen,
+        })
+      });
+      return;
+    }
     final p = await SharedPreferences.getInstance();
     await p.setInt('model', model.index);
     await p.setString('joy_type', joyMapping.name);
     await p.setBool('quick_load', quickLoad);
     await p.setBool('vibration', vibration);
+    await p.setBool('sound_on', soundOn);
     await p.setBool('keep_screen_on', keepScreenOn);
     await p.setBool('start_keyboard', startWithKeyboard);
     await p.setBool('online_info', onlineInfo);

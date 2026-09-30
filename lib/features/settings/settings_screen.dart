@@ -6,10 +6,20 @@ import '../../core/settings.dart';
 import '../../core/screen_border.dart';
 import '../../core/video_mode.dart';
 import '../../core/theme/easy_theme.dart';
+import '../../core/pad_config.dart';
 import '../about/about_screen.dart';
+import '../game/pad_config_sheet.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  /// Con juego abierto: control del juego (pestaña "Juego") y aviso de cada cambio.
+  final PadConfig? pad;
+  final JoyMapping padFallback;
+  final ValueChanged<PadConfig>? onPadChanged;
+  /// Juego en curso (null = desde el menú principal: valores por defecto).
+  final String? gamePath;
+  final String? gameName;
+  const SettingsScreen(
+      {super.key, this.pad, this.padFallback = JoyMapping.kempston, this.onPadChanged, this.gamePath, this.gameName});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -21,7 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    AppSettings.load().then((s) => setState(() => _s = s));
+    (widget.gamePath == null ? AppSettings.load() : AppSettings.loadForGame(widget.gamePath!)).then((s) => setState(() => _s = s));
   }
 
   void _update(void Function(AppSettings s) change) {
@@ -55,30 +65,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final s = _s;
     final t = context.l10n;
     String joyLabel(JoyMapping m) => m == JoyMapping.keyboard ? t.joyQaop : m.label;
-    return Scaffold(
-      appBar: AppBar(title: Text(t.settings)),
-      body: s == null
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              children: [
-                _Header(t.machine),
-                ListTile(
-                  leading: const Icon(Icons.memory_rounded, size: 32),
-                  title: Text(t.spectrumModel),
-                  subtitle: Text(t.spectrumModelSubtitle(s.model.label)),
-                  onTap: () async {
-                    final v = await _choose(t.model, ZxModel.values, (m) => m.label, s.model);
-                    if (v != null) _update((s) => s.model = v);
-                  },
-                ),
-                SwitchListTile(
-                  secondary: const Icon(Icons.fast_forward_rounded, size: 32),
-                  title: Text(t.quickLoad),
-                  subtitle: Text(t.quickLoadSubtitle),
-                  value: s.quickLoad,
-                  onChanged: (v) => _update((s) => s.quickLoad = v),
-                ),
+    final inGame = widget.gamePath != null;
+    final general = s == null
+        ? const Center(child: CircularProgressIndicator())
+        : ListView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            children: [
+              _Header(t.machine),
+              ListTile(
+                leading: const Icon(Icons.memory_rounded, size: 32),
+                title: Text(t.spectrumModel),
+                subtitle: Text(t.spectrumModelSubtitle(s.model.label)),
+                onTap: () async {
+                  final v = await _choose(t.model, ZxModel.values, (m) => m.label, s.model);
+                  if (v != null) _update((s) => s.model = v);
+                },
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.fast_forward_rounded, size: 32),
+                title: Text(t.quickLoad),
+                subtitle: Text(t.quickLoadSubtitle),
+                value: s.quickLoad,
+                onChanged: (v) => _update((s) => s.quickLoad = v),
+              ),
+              _Header(t.screen),
+              ListTile(
+                leading: const Icon(Icons.tv_rounded, size: 32),
+                title: Text(t.videoMode),
+                subtitle: Text(s.videoMode.label(t)),
+                onTap: () async {
+                  final v = await _choose(t.videoMode, VideoMode.values, (m) => m.label(t), s.videoMode);
+                  if (v != null) _update((s) => s.videoMode = v);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.crop_free_rounded, size: 32),
+                title: Text(t.screenBorder),
+                subtitle: Text(s.screenBorder.label(t)),
+                onTap: () async {
+                  final v = await _choose(t.screenBorder, ScreenBorder.values, (b) => b.label(t), s.screenBorder);
+                  if (v != null) _update((s) => s.screenBorder = v);
+                },
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.layers_rounded, size: 32),
+                title: const Text('Gigascreen'),
+                subtitle: Text(t.gigascreenSubtitle),
+                value: s.gigascreen,
+                onChanged: (v) => _update((s) => s.gigascreen = v),
+              ),
+              _Header(t.sound),
+              SwitchListTile(
+                secondary: const Icon(Icons.volume_up_rounded, size: 32),
+                title: Text(t.sound),
+                value: s.soundOn,
+                onChanged: (v) => _update((s) => s.soundOn = v),
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.vibration_rounded, size: 32),
+                title: Text(t.vibration),
+                value: s.vibration,
+                onChanged: (v) => _update((s) => s.vibration = v),
+              ),
+              // Lo que sigue es de la app entera, no de un juego.
+              if (!inGame) ...[
                 _Header(t.controls),
                 ListTile(
                   leading: const Icon(Icons.sports_esports_rounded, size: 32),
@@ -86,8 +136,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: Text('${joyLabel(s.joyMapping)}\n${t.joystickTypeNote}'),
                   isThreeLine: true,
                   onTap: () async {
-                    final v = await _choose(
-                        t.joystick, JoyMapping.values, joyLabel, s.joyMapping);
+                    final v = await _choose(t.joystick, JoyMapping.values, joyLabel, s.joyMapping);
                     if (v != null) _update((s) => s.joyMapping = v);
                   },
                 ),
@@ -97,38 +146,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: Text(t.startWithKeyboardSubtitle),
                   value: s.startWithKeyboard,
                   onChanged: (v) => _update((s) => s.startWithKeyboard = v),
-                ),
-                SwitchListTile(
-                  secondary: const Icon(Icons.vibration_rounded, size: 32),
-                  title: Text(t.vibration),
-                  value: s.vibration,
-                  onChanged: (v) => _update((s) => s.vibration = v),
-                ),
-                _Header(t.screen),
-                ListTile(
-                  leading: const Icon(Icons.tv_rounded, size: 32),
-                  title: Text(t.videoMode),
-                  subtitle: Text(s.videoMode.label(t)),
-                  onTap: () async {
-                    final v = await _choose(t.videoMode, VideoMode.values, (m) => m.label(t), s.videoMode);
-                    if (v != null) _update((s) => s.videoMode = v);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.crop_free_rounded, size: 32),
-                  title: Text(t.screenBorder),
-                  subtitle: Text(s.screenBorder.label(t)),
-                  onTap: () async {
-                    final v = await _choose(t.screenBorder, ScreenBorder.values, (b) => b.label(t), s.screenBorder);
-                    if (v != null) _update((s) => s.screenBorder = v);
-                  },
-                ),
-                SwitchListTile(
-                  secondary: const Icon(Icons.layers_rounded, size: 32),
-                  title: const Text('Gigascreen'),
-                  subtitle: Text(t.gigascreenSubtitle),
-                  value: s.gigascreen,
-                  onChanged: (v) => _update((s) => s.gigascreen = v),
                 ),
                 SwitchListTile(
                   secondary: const Icon(Icons.light_mode_rounded, size: 32),
@@ -154,7 +171,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ],
+            ],
+          );
+    // El título dice qué configuración se está editando: la de este juego o la
+    // por defecto (la que heredan los juegos nuevos).
+    final titleWidget = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(inGame ? widget.gameName ?? t.settings : t.settings, maxLines: 1, overflow: TextOverflow.ellipsis),
+        Text(inGame ? t.configThisGame : t.configDefaults,
+            style: const TextStyle(fontSize: 14, color: ZxColors.cyan, fontWeight: FontWeight.normal)),
+      ],
+    );
+    final pad = widget.pad;
+    if (pad == null) {
+      return Scaffold(appBar: AppBar(title: titleWidget), body: general);
+    }
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: titleWidget,
+          bottom: TabBar(
+            indicatorColor: ZxColors.cyan,
+            labelStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            tabs: [
+              Tab(height: 64, icon: const Icon(Icons.settings_rounded), text: t.tabGeneral),
+              Tab(height: 64, icon: const Icon(Icons.sports_esports_rounded), text: t.tabGame),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            general,
+            PadConfigEditor(
+              initial: pad,
+              fallback: widget.padFallback,
+              onChanged: (c) => widget.onPadChanged?.call(c),
             ),
+          ],
+        ),
+      ),
     );
   }
 }

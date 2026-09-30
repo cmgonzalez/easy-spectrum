@@ -15,6 +15,7 @@ import 'package:sqflite/sqflite.dart';
 /// | zxdb_status   | NULL = sin consultar, 0 = no está en ZXDB, 1 = encontrado         |
 /// | zxdb_id, title, year, publisher, genre | ficha de ZXDB                           |
 /// | pad           | configuración del mando (JSON de PadConfig)                       |
+/// | cfg           | ajustes propios del juego (JSON, ver AppSettings.loadForGame)      |
 ///
 /// Sustituye a las cachés en archivos sueltos (`thumbs/`, `info/`), que se borran
 /// al crear la base.
@@ -28,7 +29,7 @@ class MediaDb {
     final dir = await getApplicationSupportDirectory();
     return openDatabase(
       '${dir.path}/$_file',
-      version: 1,
+      version: 2,
       onCreate: (db, _) async {
         await db.execute('''
           CREATE TABLE media(
@@ -42,13 +43,17 @@ class MediaDb {
             year INTEGER,
             publisher TEXT,
             genre TEXT,
-            pad TEXT
+            pad TEXT,
+            cfg TEXT
           )''');
         for (final old in const ['thumbs', 'info']) {
           try {
             await Directory('${dir.path}/$old').delete(recursive: true);
           } catch (_) {}
         }
+      },
+      onUpgrade: (db, from, _) async {
+        if (from < 2) await db.execute('ALTER TABLE media ADD COLUMN cfg TEXT');
       },
     );
   }
