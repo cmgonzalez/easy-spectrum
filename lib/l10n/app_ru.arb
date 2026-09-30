@@ -14,6 +14,7 @@
   "zipWithoutGame": "В ZIP-архиве нет игры для Spectrum.",
   "unsupportedFormat": "Формат не поддерживается (.{ext}). Используйте .tap, .tzx, .z80, .sna, .szx, .dsk или .zip.",
   "importError": "Ошибка импорта: {error}",
+  "setDefaultApp": "Сделать приложением по умолчанию",
   "exit": "Выход",
   "showJoystick": "Показать джойстик",
   "showKeyboard": "Показать клавиатуру",

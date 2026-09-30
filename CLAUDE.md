@@ -308,6 +308,10 @@ con `window_manager`, audio con la misma `ZxAudio` que Android.
   Windows 11 solo muestra en "Abrir con" (y solo usa como predeterminado) los programas que ya
   "reconoció" para la extensión: valor `<ProgId>_<ext>` / `Applications\<exe>_<ext>` en
   `HKCU\...\Explorer\ApplicationAssociationToasts`. El instalador los escribe; sin ellos la app no salía.
+  También registra la app en `RegisteredApplications` (Capabilities en `Software\EasySoft\EasySpectrum`,
+  sin .zip) y ofrece al final abrir `ms-settings:defaultapps?registeredApp{User|Machine}=EasySpectrum`;
+  lo mismo hace Archivo › Establecer como predeterminado (runner: `openDefaultApps` por el canal
+  `open_args`). Pendiente verificar que Configuración abra la página de la app y no la general.
   Verificado: instalación silenciosa, arranque desde la copia instalada y desinstalación sin restos.
 - **Línea de comandos** (para PRISMA u otras herramientas):
   `EasySpectrum.exe juego.tap --model 48k|128k|+2|+2a|+3|16k`. Recargar (F2) vuelve a leer el

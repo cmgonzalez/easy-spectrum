@@ -14,6 +14,7 @@
   "zipWithoutGame": "The ZIP does not contain a Spectrum game.",
   "unsupportedFormat": "Unsupported format (.{ext}). Use .tap, .tzx, .z80, .sna, .szx, .dsk or .zip.",
   "importError": "Import error: {error}",
+  "setDefaultApp": "Set as default app",
   "exit": "Exit",
   "showJoystick": "Show gamepad",
   "showKeyboard": "Show keyboard",

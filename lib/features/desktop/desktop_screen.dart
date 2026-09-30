@@ -385,6 +385,7 @@ class _DesktopScreenState extends State<DesktopScreen>
         const MenuEntry.separator(),
         MenuEntry(t.powerOnBasic, onSelected: () => _start('')),
         const MenuEntry.separator(),
+        MenuEntry('${t.setDefaultApp}…', onSelected: () => _openArgs.invokeMethod('openDefaultApps')),
         MenuEntry(t.exit, shortcut: 'Alt+F4', onSelected: windowManager.close),
       ]),
       MenuEntry.submenu('&${t.machine}', [

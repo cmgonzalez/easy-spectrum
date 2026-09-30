@@ -10,6 +10,9 @@
 ; - Tipos de archivo: Easy Spectrum queda siempre en "Abrir con" de .tap .tzx .z80 .sna
 ;   .szx .dsk .csw (y .zip); con la tarea "associate" pasa a ser el predeterminado de
 ;   esos (no de .zip). Al desinstalar se quita todo.
+; - Queda registrada en "Aplicaciones predeterminadas" (RegisteredApplications): si otro
+;   programa ya es el predeterminado, Windows solo deja cambiarlo al usuario; la casilla
+;   final (y Archivo › Establecer como predeterminado, en la app) abre esa página.
 
 #ifndef AppVersion
   #define AppVersion "1.0.0"
@@ -27,6 +30,8 @@
 #define AppName "Easy Spectrum"
 #define AppExe "EasySpectrum.exe"
 #define ProgId "EasySpectrum.Media"
+#define RegApp "EasySpectrum"
+#define CapKey "Software\EasySoft\EasySpectrum\Capabilities"
 
 [Setup]
 AppId={{00C6FEFD-5F2D-40BB-BCCB-B6E31CCA253C}
@@ -88,6 +93,17 @@ pt.MediaFile=Arquivo do ZX Spectrum
 it.MediaFile=File dello ZX Spectrum
 ru.MediaFile=Файл ZX Spectrum
 
+es.SetDefault=Elegir {#AppName} como programa predeterminado (abre Configuración de Windows)
+en.SetDefault=Choose {#AppName} as the default app (opens Windows Settings)
+pt.SetDefault=Escolher o {#AppName} como aplicativo padrão (abre as Configurações do Windows)
+it.SetDefault=Scegli {#AppName} come app predefinita (apre Impostazioni di Windows)
+ru.SetDefault=Выбрать {#AppName} приложением по умолчанию (откроются Параметры Windows)
+es.AppDescription=Emulador de ZX Spectrum
+en.AppDescription=ZX Spectrum emulator
+pt.AppDescription=Emulador de ZX Spectrum
+it.AppDescription=Emulatore di ZX Spectrum
+ru.AppDescription=Эмулятор ZX Spectrum
+
 [Tasks]
 Name: "associate"; Description: "{cm:Associate}"; GroupDescription: "{cm:FileTypes}"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -140,6 +156,21 @@ Root: HKA; Subkey: "Software\Classes\.csw"; ValueType: string; ValueData: "{#Pro
 Root: HKA; Subkey: "Software\Classes\.zip\OpenWithProgids"; ValueType: string; ValueName: "{#ProgId}"; ValueData: ""; Flags: uninsdeletevalue
 Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\SupportedTypes"; ValueType: string; ValueName: ".zip"; ValueData: ""
 
+; "Aplicaciones predeterminadas" de Windows (sin .zip: el botón "Establecer como
+; predeterminado" de Configuración asigna todas las extensiones listadas).
+Root: HKA; Subkey: "Software\EasySoft\EasySpectrum"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\EasySoft"; Flags: uninsdeletekeyifempty
+Root: HKA; Subkey: "{#CapKey}"; ValueType: string; ValueName: "ApplicationName"; ValueData: "{#AppName}"
+Root: HKA; Subkey: "{#CapKey}"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "{cm:AppDescription}"
+Root: HKA; Subkey: "{#CapKey}"; ValueType: string; ValueName: "ApplicationIcon"; ValueData: "{app}\{#AppExe},0"
+Root: HKA; Subkey: "{#CapKey}\FileAssociations"; ValueType: string; ValueName: ".tap"; ValueData: "{#ProgId}"
+Root: HKA; Subkey: "{#CapKey}\FileAssociations"; ValueType: string; ValueName: ".tzx"; ValueData: "{#ProgId}"
+Root: HKA; Subkey: "{#CapKey}\FileAssociations"; ValueType: string; ValueName: ".z80"; ValueData: "{#ProgId}"
+Root: HKA; Subkey: "{#CapKey}\FileAssociations"; ValueType: string; ValueName: ".sna"; ValueData: "{#ProgId}"
+Root: HKA; Subkey: "{#CapKey}\FileAssociations"; ValueType: string; ValueName: ".szx"; ValueData: "{#ProgId}"
+Root: HKA; Subkey: "{#CapKey}\FileAssociations"; ValueType: string; ValueName: ".dsk"; ValueData: "{#ProgId}"
+Root: HKA; Subkey: "{#CapKey}\FileAssociations"; ValueType: string; ValueName: ".csw"; ValueData: "{#ProgId}"
+Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "{#RegApp}"; ValueData: "{#CapKey}"; Flags: uninsdeletevalue
 ; Windows 11 solo lista en "Abrir con" los programas que ya "reconoció" para la extensión
 ; (valor <ProgId>_<ext> en ApplicationAssociationToasts, que normalmente pone su aviso
 ; "hay una aplicación nueva"). Sin esto la app no aparece aunque esté registrada.
@@ -162,3 +193,5 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\ApplicationAssoci
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+Filename: "ms-settings:defaultapps?registeredAppUser={#RegApp}"; Description: "{cm:SetDefault}"; Flags: shellexec nowait postinstall skipifsilent; Check: not IsAdminInstallMode
+Filename: "ms-settings:defaultapps?registeredAppMachine={#RegApp}"; Description: "{cm:SetDefault}"; Flags: shellexec nowait postinstall skipifsilent; Check: IsAdminInstallMode

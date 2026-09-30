@@ -65,10 +65,13 @@ class _GameDisplayState extends State<GameDisplay> {
           )
         : const ColoredBox(color: Colors.black);
     if (mode == VideoMode.rounded) {
+      // El builder corre después: debe capturar la pantalla, no la variable `screen`
+      // (que para entonces es este LayoutBuilder → se contendría a sí mismo).
+      final content = screen;
       screen = LayoutBuilder(
         builder: (context, box) => ClipRRect(
           borderRadius: BorderRadius.circular(box.maxHeight * 0.05),
-          child: screen,
+          child: content,
         ),
       );
     }

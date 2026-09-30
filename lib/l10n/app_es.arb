@@ -42,6 +42,8 @@
       }
     }
   },
+  "setDefaultApp": "Establecer como predeterminado",
+  "@setDefaultApp": {"description": "Menú Archivo (Windows): abre Aplicaciones predeterminadas en Configuración"},
   "exit": "Salir",
   "showJoystick": "Mostrar mando",
   "showKeyboard": "Mostrar teclado",
