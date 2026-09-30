@@ -305,6 +305,9 @@ con `window_manager`, audio con la misma `ZxAudio` que Android.
   es/en/pt/it/ru. Tipos: siempre en "Abrir con" (.tap .tzx .z80 .sna .szx .dsk .csw y .zip); la tarea
   "associate" (marcada) lo hace predeterminado salvo .zip. Si el usuario ya eligió otro programa con
   "usar siempre" (UserChoice), Windows no deja que un instalador lo cambie: se elige en "Abrir con".
+  Windows 11 solo muestra en "Abrir con" (y solo usa como predeterminado) los programas que ya
+  "reconoció" para la extensión: valor `<ProgId>_<ext>` / `Applications\<exe>_<ext>` en
+  `HKCU\...\Explorer\ApplicationAssociationToasts`. El instalador los escribe; sin ellos la app no salía.
   Verificado: instalación silenciosa, arranque desde la copia instalada y desinstalación sin restos.
 - **Línea de comandos** (para PRISMA u otras herramientas):
   `EasySpectrum.exe juego.tap --model 48k|128k|+2|+2a|+3|16k`. Recargar (F2) vuelve a leer el
