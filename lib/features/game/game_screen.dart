@@ -4,11 +4,11 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/ads/ad_manager.dart';
 import '../../core/l10n.dart';
+import '../../core/emulator/zx_audio.dart';
 import '../../core/emulator/zx_bridge.dart';
 import '../../core/emulator/zx_types.dart';
 import '../../core/pad_config.dart';
@@ -43,8 +43,6 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  static const _sampleRate = 48000;
-
   final _zx = ZxBridge.instance;
   final _alive = Completer<void>();
   late final Ticker _ticker;
@@ -73,8 +71,7 @@ class _GameScreenState extends State<GameScreen>
   Uint8List? _loadingShot; // última pantalla con color vista durante la carga
   int _joyMask = 0;
 
-  AudioSource? _stream;
-  SoundHandle? _handle;
+  final _audio = ZxAudio();
 
   String get _title =>
       widget.mediaPath.isEmpty
@@ -106,7 +103,7 @@ class _GameScreenState extends State<GameScreen>
     final err = await _zx.start(
       model: _settings.model,
       mediaPath: widget.mediaPath,
-      audioFreq: _sampleRate,
+      audioFreq: ZxAudio.sampleRate,
       quickLoad: _settings.quickLoad,
     );
     if (!mounted) return;
@@ -117,58 +114,10 @@ class _GameScreenState extends State<GameScreen>
     if (widget.mediaPath.isNotEmpty) {
       _wantCapture = await GameThumbnail.needsCapture(widget.mediaPath);
     }
-    await _initAudio();
+    await _audio.start();
     if (!mounted) return;
     setState(() => _started = true);
     _ticker.start();
-  }
-
-  Future<void> _initAudio() async {
-    try {
-      if (!SoLoud.instance.isInitialized) await SoLoud.instance.init();
-      _stream = SoLoud.instance.setBufferStream(
-        maxBufferSizeDuration: const Duration(seconds: 10),
-        sampleRate: _sampleRate,
-        channels: Channels.stereo,
-        format: BufferType.s16le,
-        bufferingType: BufferingType.released,
-        bufferingTimeNeeds: 0.08,
-      );
-      _handle = SoLoud.instance.play(_stream!);
-    } catch (e) {
-      debugPrint('Audio init error: $e');
-    }
-  }
-
-  void _disposeAudio() {
-    final h = _handle, s = _stream;
-    _handle = null;
-    _stream = null;
-    if (h != null) {
-      try {
-        SoLoud.instance.stop(h);
-      } catch (_) {}
-    }
-    if (s != null) {
-      try {
-        SoLoud.instance.setDataIsEnded(s);
-        SoLoud.instance.disposeSource(s);
-      } catch (_) {}
-    }
-  }
-
-  void _feedAudio() {
-    final s = _stream;
-    while (true) {
-      final pcm = _zx.drainAudio();
-      if (pcm == null) break;
-      if (s == null) continue; // sin audio: igual vaciar el buffer nativo
-      try {
-        SoLoud.instance.addAudioDataStream(s, pcm);
-      } catch (_) {
-        break;
-      }
-    }
   }
 
   Future<void> _onTick(Duration now) async {
@@ -188,7 +137,7 @@ class _GameScreenState extends State<GameScreen>
     }
 
     final frames = _zx.run(delta);
-    _feedAudio();
+    _audio.feed(_zx);
     final turbo = _zx.turbo;
     if (turbo != _turbo) setState(() => _turbo = turbo);
     if (_wantCapture) _checkCapture(delta);
@@ -357,8 +306,7 @@ class _GameScreenState extends State<GameScreen>
 
   void _setPaused(bool p) {
     setState(() => _paused = p);
-    final h = _handle;
-    if (h != null) SoLoud.instance.setPause(h, p);
+    _audio.setPaused(p);
     if (p) {
       _zx.clearKeys();
     }
@@ -374,7 +322,7 @@ class _GameScreenState extends State<GameScreen>
     if (fb != null && widget.mediaPath.isNotEmpty) {
       await GameThumbnail.saveCaptureIfMissing(widget.mediaPath, fb);
     }
-    _disposeAudio();
+    _audio.stop();
     _zx.dispose();
     AdManager.instance.showInterstitialThenDo(() {
       if (mounted) Navigator.of(context).pop();
@@ -387,7 +335,7 @@ class _GameScreenState extends State<GameScreen>
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     WakelockPlus.disable();
     _ticker.dispose();
-    _disposeAudio();
+    _audio.stop();
     _zx.dispose();
     _frame?.dispose();
     _alive.complete();

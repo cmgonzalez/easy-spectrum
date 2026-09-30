@@ -91,5 +91,18 @@
   "videoTv": "TV CRT",
   "jumpToButton": "Assegna salto (su) a un pulsante",
   "jumpButton": "Pulsante salto",
-  "jump": "Salto"
+  "jump": "Salto",
+  "menuFile": "File",
+  "openFile": "Apri…",
+  "reloadFile": "Ricarica",
+  "recentFiles": "Recenti",
+  "noRecentFiles": "(vuoto)",
+  "speed": "Velocità",
+  "windowSize": "Dimensione finestra",
+  "fullscreen": "Schermo intero",
+  "arrowsAsCursors": "Nessuno (frecce = cursori)",
+  "keyMap": "Mappa dei tasti",
+  "menuHelp": "Aiuto",
+  "dropHint": "Rilascia il gioco per caricarlo",
+  "keyMapText": "Lettere, numeri, Invio e Spazio: gli stessi tasti dello Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nBackspace = DELETE · Esc = BREAK\nSimboli (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + il loro tasto\nFrecce = joystick scelto (o cursori con «Nessuno») · Alt o Tab = fuoco\n\nF2 ricarica · F3 apri · F5 reset · F6 nastro · F8 pausa · F11 schermo intero\nDoppio clic: schermo intero · Trascina un file sulla finestra per caricarlo"
 }

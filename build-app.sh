@@ -2,13 +2,14 @@
 # build-app.sh — Easy Spectrum (dos ediciones: free con anuncios, pro sin anuncios)
 # Uso:
 #   bash build-app.sh [modo] [edición] [push]
-#     modo:    release (defecto) | aab | debug
+#     modo:    release (defecto) | aab | debug | windows
 #     edición: all (defecto) | free | pro
 #   Ejemplos:
 #     bash build-app.sh                  → APK release de las dos ediciones
 #     bash build-app.sh aab              → AAB de las dos (Play Store)
 #     bash build-app.sh release pro      → solo la Pro
 #     bash build-app.sh release all push → APKs + git add + commit + push
+#     bash build-app.sh windows          → EasySpectrum-win-<ver>-<code>.zip (carpeta con el .exe)
 #
 # Salida en la raíz: EasySpectrum-<ver>-<code>.apk / EasySpectrumPro-<ver>-<code>.apk (o .aab).
 # El versionCode está en pubspec.yaml Y en android/app/build.gradle.kts: subir ambos.
@@ -26,6 +27,18 @@ PUSH=${3:-}
 RAW=$(grep "^version:" pubspec.yaml | sed 's/version: //' | tr -d '\r')
 VERSION=${RAW%%+*}
 CODE=${RAW##*+}
+
+# Windows: una sola edición (sin anuncios), sin flavors. Requiere Visual Studio 2022
+# con C++ y "Clang para Windows" (el core se compila con clang-cl).
+if [ "$MODE" = "windows" ]; then
+  echo "→ Windows release..."
+  "$FLUTTER" build windows --release --no-pub
+  DEST="EasySpectrum-win-${VERSION}-${CODE}.zip"
+  rm -f "$DEST"
+  powershell -NoProfile -Command "Compress-Archive -Path 'build/windows/x64/runner/Release/*' -DestinationPath '$DEST'"
+  echo "✓ $DEST  (ejecutable: build/windows/x64/runner/Release/EasySpectrum.exe)"
+  exit 0
+fi
 
 case "$EDITION" in
   all)  FLAVORS="free pro" ;;

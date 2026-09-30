@@ -1,6 +1,6 @@
 # CLAUDE.md — Easy Spectrum
 
-Emulador de ZX Spectrum en Flutter para Android (iOS preparado, sin probar).
+Emulador de ZX Spectrum en Flutter para Android y Windows (iOS preparado, sin probar).
 Paquetes: `cl.easysoft.easyspectrum` (Free, con anuncios) y `cl.easysoft.easyspectrum.pro`
 (Pro, sin anuncios) — ver "Ediciones". Repo: https://github.com/cmgonzalez/easy-spectrum
 UI accesible (botones ≥64dp, fuente ≥18–20sp), estética Spectrum (negro + arcoíris).
@@ -255,6 +255,35 @@ solo procesa flavors → para la Free apartar temporalmente ese yaml.
 - Cada edición tiene sus propios datos en el teléfono (biblioteca y ajustes no se comparten).
 - `flutter build` **exige `--flavor free|pro`**.
 
+## Windows (escritorio)
+
+Mismo proyecto, otra interfaz: en escritorio `main.dart` abre `DesktopApp`
+(`lib/features/desktop/`) en vez de la biblioteca y la consola táctil. Ventana con solo la salida
+del Spectrum (`GameDisplay`, mismos modos de video y shader CRT) y `MenuBar`: Archivo (abrir,
+recargar, recientes, BASIC), Máquina (modelo, reset, pausa, velocidad, carga rápida, cinta),
+Pantalla (modo, tamaño ×1-×4, pantalla completa), Joystick, Ayuda. Sin anuncios ni biblioteca:
+los archivos se abren en su sitio (`.zip` → temporal); arrastrar y soltar (`desktop_drop`), ventana
+con `window_manager`, audio con la misma `ZxAudio` que Android.
+- **Línea de comandos** (para PRISMA u otras herramientas):
+  `EasySpectrum.exe juego.tap --model 48k|128k|+2|+2a|+3|16k`. Recargar (F2) vuelve a leer el
+  archivo del disco: recompilar el .tap y F2.
+- Teclado (`pc_keyboard.dart`): por posición; Shift = CAPS, Ctrl = SYM, signos por carácter con SYM
+  (soltando CAPS), flechas + Alt/Tab = joystick elegido (o cursores). Cada tecla del PC recuerda lo
+  que pulsó y la matriz se recalcula como unión → no quedan teclas pegadas. F2 recargar, F3 abrir,
+  F5 reset, F6 cinta, F8 pausa, F11 pantalla completa. Por eso los atajos van en teclas F: Ctrl es SYM.
+- **Core**: `windows/CMakeLists.txt` compila `native/` como proyecto externo con **clang-cl**
+  (toolset `ClangCL`, siempre Release): MSVC no acepta las extensiones de GCC/Clang de CLK.
+  zlib se baja con FetchContent. `windows_prelude.h` (/FI) define `ssize_t`.
+- **Pila de 16 MB** (`/STACK` en `windows/runner/CMakeLists.txt`): con el 1 MB de Windows, crear la
+  máquina desbordaba la pila (0xC00000FD en zx_bridge.dll).
+- Requisitos: Visual Studio 2022 (Build Tools) con "Desarrollo para el escritorio con C++" +
+  "Clang para Windows" (`VC.Llvm.Clang` y `VC.Llvm.ClangToolset`). Instalar componentes con
+  `setup.exe modify ... --passive` exige consola elevada (si no, sale con 5007).
+- `bash build-app.sh windows` → `build/windows/x64/runner/Release/EasySpectrum.exe` y
+  `EasySpectrum-win-<ver>-<code>.zip` en la raíz. Primera compilación ~5 min.
+- Captura de la ventana para verificar: PrintWindow desde un proceso DPI-aware
+  (`SetProcessDPIAware`), si no sale recortada con escalado 150%.
+
 ## Build
 
 ```bash
@@ -262,6 +291,7 @@ bash build-app.sh                  # APK release de las dos → EasySpectrum[Pro
 bash build-app.sh aab              # AAB de las dos (Play Store)
 bash build-app.sh release pro      # solo una edición
 bash build-app.sh release all push # + commit + push
+bash build-app.sh windows          # EasySpectrum.exe (+ zip)
 ```
 Equivale a `flutter build apk --release --flavor free` (o `pro`).
 El versionCode está en `pubspec.yaml` y en `android/app/build.gradle.kts`: subir los dos.

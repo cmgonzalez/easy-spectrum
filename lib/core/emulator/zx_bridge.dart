@@ -37,12 +37,14 @@ typedef _Type = void Function(Pointer<Void> h, Pointer<Utf8> text);
 typedef _SpeedN = Void Function(Pointer<Void> h, Double m);
 typedef _Speed = void Function(Pointer<Void> h, double m);
 
-/// Puente dart:ffi → libzx_bridge.so (core Clock Signal).
+/// Puente dart:ffi → libzx_bridge.so / zx_bridge.dll (core Clock Signal).
 class ZxBridge {
   ZxBridge._() {
     final lib = Platform.isAndroid
         ? DynamicLibrary.open('libzx_bridge.so')
-        : DynamicLibrary.process();
+        : Platform.isWindows
+            ? DynamicLibrary.open('zx_bridge.dll')
+            : DynamicLibrary.process();
     _create = lib.lookupFunction<_CreateN, _Create>('zx_create');
     _lastError = lib.lookupFunction<_LastErrorN, _LastErrorN>('zx_last_error');
     _destroy = lib.lookupFunction<_VoidHN, _VoidH>('zx_destroy');
@@ -211,6 +213,10 @@ class ZxBridge {
 
   /// true mientras la cinta carga en turbo (emulación acelerada y sin sonido).
   bool get turbo => isRunning && _isTurbo(_h) != 0;
+
+  void setQuickLoad(bool enabled) {
+    if (isRunning) _setQuick(_h, enabled ? 1 : 0);
+  }
 
   void setSpeed(double multiplier) {
     if (isRunning) _setSpeed(_h, multiplier);

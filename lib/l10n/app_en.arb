@@ -91,5 +91,18 @@
   "videoTv": "CRT TV",
   "jumpToButton": "Assign jump (up) to a button",
   "jumpButton": "Jump button",
-  "jump": "Jump"
+  "jump": "Jump",
+  "menuFile": "File",
+  "openFile": "Open…",
+  "reloadFile": "Reload",
+  "recentFiles": "Recent",
+  "noRecentFiles": "(empty)",
+  "speed": "Speed",
+  "windowSize": "Window size",
+  "fullscreen": "Full screen",
+  "arrowsAsCursors": "None (arrows = cursor keys)",
+  "keyMap": "Key map",
+  "menuHelp": "Help",
+  "dropHint": "Drop the game to load it",
+  "keyMapText": "Letters, numbers, Enter and Space: same keys as the Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nBackspace = DELETE · Esc = BREAK\nSymbols (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + their key\nArrows = selected joystick (or cursor keys with \"None\") · Alt or Tab = fire\n\nF2 reload · F3 open · F5 reset · F6 tape · F8 pause · F11 full screen\nDouble click: full screen · Drag a file onto the window to load it"
 }

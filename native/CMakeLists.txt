@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(zx_bridge CXX)
+project(zx_bridge C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -102,6 +102,29 @@ target_include_directories(zx_bridge PRIVATE
 )
 
 target_compile_definitions(zx_bridge PRIVATE NDEBUG)
+
+if(WIN32)
+    # Windows (Flutter desktop): se compila con clang-cl (CLK usa extensiones de GCC/Clang
+    # que MSVC no acepta). zlib (lo usa SZX) no viene con el sistema: se baja y se enlaza
+    # estática. Se exportan todos los símbolos (sin marcar la API con __declspec).
+    include(FetchContent)
+    set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(zlib
+        URL https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
+        URL_HASH SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23)
+    FetchContent_MakeAvailable(zlib)
+    target_include_directories(zx_bridge PRIVATE "${zlib_SOURCE_DIR}" "${zlib_BINARY_DIR}")
+    target_link_libraries(zx_bridge zlibstatic)
+    set_target_properties(zx_bridge PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    target_compile_definitions(zx_bridge PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
+    # wchar_t es de 16 bits sin signo: CLK lo inicializa con char (narrowing en Windows).
+    target_compile_options(zx_bridge PRIVATE /O2 /EHsc /bigobj /w -Wno-c++11-narrowing
+        "/FI${CMAKE_CURRENT_SOURCE_DIR}/windows_prelude.h")
+    set_source_files_properties(
+        "${CLK}/Processors/Z80/Implementation/Z80Storage.cpp"
+        PROPERTIES COMPILE_OPTIONS "/O1")
+    return()
+endif()
 
 target_compile_options(zx_bridge PRIVATE
     -O3

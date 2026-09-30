@@ -1,6 +1,7 @@
 # Build artifacts (APKs grandes — no van al repo, GitHub rechaza >100MB)
 *.apk
 *.aab
+EasySpectrum-win-*.zip
 
 # Flutter/Dart
 .dart_tool/
