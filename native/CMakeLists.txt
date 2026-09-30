@@ -140,6 +140,9 @@ zx_patch(pdp-hook
     "\t\treturn HalfCycles(0);\n\t}\n\nprivate:\n\tvoid advance(const HalfCycles duration) {\n"
     "\t\tif(zxdbg::g.armed) {\n\t\t\tif(cycle.operation == PartialMachineCycle::ReadOpcode) {\n\t\t\t\tconst int64_t d = zxdbg::on_fetch(address, *cycle.value);\n\t\t\t\tif(d) return HalfCycles(d);\n\t\t\t} else if(zxdbg::g.watch_any && (cycle.operation == PartialMachineCycle::Read || cycle.operation == PartialMachineCycle::Write)) {\n\t\t\t\tconst int64_t d = zxdbg::on_mem(address, *cycle.value, cycle.operation == PartialMachineCycle::Write);\n\t\t\t\tif(d) return HalfCycles(d);\n\t\t\t}\n\t\t}\n\t\treturn HalfCycles(0);\n\t}\n\n${PDP_METHODS}private:\n\tvoid advance(const HalfCycles duration) {\n")
 
+zx_patch(pdp-clock
+    "\tvoid advance(const HalfCycles duration) {\n"
+    "\tvoid advance(const HalfCycles duration) {\n\t\tif(zxdbg::g.armed) zxdbg::g.clock += duration.get();\n")
 file(WRITE "${ZX_PATCHED}" "${ZX_TEXT}")
 
 # Video.hpp parcheado (ULAplus): salida Red8Green8Blue8 en vez de Red2Green2Blue2 (la

@@ -11,6 +11,7 @@
 #pragma once
 #include <stdint.h>
 #include <map>
+#include <string>
 #include <vector>
 
 namespace zxdbg {
@@ -28,9 +29,14 @@ struct Target {
 	uint8_t (*peek)(void *, uint16_t) = nullptr;
 	void (*poke)(void *, uint16_t, uint8_t) = nullptr;
 	void (*credit)(void *, int64_t half_cycles) = nullptr;
+	// Bancos explícitos: kind 0 = RAM (0-7), 1 = ROM (0-3), de 16 KB; off = 0..0x3FFF.
+	uint8_t (*peek_bank)(void *, int kind, int bank, uint16_t off) = nullptr;
+	void (*poke_bank)(void *, int kind, int bank, uint16_t off, uint8_t v) = nullptr;
+	void (*paging)(void *, uint8_t *p7ffd, uint8_t *p1ffd) = nullptr;
+	int64_t frame_half_cycles = 0;	// duración de un frame (half cycles)
 };
 
-enum class Reason : uint8_t { None, Pause, Breakpoint, Step, Until, Watch, Crash };
+enum class Reason : uint8_t { None, Pause, Breakpoint, Step, Until, Watch, Crash, Frames };
 
 // Condición simple "lhs OP valor": lhs = registro o byte/palabra de memoria ([addr] / [addr]w).
 enum RegId : int8_t { R_PC, R_SP, R_AF, R_BC, R_DE, R_HL, R_IX, R_IY, R_A, R_F, R_B, R_C, R_D, R_E, R_H, R_L,
@@ -89,6 +95,26 @@ struct Core {
 	const char *detail = "";
 	int from_pc = -1;		// instrucción anterior a la parada (para caídas)
 
+	// Reloj de la máquina (half cycles, lo incrementa advance()) y seguimiento de frames.
+	int64_t clock = 0, last_clock = 0, next_frame = 0;
+	uint32_t frame = 0;
+	int64_t halt_acc = 0;	// half cycles gastados en HALT dentro del frame actual
+	uint8_t last_op = 0;
+	int frames_left = 0;	// resume {frames:N}
+	bool frame_hit = false;
+
+	// Perfilador: tiempo por instrucción (half cycles) y nº de ejecuciones, por dirección.
+	bool prof_on = false;
+	std::vector<int64_t> prof_cyc;
+	std::vector<uint32_t> prof_cnt;
+
+	// frame-log: columnas evaluadas al final de cada frame (anillo de filas).
+	bool fl_on = false;
+	std::vector<Cond> fl_cols;
+	std::vector<std::string> fl_names;
+	std::vector<int32_t> fl_rows;	// fl_cap filas de fl_w enteros: [frame, idle_tstates, valores...]
+	uint32_t fl_w = 2, fl_cap = 8192, fl_head = 0, fl_count = 0;
+
 	// Seguimiento de prefijos: el ReadOpcode de CB/ED/DD/FD + opcode no es inicio de instrucción.
 	uint8_t prefix = 0;
 	int last_start_pc = -1;
@@ -109,17 +135,22 @@ inline uint32_t reg_get(const Regs &r, int id) {
 	return 0;
 }
 
+// Valor del lado izquierdo de una condición. `rp` = registros ya leídos (o null: se leen).
+inline uint32_t lhs_value(const Cond &c, uint16_t pc, const Regs *rp = nullptr) {
+	if(c.reg != R_NONE) {
+		Regs r;
+		if(rp) r = *rp; else { g.t.regs(g.t.ctx, &r); r.pc = pc; }
+		return reg_get(r, c.reg);
+	}
+	uint32_t l = g.t.peek(g.t.ctx, uint16_t(c.mem));
+	if(c.word) l |= uint32_t(g.t.peek(g.t.ctx, uint16_t(c.mem + 1))) << 8;
+	return l;
+}
+
 // Evalúa con los registros vivos; `pc` = inicio de la instrucción (el Z80 ya movió pc_).
 inline bool eval(const Cond &c, uint16_t pc) {
 	if(!c.on) return true;
-	uint32_t l;
-	if(c.reg != R_NONE) {
-		Regs r; g.t.regs(g.t.ctx, &r); r.pc = pc;
-		l = reg_get(r, c.reg);
-	} else {
-		l = g.t.peek(g.t.ctx, uint16_t(c.mem));
-		if(c.word) l |= uint32_t(g.t.peek(g.t.ctx, uint16_t(c.mem + 1))) << 8;
-	}
+	const uint32_t l = lhs_value(c, pc);
 	const uint32_t v = uint32_t(c.val);
 	switch(c.op) {
 		case C_EQ: return l == v; case C_NE: return l != v; case C_LT: return l < v;
@@ -127,6 +158,23 @@ inline bool eval(const Cond &c, uint16_t pc) {
 		case C_AND: return (l & v) != 0;
 	}
 	return true;
+}
+
+// Fila del frame-log al cerrar un frame.
+inline void sample_frame(uint16_t pc) {
+	Core &c = g;
+	int32_t *row = &c.fl_rows[size_t(c.fl_head) * c.fl_w];
+	row[0] = int32_t(c.frame);
+	row[1] = int32_t(c.halt_acc / 2);	// T-states ociosos (HALT) del frame
+	bool have = false;
+	Regs r;
+	for(size_t i = 0; i < c.fl_cols.size(); ++i) {
+		const Cond &cd = c.fl_cols[i];
+		if(cd.reg != R_NONE && !have) { c.t.regs(c.t.ctx, &r); r.pc = pc; have = true; }
+		row[2 + i] = int32_t(lhs_value(cd, pc, have ? &r : nullptr));
+	}
+	c.fl_head = (c.fl_head + 1) % c.fl_cap;
+	if(c.fl_count < c.fl_cap) ++c.fl_count;
 }
 
 inline void hist_init(uint32_t entries_pow2) {
@@ -143,6 +191,7 @@ inline int64_t stop(uint16_t addr, Reason why) {
 	c.stopped = true;
 	c.event_pending = true;
 	c.pause_req = c.step_req = false;
+	c.frames_left = 0;
 	c.until_addr = c.until_sp = -1;
 	c.debt += StopDebt;
 	return StopDebt;
@@ -168,7 +217,25 @@ inline int64_t on_fetch(uint16_t addr, uint8_t op) {
 
 	const int prev = c.last_start_pc;
 	c.last_start_pc = addr;
+
+	// Tiempo de la instrucción anterior = reloj entre dos búsquedas consecutivas.
+	const int64_t dt = c.clock - c.last_clock;
+	c.last_clock = c.clock;
+	if(c.prof_on && prev >= 0 && !c.prof_cyc.empty()) { c.prof_cyc[size_t(prev)] += dt; ++c.prof_cnt[size_t(prev)]; }
+	if(c.last_op == 0x76) c.halt_acc += dt;
+	c.last_op = op;
 	if(c.suppress || c.stopped) return 0;
+	if(c.t.frame_half_cycles > 0) {
+		if(!c.next_frame) c.next_frame = c.clock + c.t.frame_half_cycles;
+		if(c.clock >= c.next_frame) {
+			++c.frame;
+			c.next_frame += c.t.frame_half_cycles;
+			if(c.next_frame <= c.clock) c.next_frame = c.clock + c.t.frame_half_cycles;
+			if(c.fl_on && !c.fl_rows.empty()) sample_frame(addr);
+			c.halt_acc = 0;
+			if(c.frames_left > 0 && --c.frames_left == 0) c.frame_hit = true;
+		}
+	}
 
 	if(c.hist_on) {
 		c.hist[c.hpos] = addr;
@@ -176,6 +243,7 @@ inline int64_t on_fetch(uint16_t addr, uint8_t op) {
 		if(c.hcount <= c.hmask) ++c.hcount;
 	}
 
+	if(c.frame_hit) { c.frame_hit = false; return stop(addr, Reason::Frames); }
 	if(c.pause_req) return stop(addr, Reason::Pause);
 	if(c.step_req) return stop(addr, Reason::Step);
 	if(c.until_addr == addr) {

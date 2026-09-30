@@ -21,9 +21,9 @@ class Pdp:
         self.ids = itertools.count(1)
         self.events = []   # eventos asíncronos recibidos mientras se esperaba una respuesta
 
-    def cmd(self, name, **kw):
+    def cmd(self, _cmd, /, **kw):
         i = next(self.ids)
-        self.s.sendall((json.dumps({"id": i, "cmd": name, **kw}) + "\n").encode())
+        self.s.sendall((json.dumps({"id": i, "cmd": _cmd, **kw}) + "\n").encode())
         while True:
             line = self.f.readline()
             if not line:

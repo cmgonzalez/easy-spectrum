@@ -116,6 +116,27 @@ def main():
         r = c.cmd("watch", addr="_var", type="r")
         c.cmd("unwatch", addr="all")
         r = c.cmd("get", addr="_var"); check(r["value"] == 40, "get _var = 40")
+        # --- fase 3: frames, perfilador, frame-log
+        c.cmd("unbreak", addr="all")
+        f0 = c.cmd("status")["frame"]
+        r = c.cmd("resume", frames=5, wait=True)
+        check(r["reason"] == "frames", "resume frames=5 para por frames: " + str(r))
+        check(c.cmd("status")["frame"] - f0 == 5, "avanzo exactamente 5 frames")
+        c.cmd("profile", on=True)
+        c.cmd("framelog", set="a,[_var]")
+        c.cmd("resume", frames=10, wait=True)
+        r = c.cmd("profile", top=5)
+        names = [e["name"] for e in r["profile"]]
+        check(abs(r["total_tstates"] - 10 * 69888) < 0.02 * 10 * 69888, "perfil: %d T-states en 10 frames" % r["total_tstates"])
+        check("_main" in names and "_sub" in names, "perfil por funcion: " + str(names))
+        check(abs(sum(e["pct"] for e in r["profile"]) - 100) < 0.5, "porcentajes suman 100")
+        r = c.cmd("framelog", n=10)
+        rows = r["rows"]
+        check(r["columns"] == ["frame", "idle", "a", "[_var]"] and len(rows) == 10, "framelog columnas/filas: " + str(rows[:2]))
+        check(all(rows[i + 1][0] - rows[i][0] == 1 for i in range(len(rows) - 1)), "frames consecutivos")
+        check(all(row[1] == 0 for row in rows), "sin HALT: idle 0")
+        c.cmd("profile", on=False)
+        c.cmd("framelog", stop=True)
         c.cmd("unbreak", addr="all")
         r = c.cmd("poke", addr="0x9100", data="DEADBEEF")
         check(r["written"] == 4, "poke")
@@ -171,7 +192,86 @@ def crash_test():
         host.kill()
 
 
+def input_test():
+    """Teclado / joystick / bancos: programa que copia la fila A-G del teclado (puerto FDFE) a 9200."""
+    sna = os.path.join(os.environ.get("TEMP", "."), "pdp_keys.sna")
+    ram = bytearray(49152)
+    code = bytes([0x01, 0xFE, 0xFD,       # 8000 LD BC,FDFE
+                  0xED, 0x78,             # 8003 IN A,(C)
+                  0x32, 0x00, 0x92,       # 8005 LD (9200),A
+                  0xDB, 0x1F,             # 8008 IN A,(1F)   Kempston
+                  0x32, 0x01, 0x92,       # 800A LD (9201),A
+                  0x18, 0xF1])            # 800D JR 8000
+    ram[0x8000 - 0x4000:0x8000 - 0x4000 + len(code)] = code
+    sp = 0xFE00
+    ram[sp - 0x4000:sp - 0x4000 + 2] = bytes([0x00, 0x80])
+    hdr = bytearray(27)
+    hdr[23:25] = struct.pack("<H", sp)
+    hdr[25] = 1
+    open(sna, "wb").write(bytes(hdr) + bytes(ram))
+    host = subprocess.Popen([sys.executable, os.path.join(HERE, "pdp_host.py"), sna, "--port", str(PORT + 2), "--seconds", "30"],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    host.stdout.readline()
+    try:
+        c = Pdp(PORT + 2)
+        c.cmd("pause", wait=True)
+
+        def keyrow():
+            return int(c.cmd("mem", addr="0x9200", len=1)["data"], 16)
+
+        c.cmd("resume", frames=3, wait=True)
+        check(keyrow() & 1, "tecla A suelta")
+        c.cmd("key", name="a", frames=4)
+        c.cmd("resume", frames=2, wait=True)
+        check(not keyrow() & 1, "tecla A pulsada (bit0 a 0)")
+        c.cmd("resume", frames=6, wait=True)
+        check(keyrow() & 1, "tecla A soltada sola tras 4 frames")
+        c.cmd("joy", dirs="left+fire", frames=3)
+        c.cmd("resume", frames=2, wait=True)
+        kemp = int(c.cmd("mem", addr="0x9201", len=1)["data"], 16)
+        check(kemp == 0x12, "joy Kempston left+fire = 0x%02X (esperado 12)" % kemp)
+        c.cmd("resume", frames=5, wait=True)
+        check(int(c.cmd("mem", addr="0x9201", len=1)["data"], 16) == 0, "joy soltado")
+        c.cmd("key", name="a", state="down")
+        c.cmd("resume", frames=2, wait=True)
+        check(not keyrow() & 1, "key down se mantiene")
+        c.cmd("key", name="a", state="up")
+        c.cmd("resume", frames=2, wait=True)
+        check(keyrow() & 1, "key up suelta")
+        check(not c.cmd("key", name="zzz")["ok"], "tecla desconocida da error")
+    finally:
+        host.kill()
+
+
+def bank_test():
+    """128K sin medio: bancos explicitos y paginacion."""
+    host = subprocess.Popen([sys.executable, os.path.join(HERE, "pdp_host.py"), "--model", "128k", "--port", str(PORT + 3), "--seconds", "20"],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    host.stdout.readline()
+    try:
+        c = Pdp(PORT + 3)
+        time.sleep(0.5)
+        c.cmd("pause", wait=True)
+        r = c.cmd("poke", addr="0x10", bank=3, data="ABCD")
+        check(r["ok"], "poke en banco 3")
+        check(c.cmd("mem", addr="0x10", len=2, bank=3)["data"] == "ABCD", "mem banco 3")
+        check(c.cmd("mem", addr="0x10", len=2, bank=4)["data"] != "ABCD", "banco 4 distinto")
+        r = c.cmd("mem", addr="0", len=4, rom=0)
+        check(len(r["data"]) == 8 and r["data"] != "00000000", "ROM 0 legible: " + r["data"])
+        check(not c.cmd("poke", addr="0", rom=0, data="00")["ok"], "la ROM no se escribe")
+        r = c.cmd("paging")
+        check(r["ok"] and "ram_c000" in r and r["screen"] == 5, "paging: " + str(r))
+        # La RAM paginada en C000 se ve igual por direccion y por banco
+        bank = r["ram_c000"]
+        c.cmd("poke", addr="0xC010", data="5A")
+        check(c.cmd("mem", addr="0x10", len=1, bank=bank)["data"] == "5A", "C000 == banco %d" % bank)
+    finally:
+        host.kill()
+
+
 main()
 crash_test()
+input_test()
+bank_test()
 print("\n" + ("TODO OK" if not bad else "%d FALLOS" % bad))
 sys.exit(1 if bad else 0)

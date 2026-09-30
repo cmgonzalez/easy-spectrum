@@ -227,6 +227,22 @@ bool parse_value(const std::string &str, long long &out) {
 	return false;
 }
 
+// Registro ("a", "hl"...) o memoria ("[dir]" byte, "[dir]w" palabra; dir = numero o simbolo).
+bool parse_lhs(const std::string &lhs, zxdbg::Cond &c) {
+	c = zxdbg::Cond();
+	if(lhs.empty()) return false;
+	if(lhs[0] == '[') {
+		const size_t e = lhs.find(']');
+		long long a = 0;
+		if(e == std::string::npos || !parse_value(lhs.substr(1, e - 1), a)) return false;
+		c.reg = zxdbg::R_NONE; c.mem = int32_t(a & 0xffff); c.word = lhs.size() > e + 1 && tolower(lhs[e + 1]) == 'w';
+		return true;
+	}
+	static const char *names[] = {"pc", "sp", "af", "bc", "de", "hl", "ix", "iy", "a", "f", "b", "c", "d", "e", "h", "l", "i", "r", "iff1", "iff2", "im"};
+	for(int i = 0; i < 21; ++i) if(lower_eq(lhs, names[i])) { c.reg = int8_t(i); return true; }
+	return false;
+}
+
 bool parse_cond(std::string s, zxdbg::Cond &c) {
 	s.erase(std::remove_if(s.begin(), s.end(), [](char ch) { return isspace((unsigned char)ch); }), s.end());
 	size_t pos = s.find_first_of("=!<>&");
@@ -239,21 +255,11 @@ bool parse_cond(std::string s, zxdbg::Cond &c) {
 	else if(two == "<=") op = zxdbg::C_LE;
 	else if(two == ">=") op = zxdbg::C_GE;
 	else { oplen = 1; if(s[pos] == '<') op = zxdbg::C_LT; else if(s[pos] == '>') op = zxdbg::C_GT; else if(s[pos] == '&') op = zxdbg::C_AND; else return false; }
-	std::string lhs = s.substr(0, pos);
 	long long v = 0;
 	if(!parse_value(s.substr(pos + oplen), v)) return false;
-	c = zxdbg::Cond();
+	if(!parse_lhs(s.substr(0, pos), c)) return false;
 	c.on = true; c.op = op; c.val = int32_t(v);
-	if(lhs[0] == '[') {
-		const size_t e = lhs.find(']');
-		long long a = 0;
-		if(e == std::string::npos || !parse_value(lhs.substr(1, e - 1), a)) return false;
-		c.reg = zxdbg::R_NONE; c.mem = int32_t(a & 0xffff); c.word = lhs.size() > e + 1 && tolower(lhs[e + 1]) == 'w';
-		return true;
-	}
-	static const char *names[] = {"pc", "sp", "af", "bc", "de", "hl", "ix", "iy", "a", "f", "b", "c", "d", "e", "h", "l", "i", "r", "iff1", "iff2", "im"};
-	for(int i = 0; i < 21; ++i) if(lower_eq(lhs, names[i])) { c.reg = int8_t(i); return true; }
-	return false;
+	return true;
 }
 
 // ---------------------------------------------------------------- JSON mínimo (objeto plano)
@@ -335,6 +341,7 @@ const char *reason_name(zxdbg::Reason r) {
 		case zxdbg::Reason::Until: return "until";
 		case zxdbg::Reason::Watch: return "watch";
 		case zxdbg::Reason::Crash: return "crash";
+		case zxdbg::Reason::Frames: return "frames";
 		default: return "none";
 	}
 }
@@ -401,6 +408,29 @@ void reply_run(int client, const std::string &id, const Msg &m) {
 	else reply(client, id, true, state_fields());
 }
 
+struct Release { uint32_t frame; int key; bool joy; int bits; };
+std::vector<Release> g_rel;	// teclas/joystick que se sueltan al llegar a cierto frame
+int g_joy = 0;
+
+// Nombre de tecla → código de la matriz ((fila << 8) | bit), como ZxKey en zx_types.dart.
+int key_code(const std::string &n) {
+	static const char *rows[4][10] = {
+		{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
+		{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"},
+		{"a", "s", "d", "f", "g", "h", "j", "k", "l", "enter"},
+		{"caps", "z", "x", "c", "v", "b", "n", "m", "sym", "space"}};
+	// Filas de puertos del Spectrum (0 = CAPS..V, 1 = A..G, 2 = Q..T, 3 = 1..5, 4 = 0..6, 5 = P..Y, 6 = ENTER..H, 7 = SPACE..B).
+	static const int code[4][10] = {
+		{0x0301, 0x0302, 0x0304, 0x0308, 0x0310, 0x0410, 0x0408, 0x0404, 0x0402, 0x0401},
+		{0x0201, 0x0202, 0x0204, 0x0208, 0x0210, 0x0510, 0x0508, 0x0504, 0x0502, 0x0501},
+		{0x0101, 0x0102, 0x0104, 0x0108, 0x0110, 0x0610, 0x0608, 0x0604, 0x0602, 0x0601},
+		{0x0001, 0x0002, 0x0004, 0x0008, 0x0010, 0x0710, 0x0708, 0x0704, 0x0702, 0x0701}};
+	for(int r = 0; r < 4; ++r) for(int c = 0; c < 10; ++c) if(n == rows[r][c]) return code[r][c];
+	if(n == "shift") return 0x0001;
+	if(n == "symbol") return 0x0702;
+	return -1;
+}
+
 std::string hex16s(unsigned v) { char b[16]; snprintf(b, sizeof b, "0x%04X", v & 0xffff); return b; }
 
 // Las últimas n instrucciones ejecutadas (la más antigua primero), con símbolo si hay.
@@ -441,13 +471,14 @@ void handle(const Host &h, int client, const std::string &line) {
 
 	long long a = 0, n = 0;
 	if(cmd == "status") {
-		char b[96];
-		snprintf(b, sizeof b, ",\"emulated\":%.3f,\"breakpoints\":%d", h.emulated_seconds ? h.emulated_seconds() : 0.0, g.bp_count);
+		char b[128];
+		snprintf(b, sizeof b, ",\"emulated\":%.3f,\"frame\":%u,\"breakpoints\":%d", h.emulated_seconds ? h.emulated_seconds() : 0.0, g.frame, g.bp_count);
 		reply(client, id, true, state_fields() + b);
 	} else if(cmd == "pause") {
 		if(!g.stopped) g.pause_req = true;
 		reply_run(client, id, m);
 	} else if(cmd == "resume" || cmd == "run") {
+		if(m.num("frames", n) && n > 0) g.frames_left = int(n);
 		if(g.stopped) {
 			if(m.num("until", a)) { g.until_addr = int(a & 0xffff); g.until_sp = -1; }
 			zxdbg::resume();
@@ -481,9 +512,15 @@ void handle(const Host &h, int client, const std::string &line) {
 		if(!m.num("addr", a)) { fail(client, id, "falta addr"); return; }
 		n = 16; m.num("len", n);
 		if(n < 1 || n > 4096) { fail(client, id, "len fuera de rango (1-4096)"); return; }
+		long long bank = 0;
+		const bool banked = m.num("bank", bank), rom = m.num("rom", bank);
 		std::string hx;
 		char b[4];
-		for(long long i = 0; i < n; ++i) { snprintf(b, sizeof b, "%02X", g.t.peek(g.t.ctx, uint16_t(a + i))); hx += b; }
+		for(long long i = 0; i < n; ++i) {
+			const uint8_t v = (banked || rom) ? g.t.peek_bank(g.t.ctx, rom ? 1 : 0, int(bank), uint16_t(a + i)) : g.t.peek(g.t.ctx, uint16_t(a + i));
+			snprintf(b, sizeof b, "%02X", v);
+			hx += b;
+		}
 		reply(client, id, true, "\"addr\":" + hex16(unsigned(a)) + ",\"len\":" + std::to_string(n) + ",\"data\":\"" + hx + "\"");
 	} else if(cmd == "poke") {
 		if(!m.num("addr", a)) { fail(client, id, "falta addr"); return; }
@@ -494,7 +531,13 @@ void handle(const Host &h, int client, const std::string &line) {
 			for(size_t i = 0; i < d.size(); i += 2) bytes.push_back(uint8_t(strtol(d.substr(i, 2).c_str(), nullptr, 16)));
 		} else if(m.num("value", n)) bytes.push_back(uint8_t(n));
 		else { fail(client, id, "falta data (hex) o value"); return; }
-		for(size_t i = 0; i < bytes.size(); ++i) g.t.poke(g.t.ctx, uint16_t(a + (long long)i), bytes[i]);
+		long long bank = 0;
+		if(m.num("rom", bank)) { fail(client, id, "la ROM no se puede escribir"); return; }
+		const bool banked = m.num("bank", bank);
+		for(size_t i = 0; i < bytes.size(); ++i) {
+			if(banked) g.t.poke_bank(g.t.ctx, 0, int(bank), uint16_t(a + (long long)i), bytes[i]);
+			else g.t.poke(g.t.ctx, uint16_t(a + (long long)i), bytes[i]);
+		}
 		reply(client, id, true, "\"written\":" + std::to_string(bytes.size()));
 	} else if(cmd == "break") {
 		if(!m.num("addr", a)) { fail(client, id, "falta addr (numero o simbolo)"); return; }
@@ -615,6 +658,129 @@ void handle(const Host &h, int client, const std::string &line) {
 		unsigned long long v = 0;
 		for(long long i = n - 1; i >= 0; --i) v = (v << 8) | g.t.peek(g.t.ctx, uint16_t(a + i));
 		reply(client, id, true, addr_fields("addr", unsigned(a & 0xffff)) + ",\"value\":" + std::to_string(v));
+	} else if(cmd == "paging") {
+		uint8_t p7 = 0, p1 = 0;
+		g.t.paging(g.t.ctx, &p7, &p1);
+		char b[192];
+		snprintf(b, sizeof b, "\"p7ffd\":\"0x%02X\",\"p1ffd\":\"0x%02X\",\"ram_c000\":%u,\"screen\":%u,\"rom_bit\":%u,\"locked\":%s",
+			p7, p1, p7 & 7, (p7 & 8) ? 7 : 5, (p7 >> 4) & 1, (p7 & 0x20) ? "true" : "false");
+		reply(client, id, true, b);
+	} else if(cmd == "profile") {
+		if(m.has("on")) {
+			g.prof_on = m.flag("on");
+			if(g.prof_on && g.prof_cyc.empty()) { g.prof_cyc.assign(65536, 0); g.prof_cnt.assign(65536, 0); }
+			reply(client, id, true, std::string("\"profiling\":") + (g.prof_on ? "true" : "false"));
+		} else if(m.flag("reset")) {
+			std::fill(g.prof_cyc.begin(), g.prof_cyc.end(), 0);
+			std::fill(g.prof_cnt.begin(), g.prof_cnt.end(), 0);
+			reply(client, id, true, "");
+		} else {
+			if(g.prof_cyc.empty()) { fail(client, id, "perfilador apagado (profile on:true)"); return; }
+			n = 20; m.num("top", n);
+			const bool by_addr = m.get("by") == "addr";
+			struct Row { std::string name; long long cyc; unsigned long long cnt; };
+			std::map<std::string, Row> agg;
+			long long total = 0;
+			for(unsigned pc = 0; pc < 65536; ++pc) {
+				if(!g.prof_cyc[pc]) continue;
+				std::string nm;
+				if(by_addr) { nm = hex16s(pc); const std::string sy = sym_for(pc); if(!sy.empty()) nm += " " + sy; }
+				else { const Sym *sy = nearest_sym(pc); char b[24]; snprintf(b, sizeof b, "?0x%04X", pc & 0xff00); nm = sy ? sy->name : b; }
+				Row &r = agg[nm];
+				r.name = nm; r.cyc += g.prof_cyc[pc]; r.cnt += g.prof_cnt[pc];
+				total += g.prof_cyc[pc];
+			}
+			std::vector<Row> rows;
+			for(auto &kv : agg) rows.push_back(kv.second);
+			std::sort(rows.begin(), rows.end(), [](const Row &a, const Row &b) { return a.cyc > b.cyc; });
+			std::string l = "[";
+			for(long long i = 0; i < n && i < (long long)rows.size(); ++i) {
+				char b[96];
+				snprintf(b, sizeof b, ",\"tstates\":%lld,\"pct\":%.2f,\"instr\":%llu}", rows[size_t(i)].cyc / 2, total ? 100.0 * double(rows[size_t(i)].cyc) / double(total) : 0.0, rows[size_t(i)].cnt);
+				if(i) l += ",";
+				l += "{\"name\":" + quote(rows[size_t(i)].name) + b;
+			}
+			reply(client, id, true, "\"total_tstates\":" + std::to_string(total / 2) + ",\"profile\":" + l + "]");
+		}
+	} else if(cmd == "framelog") {
+		if(m.has("set")) {
+			std::vector<zxdbg::Cond> cols;
+			std::vector<std::string> names;
+			std::string spec = m.get("set"), tok;
+			spec += ',';
+			for(char ch : spec) {
+				if(ch != ',') { if(!isspace((unsigned char)ch)) tok += ch; continue; }
+				if(tok.empty()) continue;
+				zxdbg::Cond c;
+				if(!parse_lhs(tok, c)) { fail(client, id, "columna invalida: " + tok); return; }
+				cols.push_back(c); names.push_back(tok);
+				tok.clear();
+			}
+			g.fl_cols = cols; g.fl_names = names;
+			g.fl_w = uint32_t(2 + cols.size());
+			g.fl_rows.assign(size_t(g.fl_cap) * g.fl_w, 0);
+			g.fl_head = g.fl_count = 0;
+			g.fl_on = true;
+			reply(client, id, true, "\"columns\":" + std::to_string(cols.size()));
+		} else if(m.flag("stop")) { g.fl_on = false; reply(client, id, true, ""); }
+		else if(m.flag("start")) { g.fl_on = true; reply(client, id, true, ""); }
+		else if(m.flag("clear")) { g.fl_head = g.fl_count = 0; reply(client, id, true, ""); }
+		else {
+			n = 60; m.num("n", n);
+			n = std::min<long long>(std::min<long long>(n, 2000), g.fl_count);
+			std::string cols = "[\"frame\",\"idle\"";
+			for(const auto &nm : g.fl_names) cols += "," + quote(nm);
+			std::string rows = "[";
+			for(long long i = 0; i < n; ++i) {
+				const uint32_t idx = (g.fl_head + g.fl_cap - uint32_t(n) + uint32_t(i)) % g.fl_cap;
+				const int32_t *row = &g.fl_rows[size_t(idx) * g.fl_w];
+				if(i) rows += ",";
+				rows += "[";
+				for(uint32_t k = 0; k < g.fl_w; ++k) { if(k) rows += ","; rows += std::to_string(row[k]); }
+				rows += "]";
+			}
+			reply(client, id, true, "\"columns\":" + cols + "],\"rows\":" + rows + "],\"recorded\":" + std::to_string(g.fl_count) +
+				",\"on\":" + (g.fl_on ? "true" : "false"));
+		}
+	} else if(cmd == "key") {
+		const std::string state = m.has("state") ? m.get("state") : "tap";
+		long long frames = 3; m.num("frames", frames);
+		std::vector<int> keys;
+		std::string spec = m.get("name") + "+", tok;
+		for(char ch : spec) {
+			if(ch != '+') { tok += char(tolower((unsigned char)ch)); continue; }
+			if(tok.empty()) continue;
+			const int k = key_code(tok);
+			if(k < 0) { fail(client, id, "tecla desconocida: " + tok); return; }
+			keys.push_back(k);
+			tok.clear();
+		}
+		if(keys.empty() || !h.set_key) { fail(client, id, "falta name (ej: \"a\", \"enter\", \"caps+1\")"); return; }
+		for(int k : keys) h.set_key(k, state != "up");
+		if(state == "tap") for(int k : keys) g_rel.push_back({g.frame + uint32_t(std::max<long long>(frames, 1)), k, false, 0});
+		reply(client, id, true, "\"keys\":" + std::to_string(keys.size()));
+	} else if(cmd == "joy") {
+		if(!h.set_joy) { fail(client, id, "joystick no disponible"); return; }
+		long long frames = 0; m.num("frames", frames);
+		int bits = 0;
+		std::string spec = m.get("dirs") + "+", tok;
+		for(char ch : spec) {
+			if(ch != '+') { tok += char(tolower((unsigned char)ch)); continue; }
+			if(tok == "up") bits |= 1; else if(tok == "down") bits |= 2; else if(tok == "left") bits |= 4;
+			else if(tok == "right") bits |= 8; else if(tok == "fire") bits |= 16;
+			else if(!tok.empty() && tok != "none") { fail(client, id, "direccion desconocida: " + tok); return; }
+			tok.clear();
+		}
+		if(m.num("mask", n)) bits = int(n) & 31;
+		g_joy = m.get("state") == "up" ? (g_joy & ~bits) : (g_joy | bits);
+		if(m.get("dirs") == "none" || (!bits && m.has("dirs"))) g_joy = 0;
+		h.set_joy(g_joy);
+		if(frames > 0 && bits) g_rel.push_back({g.frame + uint32_t(frames), 0, true, bits});
+		reply(client, id, true, "\"mask\":" + std::to_string(g_joy));
+	} else if(cmd == "type") {
+		if(!h.type) { fail(client, id, "type no disponible"); return; }
+		h.type(m.get("text"));
+		reply(client, id, true, "");
 	} else if(cmd == "reset") {
 		zxdbg::drain();
 		g_pending.clear();
@@ -670,6 +836,7 @@ void stop() {
 	delete S;
 	S = nullptr;
 	g_pending.clear();
+	g_rel.clear();
 }
 
 bool running() { return S != nullptr; }
@@ -682,6 +849,14 @@ void pump(const Host &host) {
 		in.swap(S->inbox);
 	}
 	for(const auto &msg : in) handle(host, msg.client, msg.line);
+
+	for(size_t i = 0; i < g_rel.size();) {
+		const Release &r = g_rel[i];
+		if(int32_t(zxdbg::g.frame - r.frame) < 0) { ++i; continue; }
+		if(r.joy) { g_joy &= ~r.bits; if(host.set_joy) host.set_joy(g_joy); }
+		else if(host.set_key) host.set_key(r.key, false);
+		g_rel.erase(g_rel.begin() + long(i));
+	}
 
 	if(zxdbg::g.event_pending) {
 		zxdbg::g.event_pending = false;

@@ -1,4 +1,4 @@
-# PDP — Prisma Debug Protocol (fases 1 y 2)
+# PDP — Prisma Debug Protocol (fases 1 a 3)
 
 Depurador del core CLK (Spectrum 16K–+3) para juegos PRISMA. JSON por línea sobre TCP,
 solo `127.0.0.1`. Un objeto por línea; cada petición lleva `id` y `cmd`; la respuesta repite el `id`
@@ -46,6 +46,27 @@ Desde C: `zx_pdp_start(h, port)` / `zx_pdp_stop(h)` (zx_bridge.h).
   propia búsqueda que paró (p. ej. `0x0000`).
 - El historial (64K instrucciones, solo PCs) se graba siempre que el servidor está activo.
 
+### Fase 3: bancos, frames, perfilador, frame-log, entrada
+| cmd | parámetros | respuesta |
+|---|---|---|
+| `mem` / `poke` | `bank` (RAM 0-7) o `rom` (0-3, solo lectura); `addr` = desplazamiento 0-0x3FFF | |
+| `paging` | | `p7ffd`, `p1ffd`, `ram_c000` (banco en C000), `screen` (5/7), `rom_bit`, `locked` |
+| `resume` | `frames:N` | para tras N frames exactos (`reason:"frames"`) |
+| `profile` | `on:true/false`, `reset:true`; sin ellos informa: `top`, `by:"func"\|"addr"` | `total_tstates`, `profile[{name,tstates,pct,instr}]` |
+| `framelog` | `set:"a,[_var],[game_key]w"` (columnas y arranca), `stop`/`start`/`clear`; sin ellos: `n` | `columns`, `rows` = `[frame, idle, valores...]` |
+| `key` | `name` (`a`, `enter`, `caps+1`), `state:"tap"\|"down"\|"up"`, `frames` (defecto 3) | |
+| `joy` | `dirs` (`left+fire`, `none`) o `mask`, `state`, `frames` | `mask` |
+| `type` | `text` (Typer de CLK) | |
+
+- El reloj de la máquina cuenta half cycles (parche en `advance`); un frame = 69888 T (16K/48K) o 70908 T
+  (128K y posteriores). `status` da `frame`. Con `resume frames:N` + `key`/`joy` se puede reproducir una
+  partida de forma determinista (las teclas se sueltan por frames emulados, no por tiempo real).
+- **Perfilador**: tiempo entre dos búsquedas consecutivas = duración de la instrucción anterior
+  (incluye contención y el reconocimiento de interrupciones). Agrupa por símbolo del `.map`
+  (`?0xNN00` si no hay). Verificado: 10 frames = 698868 T (ideal 698880).
+- **`idle` del frame-log** = T-states gastados ejecutando HALT en ese frame: margen libre del juego.
+- `frame-log` guarda 8192 frames en anillo.
+
 Evento asíncrono a todos los clientes al detenerse: `{"event":"stopped","reason":...,"pc":...}`.
 `reason`: `pause`, `breakpoint`, `step`, `until`. `next` salta CALL/RST/HALT/bloques (LDIR…).
 
@@ -62,5 +83,5 @@ Evento asíncrono a todos los clientes al detenerse: `{"event":"stopped","reason
   solo mueve bytes.
 
 ## Pendiente (fases siguientes)
-Líneas C (`.lst`), bancos explícitos (`$7FFD`), perfilador, `frame-log`, input, `setreg`,
-ZX Spectrum Next, Android (no compilado aún), activar desde la app de Flutter.
+Líneas C (`.lst`), `setreg`, pantalla/captura por PDP, ZX Spectrum Next, Android (no compilado
+aún), activar desde la app de Flutter.

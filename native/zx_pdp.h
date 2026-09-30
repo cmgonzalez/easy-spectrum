@@ -12,6 +12,9 @@ struct Host {
 	std::string machine;			// "zx48", "zx128"…
 	std::function<void()> reset;	// reinicia la máquina
 	std::function<double()> emulated_seconds;
+	std::function<void(int key, bool down)> set_key;	// key = (fila << 8) | bit
+	std::function<void(int mask)> set_joy;			// ZX_JOY_*
+	std::function<void(const std::string &)> type;	// texto con el Typer de CLK
 };
 
 // Arranca el servidor en `port` (0 = puerto libre). Devuelve el puerto o -1 si falla.

@@ -7,7 +7,23 @@ public:
 		t.peek = [](void *c, uint16_t a) -> uint8_t { return static_cast<ConcreteMachine *>(c)->debug_peek(a); };
 		t.poke = [](void *c, uint16_t a, uint8_t v) { static_cast<ConcreteMachine *>(c)->debug_poke(a, v); };
 		t.credit = [](void *c, int64_t hc) { static_cast<ConcreteMachine *>(c)->z80_.run_for(HalfCycles(hc)); };
+		t.peek_bank = [](void *c, int kind, int bank, uint16_t off) -> uint8_t { return static_cast<ConcreteMachine *>(c)->debug_peek_bank(kind, bank, off); };
+		t.poke_bank = [](void *c, int kind, int bank, uint16_t off, uint8_t v) { static_cast<ConcreteMachine *>(c)->debug_poke_bank(kind, bank, off, v); };
+		t.paging = [](void *c, uint8_t *p7, uint8_t *p1) { auto *m = static_cast<ConcreteMachine *>(c); *p7 = m->port7ffd_; *p1 = m->port1ffd_; };
+		t.frame_half_cycles = (model < Model::OneTwoEightK ? 69888 : 70908) * 2;
 		zxdbg::g.t = t;
+		zxdbg::g.clock = zxdbg::g.last_clock = zxdbg::g.next_frame = 0;
+	}
+
+	uint8_t debug_peek_bank(int kind, int bank, uint16_t off) const {
+		const size_t i = size_t(bank) * 0x4000 + (off & 0x3fff);
+		if(kind == 1) return i < rom_.size() ? rom_[i] : 0xff;
+		return i < ram_.size() ? ram_[i] : 0xff;
+	}
+
+	void debug_poke_bank(int kind, int bank, uint16_t off, uint8_t v) {
+		const size_t i = size_t(bank) * 0x4000 + (off & 0x3fff);
+		if(kind == 0 && i < ram_.size()) ram_[i] = v;
 	}
 
 	void debug_regs(zxdbg::Regs &r) const {
