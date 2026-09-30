@@ -266,7 +266,14 @@ int16_t NextMachine::tile_pixel(int row, int x, bool &over_ula) {
 	else cat2 = !(attr & 1);
 	over_ula = cat2;
 
-	if(text) return -1;	// modo texto: pendiente
+	if(text) {	// modo texto: glifos de 1 bpp (8 bytes), color = paleta[(attr & 0xFE) | bit], transparente por color
+		const uint8_t b = tiles[(code * 8 + iy) & 0x3FFF];
+		bool on = (b >> (7 - ix)) & 1;
+		if(mode80) on = on || ((b >> (7 - (ix ^ 1))) & 1);	// dos píxeles de texto por píxel de pantalla
+		const uint16_t c = pal9_[pal_kind_tile()][(attr & 0xFE) | (on ? 1 : 0)];
+		if((c >> 1) == nr_[0x14]) return -1;
+		return int16_t(c);
+	}
 	const bool xm = attr & 8, ym = attr & 4, rot = attr & 2;
 	const int mx = xm ? 7 - ix : ix;
 	const int my = ym ? 7 - iy : iy;

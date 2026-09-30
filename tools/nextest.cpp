@@ -56,11 +56,17 @@ int main(int argc, char **argv) {
 		}
 	}
 	size_t evi = 0;
+	const char *wav = getenv("NX_WAV");
+	std::vector<int16_t> pcm;
 	const int ticks = int(secs / 0.02);
 	for(int i = 0; i < ticks; i++) {
 		while(evi < evs.size() && evs[evi].t <= i * 0.02) { m.set_key(evs[evi].key, evs[evi].down); ++evi; }
 		frames += m.run(0.02);
-		audio += m.drain_audio(buf, 1 << 16);
+		{
+			const int got = m.drain_audio(buf, 1 << 16);
+			audio += got;
+			if(wav) pcm.insert(pcm.end(), buf, buf + got);
+		}
 	}
 	double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 	printf("emulado=%.2fs real=%.2fs (x%.1f) frames=%d audio=%ld instr=%llu PC=%04X speed=%d\n",
@@ -85,6 +91,17 @@ int main(int argc, char **argv) {
 		printf("pixel (%d,%d): ula=%d tile=%d l2=%d spr=%d\n", x, y, o[0], o[1], o[2], o[3]);
 		for(int i = 0; i < 4; ++i) printf("ulapal[%d]=%03X ", 16 + i, m.debug_pal(0, 16 + i));
 		printf("\n");
+	}
+	if(wav) {
+		FILE *w = fopen(wav, "wb");
+		const uint32_t data_bytes = uint32_t(pcm.size() * 2), rate = 48000, byte_rate = rate * 4;
+		const uint16_t fmt = 1, ch = 2, align = 4, bits = 16;
+		const uint32_t riff = 36 + data_bytes, fmt_len = 16;
+		fwrite("RIFF", 1, 4, w); fwrite(&riff, 4, 1, w); fwrite("WAVEfmt ", 1, 8, w); fwrite(&fmt_len, 4, 1, w);
+		fwrite(&fmt, 2, 1, w); fwrite(&ch, 2, 1, w); fwrite(&rate, 4, 1, w); fwrite(&byte_rate, 4, 1, w);
+		fwrite(&align, 2, 1, w); fwrite(&bits, 2, 1, w); fwrite("data", 1, 4, w); fwrite(&data_bytes, 4, 1, w);
+		fwrite(pcm.data(), 2, pcm.size(), w);
+		fclose(w);
 	}
 	FILE *f = fopen(out_path, "wb");
 	fprintf(f, "P6 %d %d 255\n", nx::kFbWidth, nx::kFbHeight);

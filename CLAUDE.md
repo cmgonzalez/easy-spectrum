@@ -92,9 +92,9 @@ repos/mamedev/mame/contents/src/mame/sinclair/next/<archivo> -H "Accept: applica
   zxnDMA (`$6B` exacto, `$0B` Zilog N+1), interrupciones (pulso de 32 T o IM2 por hardware), 3×AY + DAC +
   beeper, cargador `.nex` (`load_nex`). Reloj en ticks de 28 MHz (1792 por línea, 312 líneas, 50 Hz).
 - `next_video.cpp`: ULA (estándar, Timex 1/hi-color/hi-res, LoRes, ULANext), Layer 2 (256×192, 320×256,
-  640×256), tilemap (40/80 col, sin modo texto), 128 sprites (ancla/relativos/4bpp/escala/rotación),
+  640×256), tilemap (40/80 col, modo texto 1 bpp), 128 sprites (ancla/relativos/4bpp/escala/rotación),
   Copper (granularidad de 8 px), orden de capas `$15`. Se dibuja línea a línea directo a 320×256 RGBA
-  (mismo tamaño que el bridge de CLK). Sin mezcla de colores (`$15` = 110/111) ni modo texto del tilemap.
+  (mismo tamaño que el bridge de CLK).
 - La línea `0` de la Next = primera línea de papel; INT de trama en la 248; coordenadas de sprites/tilemap
   = píxel del framebuffer (papel en 32,32).
 - Al cargar un `.nex` se imita a NextZXOS: **`$4A` (color de reserva) = 0** (el core lo deja en `$E3`
@@ -107,11 +107,11 @@ repos/mamedev/mame/contents/src/mame/sinclair/next/<archivo> -H "Accept: applica
   con un `.nex` (móvil: `GameLibrary.import`; escritorio: `_openPath`) se extraen los demás archivos a
   `<juego>.files/` (`GameLibrary.extractAssets`). Verificado con Fred In Space (assets/ en el zip).
 - Mezcla de capas `$15`=110/111 (suma / resta 5/8 de Layer 2 sobre ULA+tilemap, sprites encima) hecha.
-- **Pendiente**: teclas extendidas de la Next; ratón Kempston; CTC/UART/divMMC; modo texto del tilemap;
+- **Pendiente**: teclas extendidas de la Next; ratón Kempston; CTC/UART/divMMC;
   ULA+ (puertos BF3B/FF3B); 60 Hz; miniatura sacada del `.nex`.
 - Probar sin Flutter: `tools/nextest.cpp` (`clang++ -std=c++17 -O2 tools/nextest.cpp native/next/*.cpp`;
   `nextest juego.nex <s> [out.ppm]`; env `NX_REGS`, `NX_PIX=x,y`, `NX_DUMP=addr,n`, `NX_TRACE`,
-  `NX_KEYS="t:0xFFBB:1;..."`). `tools/nexgen.py` genera un `.nex` de prueba propio (L2 + sprites + tilemap +
+  `NX_KEYS="t:0xFFBB:1;..."`, `NX_WAV=a.wav`). `tools/nexgen.py` genera un `.nex` de prueba propio (L2 + sprites + tilemap +
   Copper + DMA). Corre ×10-×15 tiempo real a 28 MHz en el PC. `.nex` reales de prueba (repos de GitHub:
   JohnGreening/maze, robgmoran/DougieDo, serdjukdev/ZxNextStudio-TechDemo) no se incluyen en el repo.
 
