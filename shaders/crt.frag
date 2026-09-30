@@ -9,7 +9,7 @@
 precision mediump float;
 
 uniform vec2 uSize;      // tamaño de salida (px lógicos)
-uniform vec2 uSrc;       // tamaño de la imagen (320, 256)
+uniform vec2 uSrc;       // tamaño de la parte visible de la imagen (con el borde recortado)
 uniform float uDpr;      // px físicos por px lógico (máscara al tamaño del fósforo)
 uniform float uCurve;    // curvatura (0 = plana)
 uniform float uScan;     // intensidad de las líneas (0-1)
@@ -17,6 +17,8 @@ uniform float uMask;     // intensidad de la máscara RGB (0-1)
 uniform float uVignette; // oscurecimiento de los bordes (0-1)
 uniform float uCorner;   // radio de las esquinas, fracción del alto
 uniform float uGlow;     // resplandor (0-1)
+uniform vec2 uOff;       // esquina de la parte visible dentro de la imagen completa
+uniform vec2 uFull;      // tamaño de la imagen completa (320, 256)
 uniform sampler2D uTex;
 
 out vec4 fragColor;
@@ -26,7 +28,7 @@ vec3 toGamma(vec3 c) { return sqrt(max(c, 0.0)); }
 
 vec3 texel(vec2 p) {
   p = clamp(p, vec2(0.0), uSrc - 1.0);
-  return toLinear(texture(uTex, (floor(p) + 0.5) / uSrc).rgb);
+  return toLinear(texture(uTex, (floor(p) + 0.5 + uOff) / uFull).rgb);
 }
 
 // Fila horizontal filtrada con 4 muestras gaussianas alrededor de x.

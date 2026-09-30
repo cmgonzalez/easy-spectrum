@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/emulator/zx_types.dart';
 import '../../core/l10n.dart';
 import '../../core/settings.dart';
+import '../../core/screen_border.dart';
 import '../../core/video_mode.dart';
 import '../../core/theme/easy_theme.dart';
 import '../about/about_screen.dart';
@@ -111,6 +112,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () async {
                     final v = await _choose(t.videoMode, VideoMode.values, (m) => m.label(t), s.videoMode);
                     if (v != null) _update((s) => s.videoMode = v);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.crop_free_rounded, size: 32),
+                  title: Text(t.screenBorder),
+                  subtitle: Text(s.screenBorder.label(t)),
+                  onTap: () async {
+                    final v = await _choose(t.screenBorder, ScreenBorder.values, (b) => b.label(t), s.screenBorder);
+                    if (v != null) _update((s) => s.screenBorder = v);
                   },
                 ),
                 SwitchListTile(

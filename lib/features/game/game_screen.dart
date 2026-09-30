@@ -443,10 +443,15 @@ class _GameScreenState extends State<GameScreen>
                     ? _ErrorView(message: zxErrorText(context.l10n, _error!), onBack: () => Navigator.pop(context))
                     : ConsoleView(
                         rainbow: !_showKeyboard,
+                        screenAspect: GameDisplay.aspectFor(_settings.screenBorder),
                         screen: Stack(
                           fit: StackFit.expand,
                           children: [
-                            GameDisplay(frame: _frame, turbo: _turbo, mode: _settings.videoMode),
+                            GameDisplay(
+                                frame: _frame,
+                                turbo: _turbo,
+                                mode: _settings.videoMode,
+                                border: _settings.screenBorder),
                             if (_paused)
                               const ColoredBox(
                                 color: Colors.black54,

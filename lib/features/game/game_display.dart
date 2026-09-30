@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/emulator/zx_types.dart';
 import '../../core/l10n.dart';
 import '../../core/theme/easy_theme.dart';
+import '../../core/screen_border.dart';
 import '../../core/video_mode.dart';
 
 /// Pinta el framebuffer 320×256 del Spectrum según el [mode] de video: píxeles
@@ -15,7 +16,12 @@ class GameDisplay extends StatefulWidget {
   final ui.Image? frame;
   final bool turbo;
   final VideoMode mode;
-  const GameDisplay({super.key, this.frame, this.turbo = false, this.mode = VideoMode.sharp});
+  final ScreenBorder border;
+  const GameDisplay(
+      {super.key, this.frame, this.turbo = false, this.mode = VideoMode.sharp, this.border = ScreenBorder.half});
+
+  /// Proporción de la parte visible (320×256 menos el borde recortado).
+  static double aspectFor(ScreenBorder b) => (zxFbWidth - 2 * b.px) / (zxFbHeight - 2 * b.px);
 
   @override
   State<GameDisplay> createState() => _GameDisplayState();
@@ -59,6 +65,7 @@ class _GameDisplayState extends State<GameDisplay> {
             painter: _FramePainter(
               frame,
               mode: mode,
+              border: widget.border.px,
               shader: mode.crt != null ? _shader : null,
               dpr: MediaQuery.devicePixelRatioOf(context),
             ),
@@ -79,7 +86,7 @@ class _GameDisplayState extends State<GameDisplay> {
       color: Colors.black,
       child: Center(
         child: AspectRatio(
-          aspectRatio: zxFbWidth / zxFbHeight,
+          aspectRatio: GameDisplay.aspectFor(widget.border),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -112,9 +119,10 @@ class _GameDisplayState extends State<GameDisplay> {
 class _FramePainter extends CustomPainter {
   final ui.Image image;
   final VideoMode mode;
+  final int border;
   final ui.FragmentShader? shader;
   final double dpr;
-  _FramePainter(this.image, {required this.mode, this.shader, required this.dpr});
+  _FramePainter(this.image, {required this.mode, required this.border, this.shader, required this.dpr});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -125,8 +133,8 @@ class _FramePainter extends CustomPainter {
       s
         ..setFloat(0, size.width)
         ..setFloat(1, size.height)
-        ..setFloat(2, zxFbWidth.toDouble())
-        ..setFloat(3, zxFbHeight.toDouble())
+        ..setFloat(2, (zxFbWidth - 2 * border).toDouble())
+        ..setFloat(3, (zxFbHeight - 2 * border).toDouble())
         ..setFloat(4, dpr)
         ..setFloat(5, crt.curve)
         ..setFloat(6, crt.scan)
@@ -134,13 +142,18 @@ class _FramePainter extends CustomPainter {
         ..setFloat(8, crt.vignette)
         ..setFloat(9, crt.corner)
         ..setFloat(10, crt.glow)
+        ..setFloat(11, border.toDouble())
+        ..setFloat(12, border.toDouble())
+        ..setFloat(13, zxFbWidth.toDouble())
+        ..setFloat(14, zxFbHeight.toDouble())
         ..setImageSampler(0, image);
       canvas.drawRect(Offset.zero & size, Paint()..shader = s);
       return;
     }
     canvas.drawImageRect(
       image,
-      Rect.fromLTWH(0, 0, zxFbWidth.toDouble(), zxFbHeight.toDouble()),
+      Rect.fromLTWH(border.toDouble(), border.toDouble(), (zxFbWidth - 2 * border).toDouble(),
+          (zxFbHeight - 2 * border).toDouble()),
       Offset.zero & size,
       Paint()..filterQuality = mode == VideoMode.smooth ? FilterQuality.medium : FilterQuality.none,
     );
@@ -148,5 +161,5 @@ class _FramePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_FramePainter old) =>
-      !identical(old.image, image) || old.mode != mode || old.shader != shader || old.dpr != dpr;
+      !identical(old.image, image) || old.mode != mode || old.border != border || old.shader != shader || old.dpr != dpr;
 }

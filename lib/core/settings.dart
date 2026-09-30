@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'emulator/zx_types.dart';
+import 'screen_border.dart';
 import 'video_mode.dart';
 
 /// Ajustes persistentes de la app.
@@ -13,6 +14,7 @@ class AppSettings {
   bool onlineInfo = true;
   VideoMode videoMode = VideoMode.sharp;
   bool gigascreen = false;
+  ScreenBorder screenBorder = ScreenBorder.half;
 
   static Future<AppSettings> load() async {
     final p = await SharedPreferences.getInstance();
@@ -30,6 +32,7 @@ class AppSettings {
     s.onlineInfo = p.getBool('online_info') ?? true;
     s.videoMode = VideoMode.byName(p.getString('video_mode'));
     s.gigascreen = p.getBool('gigascreen') ?? false;
+    s.screenBorder = ScreenBorder.byName(p.getString('screen_border'));
     return s;
   }
 
@@ -44,5 +47,6 @@ class AppSettings {
     await p.setBool('online_info', onlineInfo);
     await p.setString('video_mode', videoMode.name);
     await p.setBool('gigascreen', gigascreen);
+    await p.setString('screen_border', screenBorder.name);
   }
 }

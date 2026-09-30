@@ -16,6 +16,8 @@ class ConsoleView extends StatelessWidget {
   final Widget controls;
   /// Arcoíris en la esquina inferior derecha (con el mando; el teclado trae el suyo).
   final bool rainbow;
+  /// Proporción ancho/alto de la pantalla (depende de cuánto borde se muestra).
+  final double screenAspect;
 
   const ConsoleView({
     super.key,
@@ -24,6 +26,7 @@ class ConsoleView extends StatelessWidget {
     required this.actions,
     required this.controls,
     this.rainbow = true,
+    this.screenAspect = 320 / 256,
   });
 
   static const _skinWidth = 1393.0; // ancho de las piezas del cuerpo
@@ -43,8 +46,8 @@ class ConsoleView extends StatelessWidget {
       // necesitan su espacio en teléfonos bajos).
       const glass = 5.0;
       var gameW = w - 2 * side - 2 * glass;
-      gameW = math.min(gameW, h * 0.46 * 320 / 256);
-      final gameH = gameW * 256 / 320;
+      gameW = math.min(gameW, h * 0.46 * screenAspect);
+      final gameH = gameW / screenAspect;
       final lcdW = w * 0.56;
       final actionsH = w * 0.085;
 

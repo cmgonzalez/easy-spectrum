@@ -472,7 +472,11 @@ class _DesktopScreenState extends State<DesktopScreen>
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      GameDisplay(frame: _frame, turbo: _turbo, mode: _settings.videoMode),
+                      GameDisplay(
+                          frame: _frame,
+                          turbo: _turbo,
+                          mode: _settings.videoMode,
+                          border: _settings.screenBorder),
                       if (_paused)
                         const ColoredBox(
                           color: Colors.black54,
