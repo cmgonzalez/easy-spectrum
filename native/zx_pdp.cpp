@@ -117,6 +117,145 @@ void post(int client, const std::string &line) {
 	S->outbox.emplace_back(client, line);
 }
 
+// ---------------------------------------------------------------- símbolos (.map de z88dk)
+
+struct Sym { uint16_t addr; std::string name; std::string src; };
+std::vector<Sym> g_syms;						// ordenado por dirección (mejor nombre primero)
+std::map<std::string, uint16_t> g_symmap;
+
+bool lower_eq(const std::string &a, const std::string &b) {
+	if(a.size() != b.size()) return false;
+	for(size_t i = 0; i < a.size(); ++i) if(tolower((unsigned char)a[i]) != tolower((unsigned char)b[i])) return false;
+	return true;
+}
+
+int sym_priority(const std::string &n) {	// los marcadores de sección de z88dk pierden frente a los nombres reales
+	if(n.size() > 1 && n[0] == '_' && n[1] == '_') return 2;
+	if(n.compare(0, 2, "i_") == 0 || n.compare(0, 2, "l_") == 0 || n.compare(0, 2, "s_") == 0) return 1;
+	return 0;
+}
+
+// Línea: "_name = $5C20 ; addr, public, , modulo, SECCION, archivo:linea". Solo las de tipo addr.
+int load_map(const std::string &path) {
+	FILE *f = fopen(path.c_str(), "rb");
+	if(!f) return -1;
+	std::vector<Sym> syms;
+	std::map<std::string, uint16_t> names;
+	std::string line;
+	int ch;
+	auto parse = [&](const std::string &l) {
+		const size_t eq = l.find(" = $");
+		const size_t semi = l.find(';', eq == std::string::npos ? 0 : eq);
+		if(eq == std::string::npos || semi == std::string::npos) return;
+		const size_t t0 = l.find_first_not_of(' ', semi + 1);
+		if(t0 == std::string::npos || l.compare(t0, 5, "addr,") != 0) return;
+		std::string name = l.substr(0, eq);
+		while(!name.empty() && name.back() == ' ') name.pop_back();
+		const unsigned addr = unsigned(strtoul(l.c_str() + eq + 4, nullptr, 16)) & 0xffff;
+		std::string src;
+		size_t p = t0;
+		for(int k = 0; k < 5 && p != std::string::npos; ++k) p = l.find(',', p + 1);	// 5 comas → campo del archivo
+		if(p != std::string::npos) { src = l.substr(p + 1); while(!src.empty() && (src[0] == ' ')) src.erase(0, 1); while(!src.empty() && (src.back() == '\r' || src.back() == ' ')) src.pop_back(); }
+		syms.push_back({uint16_t(addr), name, src});
+		if(!names.count(name)) names[name] = uint16_t(addr);
+	};
+	while((ch = fgetc(f)) != EOF) {
+		if(ch == '\n') { parse(line); line.clear(); }
+		else line += char(ch);
+	}
+	if(!line.empty()) parse(line);
+	fclose(f);
+	std::stable_sort(syms.begin(), syms.end(), [](const Sym &a, const Sym &b) {
+		return a.addr != b.addr ? a.addr < b.addr : sym_priority(a.name) < sym_priority(b.name);
+	});
+	g_syms.swap(syms);
+	g_symmap.swap(names);
+	return int(g_syms.size());
+}
+
+const Sym *nearest_sym(unsigned addr, unsigned max_off = 0x1000) {
+	auto it = std::upper_bound(g_syms.begin(), g_syms.end(), addr, [](unsigned a, const Sym &s) { return a < s.addr; });
+	if(it == g_syms.begin()) return nullptr;
+	--it;
+	while(it != g_syms.begin() && (it - 1)->addr == it->addr) --it;
+	return addr - it->addr <= max_off ? &*it : nullptr;
+}
+
+std::string sym_for(unsigned addr) {
+	const Sym *s = nearest_sym(addr & 0xffff);
+	if(!s) return "";
+	const unsigned off = (addr & 0xffff) - s->addr;
+	char b[16];
+	if(!off) return s->name;
+	snprintf(b, sizeof b, "+0x%X", off);
+	return s->name + b;
+}
+
+bool parse_number(const std::string &str, long long &out) {
+	const char *p = str.c_str();
+	if(!*p) return false;
+	int base = 10;
+	bool neg = false;
+	if(*p == '-') { neg = true; ++p; }
+	if(p[0] == '$' || p[0] == '#') { base = 16; ++p; }
+	else if(p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) { base = 16; p += 2; }
+	char *end = nullptr;
+	out = strtoll(p, &end, base);
+	if(!(end && *end == 0 && end != p)) return false;
+	if(neg) out = -out;
+	return true;
+}
+
+bool find_sym(const std::string &n, long long &out) {
+	auto it = g_symmap.find(n);
+	if(it == g_symmap.end()) it = g_symmap.find("_" + n);
+	if(it == g_symmap.end()) return false;
+	out = it->second;
+	return true;
+}
+
+// Número, símbolo o símbolo±desplazamiento.
+bool parse_value(const std::string &str, long long &out) {
+	if(parse_number(str, out)) return true;
+	if(find_sym(str, out)) return true;
+	const size_t p = str.find_last_of("+-");
+	long long off = 0, base = 0;
+	if(p != std::string::npos && p > 0 && parse_number(str.substr(p + 1), off) && find_sym(str.substr(0, p), base)) {
+		out = str[p] == '+' ? base + off : base - off;
+		return true;
+	}
+	return false;
+}
+
+bool parse_cond(std::string s, zxdbg::Cond &c) {
+	s.erase(std::remove_if(s.begin(), s.end(), [](char ch) { return isspace((unsigned char)ch); }), s.end());
+	size_t pos = s.find_first_of("=!<>&");
+	if(pos == std::string::npos || pos == 0) return false;
+	zxdbg::CondOp op;
+	size_t oplen = 2;
+	const std::string two = s.substr(pos, 2);
+	if(two == "==") op = zxdbg::C_EQ;
+	else if(two == "!=") op = zxdbg::C_NE;
+	else if(two == "<=") op = zxdbg::C_LE;
+	else if(two == ">=") op = zxdbg::C_GE;
+	else { oplen = 1; if(s[pos] == '<') op = zxdbg::C_LT; else if(s[pos] == '>') op = zxdbg::C_GT; else if(s[pos] == '&') op = zxdbg::C_AND; else return false; }
+	std::string lhs = s.substr(0, pos);
+	long long v = 0;
+	if(!parse_value(s.substr(pos + oplen), v)) return false;
+	c = zxdbg::Cond();
+	c.on = true; c.op = op; c.val = int32_t(v);
+	if(lhs[0] == '[') {
+		const size_t e = lhs.find(']');
+		long long a = 0;
+		if(e == std::string::npos || !parse_value(lhs.substr(1, e - 1), a)) return false;
+		c.reg = zxdbg::R_NONE; c.mem = int32_t(a & 0xffff); c.word = lhs.size() > e + 1 && tolower(lhs[e + 1]) == 'w';
+		return true;
+	}
+	static const char *names[] = {"pc", "sp", "af", "bc", "de", "hl", "ix", "iy", "a", "f", "b", "c", "d", "e", "h", "l", "i", "r", "iff1", "iff2", "im"};
+	for(int i = 0; i < 21; ++i) if(lower_eq(lhs, names[i])) { c.reg = int8_t(i); return true; }
+	return false;
+}
+
 // ---------------------------------------------------------------- JSON mínimo (objeto plano)
 
 struct Msg {
@@ -164,17 +303,10 @@ struct Msg {
 	bool has(const char *k) const { return kv.count(k) != 0; }
 	std::string get(const char *k) const { auto it = kv.find(k); return it == kv.end() ? std::string() : it->second; }
 	bool flag(const char *k) const { const auto v = get(k); return v == "true" || v == "1"; }
-	// Números: decimal, 0x1F, $1F o #1F.
+	// Números (decimal, 0x1F, $1F), símbolos del .map (_main, game_key+4) y sumas.
 	bool num(const char *k, long long &out) const {
 		auto it = kv.find(k);
-		if(it == kv.end() || it->second.empty()) return false;
-		const char *p = it->second.c_str();
-		int base = 10;
-		if(p[0] == '$' || p[0] == '#') { base = 16; ++p; }
-		else if(p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) { base = 16; p += 2; }
-		char *end = nullptr;
-		out = strtoll(p, &end, base);
-		return end && *end == 0 && end != p;
+		return it != kv.end() && parse_value(it->second, out);
 	}
 };
 
@@ -201,15 +333,32 @@ const char *reason_name(zxdbg::Reason r) {
 		case zxdbg::Reason::Breakpoint: return "breakpoint";
 		case zxdbg::Reason::Step: return "step";
 		case zxdbg::Reason::Until: return "until";
+		case zxdbg::Reason::Watch: return "watch";
+		case zxdbg::Reason::Crash: return "crash";
 		default: return "none";
 	}
 }
 
+std::string addr_fields(const char *key, unsigned a) {	// "key":"0x1234","key_sym":"_main+3"
+	std::string o = std::string("\"") + key + "\":" + hex16(a);
+	const std::string sy = sym_for(a);
+	if(!sy.empty()) o += std::string(",\"") + key + "_sym\":" + quote(sy);
+	return o;
+}
+
 std::string state_fields() {
 	const auto &g = zxdbg::g;
-	if(g.stopped)
-		return std::string("\"state\":\"stopped\",\"reason\":\"") + reason_name(g.reason) + "\",\"pc\":" + hex16(g.stop_pc);
-	return "\"state\":\"running\"";
+	if(!g.stopped) return "\"state\":\"running\"";
+	std::string o = std::string("\"state\":\"stopped\",\"reason\":\"") + reason_name(g.reason) + "\"," + addr_fields("pc", g.stop_pc);
+	if(g.reason == zxdbg::Reason::Watch) {
+		char b[80];
+		snprintf(b, sizeof b, ",\"value\":%u,\"access\":\"%s\",", g.hit_val, g.hit_write ? "write" : "read");
+		o += b + addr_fields("addr", g.hit_addr);
+	} else if(g.reason == zxdbg::Reason::Crash) {
+		o += std::string(",\"detail\":\"") + g.detail + "\"";
+		if(g.from_pc >= 0) o += "," + addr_fields("from", unsigned(g.from_pc));
+	}
+	return o;
 }
 
 std::string flags_text(uint8_t f) {
@@ -250,6 +399,29 @@ void fail(int client, const std::string &id, const std::string &why) { reply(cli
 void reply_run(int client, const std::string &id, const Msg &m) {
 	if(m.flag("wait") && !zxdbg::g.stopped) g_pending.push_back({client, id});
 	else reply(client, id, true, state_fields());
+}
+
+std::string hex16s(unsigned v) { char b[16]; snprintf(b, sizeof b, "0x%04X", v & 0xffff); return b; }
+
+// Las últimas n instrucciones ejecutadas (la más antigua primero), con símbolo si hay.
+std::string history_json(unsigned n) {
+	const zxdbg::Core &g = zxdbg::g;
+	std::string l = "[";
+	for(unsigned i = 0; i < n; ++i) {
+		const unsigned pc = g.hist[(g.hpos - n + i) & g.hmask];
+		if(i) l += ",";
+		const std::string sy = sym_for(pc);
+		l += quote(hex16s(pc) + (sy.empty() ? "" : " " + sy));
+	}
+	return l + "]";
+}
+
+void rebuild_watch() {
+	zxdbg::Core &g = zxdbg::g;
+	memset(g.wmask, 0, sizeof g.wmask);
+	for(const auto &w : g.watches)
+		for(unsigned i = 0; i < w.len; ++i) g.wmask[uint16_t(w.addr + i)] |= w.kind;
+	g.watch_any = !g.watches.empty();
 }
 
 void handle(const Host &h, int client, const std::string &line) {
@@ -325,19 +497,124 @@ void handle(const Host &h, int client, const std::string &line) {
 		for(size_t i = 0; i < bytes.size(); ++i) g.t.poke(g.t.ctx, uint16_t(a + (long long)i), bytes[i]);
 		reply(client, id, true, "\"written\":" + std::to_string(bytes.size()));
 	} else if(cmd == "break") {
-		if(!m.num("addr", a)) { fail(client, id, "falta addr"); return; }
+		if(!m.num("addr", a)) { fail(client, id, "falta addr (numero o simbolo)"); return; }
 		a &= 0xffff;
+		if(m.has("cond")) {
+			zxdbg::Cond c;
+			if(!parse_cond(m.get("cond"), c)) { fail(client, id, "cond invalida (ej: a==5, [0x9000]>=3, hl&0x80)"); return; }
+			g.bp_cond[uint16_t(a)] = c;
+		} else g.bp_cond.erase(uint16_t(a));
 		if(!g.bp[a]) { g.bp[a] = 1; ++g.bp_count; }
-		reply(client, id, true, "\"addr\":" + hex16(unsigned(a)));
+		reply(client, id, true, addr_fields("addr", unsigned(a)));
 	} else if(cmd == "unbreak") {
-		if(m.get("addr") == "all") { memset(g.bp, 0, sizeof g.bp); g.bp_count = 0; }
-		else if(m.num("addr", a)) { a &= 0xffff; if(g.bp[a]) { g.bp[a] = 0; --g.bp_count; } }
+		if(m.get("addr") == "all") { memset(g.bp, 0, sizeof g.bp); g.bp_count = 0; g.bp_cond.clear(); }
+		else if(m.num("addr", a)) { a &= 0xffff; if(g.bp[a]) { g.bp[a] = 0; --g.bp_count; } g.bp_cond.erase(uint16_t(a)); }
 		else { fail(client, id, "falta addr (o \"all\")"); return; }
 		reply(client, id, true, "\"breakpoints\":" + std::to_string(g.bp_count));
 	} else if(cmd == "breaks") {
 		std::string l = "[";
-		for(int i = 0; i < 65536; ++i) if(g.bp[i]) { if(l.size() > 1) l += ","; l += hex16(unsigned(i)); }
+		for(int i = 0; i < 65536; ++i) if(g.bp[i]) {
+			if(l.size() > 1) l += ",";
+			std::string t = hex16s(unsigned(i));
+			const std::string sy = sym_for(unsigned(i));
+			if(!sy.empty()) t += " " + sy;
+			if(g.bp_cond.count(uint16_t(i))) t += " [cond]";
+			l += quote(t);
+		}
 		reply(client, id, true, "\"breakpoints\":" + l + "]");
+	} else if(cmd == "watch") {
+		if(!m.num("addr", a)) { fail(client, id, "falta addr (numero o simbolo)"); return; }
+		zxdbg::WatchEntry w;
+		w.addr = uint16_t(a);
+		n = 1; m.num("len", n);
+		if(n < 1 || n > 65535) { fail(client, id, "len fuera de rango"); return; }
+		w.len = uint16_t(n);
+		const std::string t = m.has("type") ? m.get("type") : "w";
+		w.kind = 0;
+		if(t.find('r') != std::string::npos) w.kind |= 1;
+		if(t.find('w') != std::string::npos) w.kind |= 2;
+		if(!w.kind) { fail(client, id, "type: r, w o rw"); return; }
+		if(m.num("value", n)) { w.has_val = true; w.val = uint8_t(n); }
+		if(m.has("cond") && !parse_cond(m.get("cond"), w.cond)) { fail(client, id, "cond invalida"); return; }
+		g.watches.push_back(w);
+		rebuild_watch();
+		reply(client, id, true, "\"watches\":" + std::to_string(g.watches.size()));
+	} else if(cmd == "unwatch") {
+		if(m.get("addr") == "all") g.watches.clear();
+		else if(m.num("addr", a)) {
+			g.watches.erase(std::remove_if(g.watches.begin(), g.watches.end(), [&](const zxdbg::WatchEntry &w) { return w.addr == uint16_t(a); }), g.watches.end());
+		} else { fail(client, id, "falta addr (o \"all\")"); return; }
+		rebuild_watch();
+		reply(client, id, true, "\"watches\":" + std::to_string(g.watches.size()));
+	} else if(cmd == "watches") {
+		std::string l = "[";
+		for(const auto &w : g.watches) {
+			if(l.size() > 1) l += ",";
+			char b[96];
+			snprintf(b, sizeof b, "{\"len\":%u,\"type\":\"%s%s\"", w.len, (w.kind & 1) ? "r" : "", (w.kind & 2) ? "w" : "");
+			l += std::string(b) + "," + addr_fields("addr", w.addr) + "}";
+		}
+		reply(client, id, true, "\"watches\":" + l + "]");
+	} else if(cmd == "history") {
+		n = 32; m.num("n", n);
+		n = std::min<long long>(std::min<long long>(n, 4096), g.hcount);
+		reply(client, id, true, "\"history\":" + history_json(unsigned(n)) + ",\"recorded\":" + std::to_string(g.hcount));
+	} else if(cmd == "catch") {
+		const std::string on = m.get("on");
+		g.catch_reset = on.find("reset") != std::string::npos || on == "all";
+		g.catch_nmi = on.find("nmi") != std::string::npos || on == "all";
+		g.catch_dihalt = on.find("dihalt") != std::string::npos || on == "all";
+		g.catch_rom = on.find("rom") != std::string::npos;
+		g.catch_any = g.catch_reset || g.catch_nmi || g.catch_dihalt || g.catch_rom;
+		std::string l;
+		auto add = [&](bool f, const char *nm) { if(f) { if(!l.empty()) l += ","; l += nm; } };
+		add(g.catch_reset, "reset"); add(g.catch_nmi, "nmi"); add(g.catch_rom, "rom"); add(g.catch_dihalt, "dihalt");
+		reply(client, id, true, "\"catch\":" + quote(l));
+	} else if(cmd == "crash") {
+		if(!g.stopped) { fail(client, id, "la maquina no esta detenida"); return; }
+		std::string st = "[";
+		for(int i = 0; i < 8; ++i) {
+			const uint16_t at = uint16_t(g.regs.sp + i * 2);
+			const unsigned w = g.t.peek(g.t.ctx, at) | (unsigned(g.t.peek(g.t.ctx, uint16_t(at + 1))) << 8);
+			if(i) st += ",";
+			st += quote(hex16s(w) + (sym_for(w).empty() ? "" : " " + sym_for(w)));
+		}
+		reply(client, id, true, state_fields() + ",\"regs\":" + regs_json(g.regs) + ",\"history\":" +
+			history_json(std::min<unsigned>(24, g.hcount)) + ",\"stack\":" + st + "]");
+	} else if(cmd == "load_map") {
+		const int cnt = load_map(m.get("path"));
+		if(cnt < 0) { fail(client, id, "no se pudo abrir el .map"); return; }
+		reply(client, id, true, "\"symbols\":" + std::to_string(cnt));
+	} else if(cmd == "sym") {
+		const std::string q = m.get("q");
+		if(q.empty()) { fail(client, id, "falta q (simbolo o direccion)"); return; }
+		if(!parse_value(q, a)) { fail(client, id, "simbolo desconocido: " + q); return; }
+		const Sym *sy = nearest_sym(unsigned(a & 0xffff));
+		reply(client, id, true, addr_fields("addr", unsigned(a & 0xffff)) + (sy ? ",\"src\":" + quote(sy->src) : std::string()));
+	} else if(cmd == "symbols") {
+		const std::string flt = m.get("filter");
+		n = 100; m.num("limit", n);
+		std::string l = "[";
+		long long cnt = 0;
+		for(const auto &sy : g_syms) {
+			if(!flt.empty()) {
+				std::string a2 = sy.name, b2 = flt;
+				for(auto &ch : a2) ch = char(tolower((unsigned char)ch));
+				for(auto &ch : b2) ch = char(tolower((unsigned char)ch));
+				if(a2.find(b2) == std::string::npos) continue;
+			}
+			if(cnt++ >= n) break;
+			if(l.size() > 1) l += ",";
+			l += quote(hex16s(sy.addr) + " " + sy.name);
+		}
+		reply(client, id, true, "\"symbols\":" + l + "],\"total\":" + std::to_string(g_syms.size()));
+	} else if(cmd == "get") {
+		if(!m.num("addr", a)) { fail(client, id, "falta addr (numero o simbolo)"); return; }
+		n = 1; m.num("len", n);
+		if(n < 1 || n > 4) { fail(client, id, "len 1-4 (usa mem para mas)"); return; }
+		unsigned long long v = 0;
+		for(long long i = n - 1; i >= 0; --i) v = (v << 8) | g.t.peek(g.t.ctx, uint16_t(a + i));
+		reply(client, id, true, addr_fields("addr", unsigned(a & 0xffff)) + ",\"value\":" + std::to_string(v));
 	} else if(cmd == "reset") {
 		zxdbg::drain();
 		g_pending.clear();
@@ -374,6 +651,8 @@ int start(int port) {
 	S->listen_fd = fd;
 	S->port = ntohs(addr.sin_port);
 	S->th = std::thread(serve, S);
+	zxdbg::hist_init(1u << 16);
+	zxdbg::g.hist_on = true;
 	zxdbg::g.armed = true;
 	return S->port;
 }
@@ -381,6 +660,9 @@ int start(int port) {
 void stop() {
 	if(!S) return;
 	zxdbg::g.armed = false;
+	zxdbg::g.hist_on = false;
+	zxdbg::g.watch_any = false;
+	zxdbg::g.watches.clear();
 	zxdbg::drain();
 	S->quit = true;
 	S->th.join();

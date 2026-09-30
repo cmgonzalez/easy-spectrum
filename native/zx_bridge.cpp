@@ -759,7 +759,7 @@ int zx_get_audio(ZxHandle *h, int16_t *out, int max_samples) {
 }
 
 void zx_reset(ZxHandle *h) {
-	if(h && !h->next) zxdbg::drain();
+	if(h && !h->next) { zxdbg::drain(); zxdbg::g.last_start_pc = -1; zxdbg::g.prefix = 0; }
 	if(h && h->next) {
 		std::string err;
 		h->next->load_nex(h->next_file.data(), h->next_file.size(), err);

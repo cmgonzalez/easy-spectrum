@@ -1,4 +1,4 @@
-# PDP — Prisma Debug Protocol (fase 1)
+# PDP — Prisma Debug Protocol (fases 1 y 2)
 
 Depurador del core CLK (Spectrum 16K–+3) para juegos PRISMA. JSON por línea sobre TCP,
 solo `127.0.0.1`. Un objeto por línea; cada petición lleva `id` y `cmd`; la respuesta repite el `id`
@@ -20,6 +20,32 @@ Desde C: `zx_pdp_start(h, port)` / `zx_pdp_stop(h)` (zx_bridge.h).
 | `break` / `unbreak` / `breaks` | `addr` (`"all"` en unbreak) | |
 | `reset` | | |
 
+### Fase 2: símbolos, condiciones, watchpoints, historial, caídas
+| cmd | parámetros | respuesta |
+|---|---|---|
+| `load_map` | `path` (`build/game.map` de z88dk; solo entradas `addr`) | `symbols` |
+| `sym` | `q` = símbolo o dirección | `addr`, `addr_sym` (`_main+0x3`), `src` (`archivo.c:línea` del símbolo) |
+| `symbols` | `filter`, `limit` | lista `"0xADDR nombre"` |
+| `get` | `addr`, `len` (1-4) | `value` (little endian) |
+| `watch` | `addr`, `len`, `type` (`r`/`w`/`rw`), `value` (solo escrituras de ese valor), `cond` | |
+| `unwatch` / `watches` | `addr` o `"all"` | |
+| `history` | `n` (≤4096) | últimas instrucciones, la más antigua primero, con símbolo |
+| `catch` | `on`: `reset,nmi,rom,dihalt` (`all` = todo salvo `rom`; `none`) | |
+| `crash` | (detenida) | estado + `regs` + `history`(24) + `stack`(8 palabras) |
+
+- **Símbolos** valen en cualquier dirección: `"addr":"_main+3"` (con o sin `_`). Las respuestas llevan
+  `pc_sym`, `addr_sym`, `from_sym`.
+- **`cond`** (en `break` y `watch`): `reg OP valor` o `[dir]`/`[dir]w` (byte/palabra) `OP valor`;
+  OP = `== != < > <= >= &`; regs `pc sp af bc de hl ix iy a f b c d e h l i r iff1 iff2 im`.
+  Ej.: `a==10`, `[game_key]!=0`, `hl&0x8000`.
+- **Watch**: para con el acceso ya hecho y a mitad de instrucción; `pc` = inicio de la instrucción que
+  accedió (los registros de `regs` pueden estar a medias). Stop con `reason:"watch"`, `addr`, `value`, `access`.
+- **Caídas** (`reason:"crash"`, `detail`, `from` = instrucción anterior): `reset` = entrar en `$0000` desde
+  RAM; `nmi` = `$0066`; `rom` = cualquier RAM→ROM salvo `$0038` (ruidoso: los juegos llaman a la ROM);
+  `dihalt` = HALT con interrupciones apagadas (bloqueo seguro). El último elemento de `history` es la
+  propia búsqueda que paró (p. ej. `0x0000`).
+- El historial (64K instrucciones, solo PCs) se graba siempre que el servidor está activo.
+
 Evento asíncrono a todos los clientes al detenerse: `{"event":"stopped","reason":...,"pc":...}`.
 `reason`: `pause`, `breakpoint`, `step`, `until`. `next` salta CALL/RST/HALT/bloques (LDIR…).
 
@@ -36,6 +62,5 @@ Evento asíncrono a todos los clientes al detenerse: `{"event":"stopped","reason
   solo mueve bytes.
 
 ## Pendiente (fases siguientes)
-Símbolos (`.map`/`.lst`), historial de PC y detección de caída, watchpoints, condiciones, bancos
-explícitos, perfilador, `frame-log`, input, `setreg`, ZX Spectrum Next, Android (no compilado aún),
-activar desde la app de Flutter.
+Líneas C (`.lst`), bancos explícitos (`$7FFD`), perfilador, `frame-log`, input, `setreg`,
+ZX Spectrum Next, Android (no compilado aún), activar desde la app de Flutter.

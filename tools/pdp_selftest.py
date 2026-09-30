@@ -91,6 +91,32 @@ def main():
         r = c.cmd("next", wait=True)
         check(hx(r["pc"]) == 0x8009 and r["reason"] == "until", "next sobre CALL -> 8009: " + str(r))
         c.cmd("unbreak", addr="all")
+        # --- fase 2: simbolos, condiciones, watchpoints, historial
+        mp = os.path.join(os.environ.get("TEMP", "."), "pdp_test.map")
+        open(mp, "w").write("\n".join([
+            "_main = $8000 ; addr, public, , t_c, code_compiler, t.c:1",
+            "_sub = $8010 ; addr, public, , t_c, code_compiler, t.c:9",
+            "_var = $9000 ; addr, public, , t_c, bss_compiler, t.c:2",
+            "CRT_ORG = $5C20 ; const, local, , crt, , crt.m4:1", ""]))
+        r = c.cmd("load_map", path=mp); check(r["symbols"] == 3, "load_map (solo addr): " + str(r.get("symbols")))
+        r = c.cmd("sym", q="0x8004"); check(r["addr_sym"] == "_main+0x4" and r["src"] == "t.c:1", "sym inversa: " + str(r))
+        r = c.cmd("sym", q="var"); check(r["addr"] == "0x9000", "sym por nombre sin _")
+        r = c.cmd("break", addr="_main+3", cond="a==10"); check(r["ok"], "break con simbolo y cond")
+        r = c.cmd("resume", wait=True)
+        check(r["reason"] == "breakpoint" and hx(c.cmd("regs")["regs"]["af"]) >> 8 == 10, "cond a==10: " + str(r))
+        check(r.get("pc_sym") == "_main+0x3", "pc_sym en el estado")
+        c.cmd("unbreak", addr="all")
+        r = c.cmd("watch", addr="_var", type="w", cond="a==40"); check(r["ok"], "watch con cond")
+        r = c.cmd("resume", wait=True)
+        check(r["reason"] == "watch" and r["access"] == "write" and r["addr"] == "0x9000" and r["value"] == 40 and r["pc"] == "0x8003",
+              "watch write a 9000 con A==40: " + str(r))
+        h = c.cmd("history", n=3)["history"]
+        check(len(h) == 3 and h[-1].startswith("0x8003"), "history: " + str(h))
+        c.cmd("unwatch", addr="all")
+        r = c.cmd("watch", addr="_var", type="r")
+        c.cmd("unwatch", addr="all")
+        r = c.cmd("get", addr="_var"); check(r["value"] == 40, "get _var = 40")
+        c.cmd("unbreak", addr="all")
         r = c.cmd("poke", addr="0x9100", data="DEADBEEF")
         check(r["written"] == 4, "poke")
         r = c.cmd("mem", addr="0x9100", len=4)
@@ -111,8 +137,41 @@ def main():
         check(r["state"] == "running", "tras reset corre: " + str(r))
     finally:
         host.kill()
-    print("\n" + ("TODO OK" if not bad else "%d FALLOS" % bad))
-    sys.exit(1 if bad else 0)
+
+
+def crash_test():
+    """Programa que salta a 0 (reset): catch + crash (desde, historial, pila)."""
+    sna = os.path.join(os.environ.get("TEMP", "."), "pdp_crash.sna")
+    ram = bytearray(49152)
+    code = bytes([0x18, 0xFE, 0x3E, 0x07, 0xC3, 0x00, 0x00])    # 8000 JR $ ; 8002 LD A,7 ; 8004 JP 0
+    ram[0x8000 - 0x4000:0x8000 - 0x4000 + len(code)] = code
+    sp = 0xFE00
+    ram[sp - 0x4000:sp - 0x4000 + 6] = bytes([0x00, 0x80, 0x34, 0x12, 0x78, 0x56])   # PC, y datos en la pila
+    hdr = bytearray(27)
+    hdr[23:25] = struct.pack("<H", sp)
+    hdr[25] = 1
+    open(sna, "wb").write(bytes(hdr) + bytes(ram))
+    host = subprocess.Popen([sys.executable, os.path.join(HERE, "pdp_host.py"), sna, "--port", str(PORT + 1), "--seconds", "30"],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    host.stdout.readline()
+    try:
+        c = Pdp(PORT + 1)
+        c.cmd("catch", on="reset")
+        c.cmd("poke", addr="0x8000", data="0000")   # libera el JR $: cae por LD A,7 y JP 0
+        time.sleep(0.5)
+        r = c.cmd("status")
+        check(r["state"] == "stopped" and r["reason"] == "crash" and r["detail"] == "reset", "crash reset detectado: " + str(r))
+        check(r["pc"] == "0x0000" and r["from"] == "0x8004", "desde JP 0 en 8004")
+        r = c.cmd("crash")
+        check(r["history"][-2].startswith("0x8004") and r["history"][-3].startswith("0x8002"),
+              "historial previo al crash: " + str(r["history"][-3:]))
+        check(r["regs"]["af"].startswith("0x07"), "A=7 tras LD A,7")
+        check(len(r["stack"]) == 8 and r["stack"][0] == "0x1234", "volcado de pila: " + str(r["stack"][:2]))
+    finally:
+        host.kill()
 
 
 main()
+crash_test()
+print("\n" + ("TODO OK" if not bad else "%d FALLOS" % bad))
+sys.exit(1 if bad else 0)

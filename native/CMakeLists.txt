@@ -138,7 +138,7 @@ zx_patch(pdp-detach
     "\t~ConcreteMachine() {\n\t\tzxdbg::detach(this);\n\t\taudio_queue_.lock_flush();\n")
 zx_patch(pdp-hook
     "\t\treturn HalfCycles(0);\n\t}\n\nprivate:\n\tvoid advance(const HalfCycles duration) {\n"
-    "\t\tif(zxdbg::g.armed && cycle.operation == PartialMachineCycle::ReadOpcode) {\n\t\t\tconst int64_t d = zxdbg::on_fetch(address, *cycle.value);\n\t\t\tif(d) return HalfCycles(d);\n\t\t}\n\t\treturn HalfCycles(0);\n\t}\n\n${PDP_METHODS}private:\n\tvoid advance(const HalfCycles duration) {\n")
+    "\t\tif(zxdbg::g.armed) {\n\t\t\tif(cycle.operation == PartialMachineCycle::ReadOpcode) {\n\t\t\t\tconst int64_t d = zxdbg::on_fetch(address, *cycle.value);\n\t\t\t\tif(d) return HalfCycles(d);\n\t\t\t} else if(zxdbg::g.watch_any && (cycle.operation == PartialMachineCycle::Read || cycle.operation == PartialMachineCycle::Write)) {\n\t\t\t\tconst int64_t d = zxdbg::on_mem(address, *cycle.value, cycle.operation == PartialMachineCycle::Write);\n\t\t\t\tif(d) return HalfCycles(d);\n\t\t\t}\n\t\t}\n\t\treturn HalfCycles(0);\n\t}\n\n${PDP_METHODS}private:\n\tvoid advance(const HalfCycles duration) {\n")
 
 file(WRITE "${ZX_PATCHED}" "${ZX_TEXT}")
 
