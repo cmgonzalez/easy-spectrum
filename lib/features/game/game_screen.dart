@@ -114,6 +114,7 @@ class _GameScreenState extends State<GameScreen>
     if (widget.mediaPath.isNotEmpty) {
       _wantCapture = await GameThumbnail.needsCapture(widget.mediaPath);
     }
+    _zx.setGigascreen(_settings.gigascreen);
     await _audio.start();
     if (!mounted) return;
     setState(() => _started = true);
@@ -282,6 +283,7 @@ class _GameScreenState extends State<GameScreen>
     if (!mounted) return;
     s.keepScreenOn ? WakelockPlus.enable() : WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _zx.setGigascreen(s.gigascreen);
     setState(() {
       _settings = s;
       _pad = pad;

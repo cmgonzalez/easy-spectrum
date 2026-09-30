@@ -61,6 +61,7 @@ class ZxBridge {
     _setQuick = lib.lookupFunction<_IntArgN, _IntArg>('zx_set_quickload');
     _setSpeed = lib.lookupFunction<_SpeedN, _Speed>('zx_set_speed');
     _isTurbo = lib.lookupFunction<_IntRetN, _IntRet>('zx_is_turbo');
+    _setGiga = lib.lookupFunction<_IntArgN, _IntArg>('zx_set_gigascreen');
   }
 
   static final ZxBridge instance = ZxBridge._();
@@ -81,6 +82,7 @@ class ZxBridge {
   late final _IntArg _setQuick;
   late final _Speed _setSpeed;
   late final _IntRet _isTurbo;
+  late final _IntArg _setGiga;
 
   Pointer<Void> _h = nullptr;
   Pointer<Int16>? _audioBuf;
@@ -213,6 +215,11 @@ class ZxBridge {
 
   /// true mientras la cinta carga en turbo (emulación acelerada y sin sonido).
   bool get turbo => isRunning && _isTurbo(_h) != 0;
+
+  /// Gigascreen: cada frame se mezcla con el anterior (dos pantallas alternadas = más colores).
+  void setGigascreen(bool enabled) {
+    if (isRunning) _setGiga(_h, enabled ? 1 : 0);
+  }
 
   void setQuickLoad(bool enabled) {
     if (isRunning) _setQuick(_h, enabled ? 1 : 0);

@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <memory>
@@ -97,6 +98,23 @@ public:
 		if(!drawing) frame_clean_ = false;
 	}
 
+	/// Gigascreen: cada frame publicado es la mezcla del actual con el anterior (los
+	/// programas alternan dos pantallas a 50 Hz y el ojo ve el promedio). Se mezcla en luz
+	/// lineal, como el parpadeo real: negro + blanco = gris claro, no gris medio.
+	void set_gigascreen(bool enabled) {
+		gigascreen_ = enabled;
+		prev_valid_ = false;
+		if(enabled && !gamma_ready_) {
+			for(int i = 0; i < 256; i++) {
+				to_linear_[i] = uint16_t(std::lround(std::pow(i / 255.0, 2.2) * 4095.0));
+			}
+			for(int i = 0; i < 4096; i++) {
+				to_srgb_[i] = uint8_t(std::lround(std::pow(i / 4095.0, 1 / 2.2) * 255.0));
+			}
+			gamma_ready_ = true;
+		}
+	}
+
 	void end_scan() override {
 		if(!drawing_ || !data_ptr_ || !data_length_) return;
 		const auto &p0 = scan_.end_points[0];
@@ -150,7 +168,15 @@ public:
 				if(!frame_clean_) break;
 				{
 					std::lock_guard lock(fb_mutex_);
-					front_ = work_;
+					if(gigascreen_ && prev_valid_) {
+						blend_into_front();
+					} else {
+						front_ = work_;
+					}
+				}
+				if(gigascreen_) {
+					prev_ = work_;
+					prev_valid_ = true;
 				}
 				++frames_;
 				// Ajustar la línea superior del papel (estable tras el primer frame).
@@ -183,6 +209,22 @@ public:
 	}
 
 private:
+	void blend_into_front() {
+		for(size_t i = 0; i < work_.size(); i++) {
+			const uint32_t a = work_[i], b = prev_[i];
+			if(a == b) {
+				front_[i] = a;
+				continue;
+			}
+			uint32_t out = 0xff000000u;
+			for(int shift = 0; shift < 24; shift += 8) {
+				const int la = to_linear_[(a >> shift) & 0xff], lb = to_linear_[(b >> shift) & 0xff];
+				out |= uint32_t(to_srgb_[(la + lb) >> 1]) << shift;
+			}
+			front_[i] = out;
+		}
+	}
+
 	uint32_t colour(int idx) const {
 		using T = Outputs::Display::InputDataType;
 		uint8_t r = 0, g = 0, b = 0;
@@ -222,8 +264,12 @@ private:
 	bool drawing_ = true;
 	bool frame_clean_ = false;	// se dibujó desde el último EndVerticalRetrace
 
-	std::array<uint32_t, FbW * FbH> work_{}, front_{}, snapshot_{};
+	std::array<uint32_t, FbW * FbH> work_{}, front_{}, snapshot_{}, prev_{};
 	std::mutex fb_mutex_;
+
+	bool gigascreen_ = false, prev_valid_ = false, gamma_ready_ = false;
+	std::array<uint16_t, 256> to_linear_{};
+	std::array<uint8_t, 4096> to_srgb_{};
 };
 
 // ---------------------------------------------------------------------------
@@ -647,6 +693,10 @@ void zx_set_quickload(ZxHandle *h, int enabled) {
 		zx->output = Configurable::Display::RGB;
 		h->configurable->set_options(options);
 	}
+}
+
+void zx_set_gigascreen(ZxHandle *h, int enabled) {
+	if(h) h->scan_target.set_gigascreen(enabled != 0);
 }
 
 void zx_set_speed(ZxHandle *h, double multiplier) {

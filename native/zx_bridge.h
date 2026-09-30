@@ -78,6 +78,9 @@ int  zx_get_tape_playing(ZxHandle* h);
  * más turbo de emulación mientras gira la cinta (cargadores propios, .tzx). */
 void zx_set_quickload(ZxHandle* h, int enabled);
 
+/* Gigascreen: 1 = cada frame se mezcla con el anterior (en luz lineal). Defecto 0. */
+void zx_set_gigascreen(ZxHandle* h, int enabled);
+
 /* Multiplicador de velocidad (1.0 = normal). */
 void zx_set_speed(ZxHandle* h, double multiplier);
 

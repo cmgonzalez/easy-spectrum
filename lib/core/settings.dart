@@ -12,6 +12,7 @@ class AppSettings {
   bool startWithKeyboard = false;
   bool onlineInfo = true;
   VideoMode videoMode = VideoMode.sharp;
+  bool gigascreen = false;
 
   static Future<AppSettings> load() async {
     final p = await SharedPreferences.getInstance();
@@ -28,6 +29,7 @@ class AppSettings {
     s.startWithKeyboard = p.getBool('start_keyboard') ?? false;
     s.onlineInfo = p.getBool('online_info') ?? true;
     s.videoMode = VideoMode.byName(p.getString('video_mode'));
+    s.gigascreen = p.getBool('gigascreen') ?? false;
     return s;
   }
 
@@ -41,5 +43,6 @@ class AppSettings {
     await p.setBool('start_keyboard', startWithKeyboard);
     await p.setBool('online_info', onlineInfo);
     await p.setString('video_mode', videoMode.name);
+    await p.setBool('gigascreen', gigascreen);
   }
 }

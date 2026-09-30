@@ -120,6 +120,7 @@ class _DesktopScreenState extends State<DesktopScreen>
       return;
     }
     _zx.setSpeed(_speed);
+    _zx.setGigascreen(_settings.gigascreen);
     setState(() => _media = source ?? path);
     if (_media.isNotEmpty) await _addRecent(_media);
     await windowManager.setTitle(
@@ -260,6 +261,12 @@ class _DesktopScreenState extends State<DesktopScreen>
 
   Future<void> _setVideo(VideoMode m) async {
     setState(() => _settings.videoMode = m);
+    await _settings.save();
+  }
+
+  Future<void> _setGigascreen(bool v) async {
+    setState(() => _settings.gigascreen = v);
+    _zx.setGigascreen(v);
     await _settings.save();
   }
 
@@ -441,6 +448,12 @@ class _DesktopScreenState extends State<DesktopScreen>
                 onChanged: (v) => _setVideo(v!),
                 child: Text(m.label(t)),
               ),
+            const Divider(height: 1),
+            CheckboxMenuButton(
+              value: _settings.gigascreen,
+              onChanged: (v) => _setGigascreen(v ?? false),
+              child: const Text('Gigascreen'),
+            ),
             const Divider(height: 1),
             SubmenuButton(
               menuChildren: [

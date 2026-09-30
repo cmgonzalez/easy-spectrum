@@ -206,6 +206,16 @@ el área de controles. La pantalla mide lo mismo en ambos modos.
   no es una sola imagen (se borraron `joystick_<n>.jpg`).
 Salto: `PadConfig.jump` = botón de color (1-3) que envía "arriba"; la cruceta deja de enviarlo.
 
+## Gigascreen (Ajustes › Pantalla, desactivado por defecto)
+
+`SoftScanTarget` publica cada frame mezclado con el anterior (`zx_set_gigascreen`, `AppSettings.gigascreen`).
+Mezcla en luz lineal (gamma 2,2 con tablas), no promedio sRGB: negro + blanco (215) = 157, como el
+parpadeo en un CRT. Es solo visual; se combina con cualquier modo de video. Verificado en Windows con
+un SNA 128K que alterna pantalla normal (negra) y sombra (blanca) en cada frame: sin Gigascreen
+0/215 alternando, con Gigascreen 157 fijo. Escritorio: menú Pantalla › Gigascreen.
+ULA+ **no** está (CLK tiene paleta fija de 16 colores y salida Red2Green2Blue2): habría que parchear
+Video.hpp (puertos BF3B/FF3B, paleta de 64, bloque PLTT de .szx).
+
 ## Modos de video (`lib/core/video_mode.dart`)
 
 Nítido (por defecto), Suave (bilineal), Bordes redondeados (ClipRRect), Monitor y TV CRT. Se eligen

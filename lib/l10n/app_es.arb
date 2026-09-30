@@ -153,5 +153,6 @@
   "keyMap": "Mapa de teclas",
   "menuHelp": "Ayuda",
   "dropHint": "Suelta el juego para cargarlo",
-  "keyMapText": "Letras, números, Enter y Espacio: las mismas teclas del Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nRetroceso = DELETE · Esc = BREAK\nSignos (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + su tecla\nFlechas = joystick elegido (o cursores con «Ninguno») · Alt o Tab = fuego\n\nF2 recargar · F3 abrir · F5 reiniciar · F6 cinta · F8 pausa · F11 pantalla completa\nDoble clic: pantalla completa · Arrastra un archivo a la ventana para cargarlo"
+  "keyMapText": "Letras, números, Enter y Espacio: las mismas teclas del Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nRetroceso = DELETE · Esc = BREAK\nSignos (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + su tecla\nFlechas = joystick elegido (o cursores con «Ninguno») · Alt o Tab = fuego\n\nF2 recargar · F3 abrir · F5 reiniciar · F6 cinta · F8 pausa · F11 pantalla completa\nDoble clic: pantalla completa · Arrastra un archivo a la ventana para cargarlo",
+  "gigascreenSubtitle": "Mezcla cada imagen con la anterior: más colores en los programas que alternan dos pantallas."
 }
