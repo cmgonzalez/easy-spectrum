@@ -82,6 +82,11 @@ void zx_set_quickload(ZxHandle* h, int enabled);
 /* Gigascreen: 1 = cada frame se mezcla con el anterior (en luz lineal). Defecto 0. */
 void zx_set_gigascreen(ZxHandle* h, int enabled);
 
+/* Depuracion PDP (Prisma Debug Protocol, doc/PDP.md): abre un servidor TCP en 127.0.0.1:<port>
+ * (0 = puerto libre). Devuelve el puerto, o -1 si falla. Solo una maquina a la vez. */
+int  zx_pdp_start(ZxHandle* h, int port);
+void zx_pdp_stop(ZxHandle* h);
+
 /* Multiplicador de velocidad (1.0 = normal). */
 void zx_set_speed(ZxHandle* h, double multiplier);
 

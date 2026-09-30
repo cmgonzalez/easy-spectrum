@@ -71,6 +71,13 @@ distribuirlas con emuladores. Se copian a `<appSupport>/roms` al primer arranque
 - Dart: ticks de hasta 100 ms se emulan completos (antes >100 ms se trataba como 20 ms → cámara
   lenta en teléfonos cargados); solo >0,5 s (pausa) se descarta.
 
+## Depurador PDP (Prisma Debug Protocol)
+
+Sustituye a ZRCP de ZEsarUX para depurar juegos PRISMA: servidor TCP en el bridge (`native/zx_pdp.cpp`,
+`zx_debug.h`, parche 4 de CMake). Protocolo, arquitectura y pendientes en `doc/PDP.md`.
+Host headless `tools/pdp_host.py`, cliente `tools/pdp.py`, autotest `tools/pdp_selftest.py` (verificado
+en Windows, 48K: breakpoints, step, next, mem, poke, reset). Fase 1 = solo CLK.
+
 ## Probar el core sin Flutter
 
 `tools/zxtest.cpp`: ejecutable que arranca la máquina, corre N segundos y vuelca `out.ppm`.

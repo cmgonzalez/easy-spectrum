@@ -11,6 +11,8 @@
 
 #include "zx_bridge.h"
 #include "next/next_machine.h"
+#include "zx_debug.h"
+#include "zx_pdp.h"
 
 #include "Machines/Sinclair/ZXSpectrum/ZXSpectrum.hpp"
 #include "Machines/Sinclair/Keyboard/Keyboard.hpp"
@@ -449,6 +451,7 @@ struct ZxHandle {
 	// detenga (menús de juegos multicarga que leen el teclado con la cinta a medias).
 	bool turbo_suppressed = false;
 	double emulated = 0.0;	// segundos emulados desde zx_create
+	bool pdp = false;	// este handle es el dueno del servidor de depuracion (PDP)
 
 	// Secuencia de teclas con tiempos propios (el Typer de CLK va demasiado rápido
 	// para el debounce del ROM 48K: dos comillas seguidas se leen como una).
@@ -619,14 +622,34 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 
 void zx_destroy(ZxHandle *h) {
 	if(!h) return;
+	if(h->pdp) pdp::stop();	// antes de destruir la maquina: reanuda la CPU si estaba detenida
 	if(h->next) { delete h; return; }
 	if(h->speaker) h->speaker->set_delegate(nullptr);
 	h->machine.reset();
 	delete h;
 }
 
+static int run_machine(ZxHandle *h, double seconds);
+
+static pdp::Host pdp_host(ZxHandle *h) {
+	pdp::Host host;
+	host.supported = h->next == nullptr;
+	host.machine = h->next ? "next" : "zx";
+	host.reset = [h] { zx_reset(h); };
+	host.emulated_seconds = [h] { return zx_get_emulated_time(h); };
+	return host;
+}
+
 int zx_run(ZxHandle *h, double seconds) {
 	if(!h || seconds <= 0.0) return 0;
+	if(h->pdp) pdp::pump(pdp_host(h));
+	// Detenida por el depurador: no se debe llamar a run_for() (ver zx_debug.h).
+	const int frames = (!h->next && zxdbg::g.stopped) ? 0 : run_machine(h, seconds);
+	if(h->pdp) pdp::pump(pdp_host(h));
+	return frames;
+}
+
+static int run_machine(ZxHandle *h, double seconds) {
 	if(h->next) return h->next->run(seconds);
 	if(h->script_pos < h->script.size()) {
 		h->clock += seconds;
@@ -659,14 +682,14 @@ int zx_run(ZxHandle *h, double seconds) {
 		// dibujarlos todos es el grueso del costo); el último tramo sí dibuja. No se
 		// desconecta el ScanTarget: perdería la cuenta de líneas y la imagen saltaría.
 		h->scan_target.set_drawing(false);
-		while(done < limit && Clock::now() < deadline && h->machine->get_tape_is_playing()) {
+		while(done < limit && Clock::now() < deadline && h->machine->get_tape_is_playing() && !zxdbg::g.stopped) {
 			h->timed->run_for(Time::Seconds(Slice));
 			h->timed->flush_output(MachineTypes::TimedMachine::Output::All);
 			done += Slice;
 		}
 		h->scan_target.set_drawing(true);
 		const double tail = std::max(seconds - done, 0.041);	// ≥1 frame completo visible
-		h->timed->run_for(Time::Seconds(tail));
+		if(!zxdbg::g.stopped) h->timed->run_for(Time::Seconds(tail));
 		h->emulated += done + tail;
 	} else {
 		h->timed->run_for(Time::Seconds(seconds));
@@ -736,6 +759,7 @@ int zx_get_audio(ZxHandle *h, int16_t *out, int max_samples) {
 }
 
 void zx_reset(ZxHandle *h) {
+	if(h && !h->next) zxdbg::drain();
 	if(h && h->next) {
 		std::string err;
 		h->next->load_nex(h->next_file.data(), h->next_file.size(), err);
@@ -767,6 +791,17 @@ void zx_set_quickload(ZxHandle *h, int enabled) {
 
 void zx_set_gigascreen(ZxHandle *h, int enabled) {
 	if(h && !h->next) h->scan_target.set_gigascreen(enabled != 0);
+}
+
+int zx_pdp_start(ZxHandle *h, int port) {
+	if(!h) return -1;
+	const int p = pdp::start(port);
+	if(p > 0) h->pdp = true;
+	return p;
+}
+
+void zx_pdp_stop(ZxHandle *h) {
+	if(h && h->pdp) { pdp::stop(); h->pdp = false; }
 }
 
 void zx_set_speed(ZxHandle *h, double multiplier) {

@@ -117,6 +117,29 @@ zx_patch(ulaplus-reset
     "\t\tupdate_video_base();\n\t\tz80_.set_power_on_reset();\n"
     "\t\tupdate_video_base();\n\t\tvideo_->ulaplus_reset();\n\t\tz80_.set_power_on_reset();\n")
 
+# Métodos de depuración que se inyectan dentro de ConcreteMachine (native/clk_patches/pdp_methods.inc).
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/clk_patches/pdp_methods.inc" PDP_METHODS)
+string(REPLACE "
+
+" "
+" PDP_METHODS "${PDP_METHODS}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/clk_patches/pdp_methods.inc")
+# 4. PDP (depuración, ver zx_debug.h): hook en cada ReadOpcode + acceso a registros/memoria.
+#    La máquina se engancha al núcleo de depuración al primer run_for; con el servidor apagado
+#    el coste es un bool global por opcode.
+zx_patch(pdp-include
+    "#include \"ZXSpectrum.hpp\"\n"
+    "#include \"ZXSpectrum.hpp\"\n#include \"zx_debug.h\"\n")
+zx_patch(pdp-attach
+    "\tvoid run_for(const Cycles cycles) override {\n\t\tz80_.run_for(cycles);\n"
+    "\tvoid run_for(const Cycles cycles) override {\n\t\tif(zxdbg::g.t.ctx != this) debug_attach();\n\t\tz80_.run_for(cycles);\n")
+zx_patch(pdp-detach
+    "\t~ConcreteMachine() {\n\t\taudio_queue_.lock_flush();\n"
+    "\t~ConcreteMachine() {\n\t\tzxdbg::detach(this);\n\t\taudio_queue_.lock_flush();\n")
+zx_patch(pdp-hook
+    "\t\treturn HalfCycles(0);\n\t}\n\nprivate:\n\tvoid advance(const HalfCycles duration) {\n"
+    "\t\tif(zxdbg::g.armed && cycle.operation == PartialMachineCycle::ReadOpcode) {\n\t\t\tconst int64_t d = zxdbg::on_fetch(address, *cycle.value);\n\t\t\tif(d) return HalfCycles(d);\n\t\t}\n\t\treturn HalfCycles(0);\n\t}\n\n${PDP_METHODS}private:\n\tvoid advance(const HalfCycles duration) {\n")
+
 file(WRITE "${ZX_PATCHED}" "${ZX_TEXT}")
 
 # Video.hpp parcheado (ULAplus): salida Red8Green8Blue8 en vez de Red2Green2Blue2 (la
@@ -170,6 +193,7 @@ set(NEXT_SOURCES
 
 add_library(zx_bridge SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/zx_bridge.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/zx_pdp.cpp"
     ${NEXT_SOURCES}
     ${CLK_SOURCES}
 )
