@@ -30,6 +30,11 @@ int main(int argc, char **argv) {
 	nx::NextMachine m(48000);
 	m.set_rom(rom.data(), rom.size());
 	m.trace_regs = getenv("NX_TRACE") != nullptr;
+	{
+		std::string p = argv[1];
+		const size_t slash = p.find_last_of("/\\");
+		m.set_data_dir(getenv("NX_DIR") ? getenv("NX_DIR") : (slash == std::string::npos ? "." : p.substr(0, slash)));
+	}
 	std::string err;
 	if(!m.load_nex(nex.data(), nex.size(), err)) { printf("error: %s\n", err.c_str()); return 1; }
 

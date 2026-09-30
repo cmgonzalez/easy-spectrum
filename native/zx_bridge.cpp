@@ -34,6 +34,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <atomic>
@@ -459,6 +460,16 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 			auto h = std::make_unique<ZxHandle>();
 			h->next = std::make_unique<nx::NextMachine>(audio_freq);
 			h->next->set_rom(rom.data(), rom.size());
+			// Los archivos que pida el juego (esxDOS): carpeta "<juego>.files" si existe (la crea el
+			// importador de .zip); si no, la carpeta del propio .nex.
+			{
+				const size_t slash = path.find_last_of("/\\");
+				const size_t dot = path.find_last_of('.');
+				const std::string files_dir = path.substr(0, dot) + ".files";
+				std::error_code ec;
+				if(std::filesystem::is_directory(files_dir, ec)) h->next->set_data_dir(files_dir);
+				else h->next->set_data_dir(slash == std::string::npos ? std::string(".") : path.substr(0, slash));
+			}
 			std::string err;
 			if(!h->next->load_nex(nex.data(), nex.size(), err)) { g_last_error = err; return nullptr; }
 			h->next_file = std::move(nex);

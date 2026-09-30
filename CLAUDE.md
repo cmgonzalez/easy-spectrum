@@ -101,8 +101,14 @@ repos/mamedev/mame/contents/src/mame/sinclair/next/<archivo> -H "Accept: applica
   magenta; los juegos ponen `$14`=0 y esperan negro) y ROM 48K en `$0000-$3FFF`.
 - Bridge: `ZX_MODEL_NEXT`; `zx_create` detecta la extensión `.nex` (ignora el modelo) y usa `ZxHandle::next`.
   Teclado/joystick (Kempston `$1F`)/audio/reset funcionan igual; cinta y Gigascreen no aplican.
-- **Pendiente**: API esxDOS (`RST 8`) para los `.nex` que leen archivos (p. ej. Fred In Space); teclas
-  extendidas de la Next; ratón Kempston; CTC/UART/divMMC; blend de colores; miniatura sacada del `.nex`.
+- esxDOS (`next_esxdos.cpp`): `RST 8` (con la ROM en slot 0) se atiende en el host: F_OPEN/CLOSE/READ/WRITE/
+  SEEK/FGETPOS/FSTAT/GETCWD/CHDIR y M_GETSETDRV, contra una carpeta (sin salir de ella, sin distinguir
+  mayúsculas). El bridge usa `<juego>.files/` si existe, si no la carpeta del `.nex`. Al importar un `.zip`
+  con un `.nex` (móvil: `GameLibrary.import`; escritorio: `_openPath`) se extraen los demás archivos a
+  `<juego>.files/` (`GameLibrary.extractAssets`). Verificado con Fred In Space (assets/ en el zip).
+- Mezcla de capas `$15`=110/111 (suma / resta 5/8 de Layer 2 sobre ULA+tilemap, sprites encima) hecha.
+- **Pendiente**: teclas extendidas de la Next; ratón Kempston; CTC/UART/divMMC; modo texto del tilemap;
+  ULA+ (puertos BF3B/FF3B); 60 Hz; miniatura sacada del `.nex`.
 - Probar sin Flutter: `tools/nextest.cpp` (`clang++ -std=c++17 -O2 tools/nextest.cpp native/next/*.cpp`;
   `nextest juego.nex <s> [out.ppm]`; env `NX_REGS`, `NX_PIX=x,y`, `NX_DUMP=addr,n`, `NX_TRACE`,
   `NX_KEYS="t:0xFFBB:1;..."`). `tools/nexgen.py` genera un `.nex` de prueba propio (L2 + sprites + tilemap +

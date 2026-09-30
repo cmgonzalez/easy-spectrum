@@ -322,6 +322,9 @@ void NextMachine::render_chunk(int row, int x0, int x1) {
 		{S, L, U}, {L, S, U}, {S, U, L}, {L, U, S}, {U, S, L}, {U, L, S},
 	};
 	int o = (nr_[0x15] >> 2) & 7;
+	// 110 / 111: Layer 2 se suma (o resta 5/8) al grupo ULA+tilemap; los sprites quedan encima.
+	const bool blend = o >= 6 && ((nr_[0x68] >> 5) & 3) != 1;
+	const bool blend_sub = o == 7;
 	if(o > 5) o = 0;
 	const uint8_t *ord = orders[o];
 	const uint32_t *lut = rgba_lut();
@@ -344,7 +347,18 @@ void NextMachine::render_chunk(int row, int x0, int x1) {
 		layer[U] = g;
 
 		int16_t c = -1;
-		if(layer[L] >= 0 && prio) c = layer[L];
+		if(blend) {
+			if(layer[S] >= 0) c = layer[S];
+			else if(layer[U] >= 0 && layer[L] >= 0) {
+				int r = 0;
+				for(int shift = 0; shift <= 6; shift += 3) {
+					int v = ((layer[U] >> shift) & 7) + ((layer[L] >> shift) & 7);
+					if(blend_sub) v -= 5;
+					r |= std::clamp(v, 0, 7) << shift;
+				}
+				c = int16_t(r);
+			} else c = layer[U] >= 0 ? layer[U] : layer[L];
+		} else if(layer[L] >= 0 && prio) c = layer[L];
 		else {
 			for(int i = 0; i < 3; ++i)
 				if(layer[ord[i]] >= 0) { c = layer[ord[i]]; break; }

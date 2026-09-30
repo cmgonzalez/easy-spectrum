@@ -5,6 +5,7 @@
 #include "z80n.h"
 
 #include <cstddef>
+#include <cstdio>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -37,6 +38,10 @@ struct Ay {
 class NextMachine final : public Z80Bus {
 public:
 	explicit NextMachine(int audio_rate);
+	~NextMachine();
+
+	// Carpeta del host que hace de tarjeta SD para las llamadas esxDOS (RST 8). Vacía = sin archivos.
+	void set_data_dir(const std::string &dir);
 
 	// ROM de 16K (48K BASIC): la Next sin NextZXOS la mapea en $0000-$3FFF.
 	bool set_rom(const uint8_t *data, size_t size);
@@ -92,6 +97,13 @@ private:
 	void remap();
 	uint8_t *page(int p) { return ram_.data() + size_t(p & 0xFF) * 0x2000; }
 	uint8_t *bank16(int b) { return ram_.data() + size_t(b & 0x7F) * 0x4000; }
+
+	// --- esxDOS ---
+	std::string data_dir_, esx_cwd_;
+	std::vector<FILE *> esx_files_ = std::vector<FILE *>(16, nullptr);
+	bool esx_call();
+	uint16_t read16(uint16_t a) { return uint16_t(read(a) | (read(uint16_t(a + 1)) << 8)); }
+	int cpu_step();
 
 	// --- CPU ---
 	Z80N cpu_;

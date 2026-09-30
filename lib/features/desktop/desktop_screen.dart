@@ -15,6 +15,7 @@ import '../../core/emulator/zx_bridge.dart';
 import '../../core/emulator/zx_types.dart';
 import '../../core/l10n.dart';
 import '../../core/settings.dart';
+import '../../core/storage/game_library.dart';
 import '../../core/theme/easy_theme.dart';
 import '../../core/video_mode.dart';
 import '../about/about_screen.dart';
@@ -232,6 +233,9 @@ class _DesktopScreenState extends State<DesktopScreen>
       await dir.create(recursive: true);
       final out = File('${dir.path}${Platform.pathSeparator}${_baseName(entry.name)}');
       await out.writeAsBytes(entry.content, flush: true);
+      if (_ext(entry.name) == 'nex') {
+        await GameLibrary.extractAssets(archive, entry, Directory(GameLibrary.assetsDirFor(out.path)));
+      }
       media = out.path;
     } else if (!zxMediaExtensions.contains(ext)) {
       _showError(t.unsupportedFormat(ext));

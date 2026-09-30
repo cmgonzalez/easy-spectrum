@@ -165,6 +165,7 @@ set(NEXT_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/next/z80n.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/next/next_machine.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/next/next_video.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/next/next_esxdos.cpp"
 )
 
 add_library(zx_bridge SHARED

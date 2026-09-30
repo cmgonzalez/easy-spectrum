@@ -128,6 +128,19 @@ NextMachine::NextMachine(int audio_rate)
 	reset();
 }
 
+NextMachine::~NextMachine() {
+	for(FILE *f : esx_files_) if(f) std::fclose(f);
+}
+
+int NextMachine::cpu_step() {
+	if(cpu_.PC == 0x0008 && mmu_[0] == 0xFF) {
+		esx_call();
+		return 10 * ticks_per_t();
+	}
+	++instr_count_;
+	return cpu_.step() * ticks_per_t();
+}
+
 bool NextMachine::set_rom(const uint8_t *data, size_t size) {
 	if(size < 0x4000) return false;
 	std::memcpy(rom_, data, 0x4000);
@@ -159,6 +172,7 @@ void NextMachine::set_defaults() {
 }
 
 void NextMachine::reset() {
+	for(FILE *&f : esx_files_) { if(f) std::fclose(f); f = nullptr; }
 	std::fill(ram_.begin(), ram_.end(), 0);
 	set_defaults();
 	for(int k = 0; k < 8; ++k)
@@ -797,13 +811,11 @@ void NextMachine::run_line() {
 				if(cost < 1) cost = 1;
 				dma_.next_ok -= cost;
 			} else {
-				cost = cpu_.step() * ticks_per_t();
-				++instr_count_;
+				cost = cpu_step();
 				dma_.next_ok -= cost;
 			}
 		} else {
-			cost = cpu_.step() * ticks_per_t();
-			++instr_count_;
+			cost = cpu_step();
 		}
 		budget_ -= cost;
 		if(int_pulse_ticks_ > 0 && !int_hw_mode_) {

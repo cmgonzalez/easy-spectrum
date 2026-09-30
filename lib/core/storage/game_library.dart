@@ -40,9 +40,11 @@ class GameLibrary {
   static Future<String> import(String fileName, Uint8List bytes) async {
     var name = fileName;
     var data = bytes;
+    Archive? archive;
+    ArchiveFile? entry;
     if (extensionOf(name) == 'zip') {
-      final archive = ZipDecoder().decodeBytes(bytes);
-      final entry = archive.files.where((f) => f.isFile).firstWhere(
+      archive = ZipDecoder().decodeBytes(bytes);
+      entry = archive.files.where((f) => f.isFile).firstWhere(
             (f) => zxMediaExtensions.contains(extensionOf(f.name)),
             orElse: () => throw const GameImportException(null),
           );
@@ -62,13 +64,49 @@ class GameLibrary {
     final tmp = File('${file.path}.part');
     await tmp.writeAsBytes(data, flush: true);
     await tmp.rename(file.path);
+    // Un .nex puede leer archivos junto a él (esxDOS): se extraen a <juego>.files.
+    if (archive != null && entry != null && extensionOf(name) == 'nex') {
+      await extractAssets(archive, entry, Directory(assetsDirFor(file.path)));
+    }
     return file.path;
+  }
+
+  /// Carpeta con los archivos que acompañan a un .nex (el núcleo la busca sola).
+  static String assetsDirFor(String gamePath) {
+    final dot = gamePath.lastIndexOf('.');
+    return '${dot < 0 ? gamePath : gamePath.substring(0, dot)}.files';
+  }
+
+  /// Extrae a [dest] los demás archivos del .zip que están junto a [game] (rutas relativas).
+  static Future<void> extractAssets(Archive archive, ArchiveFile game, Directory dest) async {
+    final slash = game.name.lastIndexOf('/');
+    final prefix = slash < 0 ? '' : game.name.substring(0, slash + 1);
+    if (await dest.exists()) await dest.delete(recursive: true);
+    var any = false;
+    for (final f in archive.files) {
+      if (!f.isFile || identical(f, game) || !f.name.startsWith(prefix)) continue;
+      final rel = f.name.substring(prefix.length);
+      final parts = rel.split('/');
+      if (rel.isEmpty ||
+          parts.any((p) => p == '..' || p == '__MACOSX' || p == '.DS_Store' || p.startsWith('._'))) {
+        continue;
+      }
+      final out = File('${dest.path}/$rel');
+      await out.parent.create(recursive: true);
+      await out.writeAsBytes(f.content, flush: true);
+      any = true;
+    }
+    if (!any && await dest.exists()) await dest.delete(recursive: true);
   }
 
   /// Quita un juego de la biblioteca con todo lo guardado sobre él.
   static Future<void> delete(String path) async {
     try {
       await File(path).delete();
+    } catch (_) {}
+    try {
+      final assets = Directory(assetsDirFor(path));
+      if (await assets.exists()) await assets.delete(recursive: true);
     } catch (_) {}
     await MediaDb.delete(path);
   }

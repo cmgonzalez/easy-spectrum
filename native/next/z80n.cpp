@@ -1,5 +1,7 @@
 #include "z80n.h"
 
+#include <algorithm>
+
 namespace nx {
 
 namespace {
@@ -307,7 +309,7 @@ void Z80N::exec_z80n(uint8_t op) {
 			F |= fH;
 			t_ += 3; break;
 		}
-		case 0x28: setDE(uint16_t(DE() << (B & 31))); break;	// BSLA DE,B
+		case 0x28: setDE(uint16_t(DE() << std::min(B & 31, 16))); break;	// BSLA DE,B
 		case 0x29: setDE(uint16_t(int16_t(DE()) >> (B & 31))); break;	// BSRA
 		case 0x2A: setDE(uint16_t(DE() >> (B & 31))); break;	// BSRL
 		case 0x2B: setDE(uint16_t(~(uint16_t(~DE()) >> (B & 31)))); break;	// BSRF
