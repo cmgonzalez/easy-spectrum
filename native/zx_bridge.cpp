@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -345,6 +346,32 @@ std::string lower_ext(const std::string &path) {
  * en orden ascendente, omitiendo 5, 2 y el paginado (5 bancos; 6 si el paginado
  * es el 2 o el 5, que entonces ya vino repetido dentro de los primeros 48K).
  */
+// CLK interpreta el campo de hardware de los .z80 v3 (cabecera de 54/55 bytes) con la tabla de
+// la v2: en la v3 el 128K es 4 (5/6 con IF1/MGT) y el 3 es "48K + MGT". Se corrige una copia
+// temporal junto al archivo y se vuelve a cargar.
+std::unique_ptr<Analyser::Static::Target> load_z80(const std::string &path) {
+	auto t = Storage::State::Z80::load(path);
+	if(t) return t;
+	std::vector<uint8_t> d;
+	if(!read_file(path, d) || d.size() < 35) return nullptr;
+	const unsigned bonus = d[30] | (d[31] << 8);
+	if(d[6] || d[7] || (bonus != 54 && bonus != 55)) return nullptr;
+	const uint8_t m = d[34];
+	if(m >= 4 && m <= 6) d[34] = 3;
+	else if(m == 3) d[34] = 0;
+	else if(m == 9) d[34] = 3;	// Pentagon 128
+	else return nullptr;
+	const std::string tmp = path + ".fix";
+	{
+		std::ofstream f(tmp, std::ios::binary);
+		f.write(reinterpret_cast<const char *>(d.data()), std::streamsize(d.size()));
+		if(!f) return nullptr;
+	}
+	t = Storage::State::Z80::load(tmp);
+	std::remove(tmp.c_str());
+	return t;
+}
+
 std::unique_ptr<Analyser::Static::Target> load_sna128(const std::string &path) {
 	using Target = Analyser::Static::ZXSpectrum::Target;
 	constexpr size_t Bank = 16 * 1024;
@@ -483,7 +510,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 		// Snapshots: el archivo define el modelo y el estado.
 		if(ext == "z80" || ext == "sna" || ext == "szx") {
 			std::unique_ptr<Analyser::Static::Target> t;
-			if(ext == "z80") t = Storage::State::Z80::load(path);
+			if(ext == "z80") t = load_z80(path);
 			else if(ext == "sna") {
 				t = Storage::State::SNA::load(path);
 				if(!t) t = load_sna128(path);
