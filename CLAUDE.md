@@ -284,7 +284,7 @@ con `window_manager`, audio con la misma `ZxAudio` que Android.
   si ya hay una ventana (marcada con la propiedad `EasySpectrum.MainWindow`), la nueva instancia le
   manda sus argumentos por `WM_COPYDATA` (rutas ya absolutas), la trae al frente y sale. El runner
   los pasa a Dart por el canal `cl.easysoft.easyspectrum/open_args` → `_onOpenArgs`.
-- **Instalador** (`installer/easy_spectrum.iss`, Inno Setup 6 — se usa el de `C:\prismain\Inno Setup 6`):
+- **Instalador** (`installer/easy_spectrum.iss`, Inno Setup 6 — se usa el de `C:\prisma\bin\Inno Setup 6`):
   `bash build-app.sh installer` → `EasySpectrum-Setup-<ver>-<code>.exe`. Por usuario sin UAC (con
   opción "todos los usuarios"; registro en HKA), runtime VC++ copiado junto al .exe, idiomas
   es/en/pt/it/ru. Tipos: siempre en "Abrir con" (.tap .tzx .z80 .sna .szx .dsk .csw y .zip); la tarea
