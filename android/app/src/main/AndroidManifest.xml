@@ -72,6 +72,8 @@
                 <data android:pathPattern=".*\\.szx"/>
                 <data android:pathPattern=".*\\.SZX"/>
                 <data android:pathPattern=".*\\.csw"/>
+                <data android:pathPattern=".*\\.nex"/>
+                <data android:pathPattern=".*\\.NEX"/>
                 <data android:pathPattern=".*\\.dsk"/>
                 <data android:pathPattern=".*\\.DSK"/>
             </intent-filter>

@@ -20,7 +20,7 @@ Base de estructura: `C:\dev\easygbemu` (mismo patrón FFI + Ticker + flutter_sol
 | Ads | google_mobile_ads (IDs de prueba) — banner home + interstitial al salir |
 | ABIs | arm64-v8a, x86_64 (emulador) |
 
-Modelos: 16K, 48K, 128K, +2, +2A, +3. Formatos: `.tap .tzx .csw .z80 .sna .szx .dsk` (+ `.zip`).
+Modelos: 16K, 48K, 128K, +2, +2A, +3 (+ ZX Spectrum Next solo para `.nex`, ver sección propia). Formatos: `.tap .tzx .csw .z80 .sna .szx .dsk .nex` (+ `.zip`).
 ROMs en `assets/roms/` (48.rom, 128.rom, plus2.rom, plus3.rom = p2a41) — Amstrad permite
 distribuirlas con emuladores. Se copian a `<appSupport>/roms` al primer arranque (el core las lee por ruta).
 
@@ -77,6 +77,37 @@ distribuirlas con emuladores. Se copian a `<appSupport>/roms` al primer arranque
 Compilar con el clang del NDK (target `x86_64-linux-android24` para el AVD, `aarch64` para el S24+),
 push a `/data/local/tmp/zx/` junto con las ROMs, y ejecutar `./zxtest juego.tap <modelo> <segundos>`.
 En Git Bash usar `MSYS_NO_PATHCONV=1` para que adb no reescriba las rutas `/data/...`.
+
+## ZX Spectrum Next (solo `.nex`, sin NextZXOS)
+
+Máquina **propia**, sin CLK, en `native/next/` (código nuestro: se puede mantener cerrado). Decisión de
+licencias: CLK no emula la Next; ZEsarUX/JNEXT son GPL y CSpect es cerrado → se escribió desde la
+documentación pública (wiki.specnext.dev) y **usando como referencia de consulta el driver BSD-3 de MAME**
+(`src/mame/sinclair/next/`, copia local ignorada en `tools/_ref_mame/`; bajar con `gh api
+repos/mamedev/mame/contents/src/mame/sinclair/next/<archivo> -H "Accept: application/vnd.github.raw"`).
+**No copiar código de emuladores GPL**. Sin NextZXOS no hay problema con su licencia ("The Next License").
+- `z80n.{h,cpp}`: Z80 + extensiones Z80N, T-states estándar sin contención. **Pasa `zexdoc` completo**
+  (`tools/z80test.cpp`, CP/M mínimo; el .com está en github.com/anotherlin/z80emu/testfiles).
+- `next_machine.{h,cpp}`: memoria (2 MB, MMU de 8 páginas de 8K, `$50-$57`), puertos, NextRegs, paletas,
+  zxnDMA (`$6B` exacto, `$0B` Zilog N+1), interrupciones (pulso de 32 T o IM2 por hardware), 3×AY + DAC +
+  beeper, cargador `.nex` (`load_nex`). Reloj en ticks de 28 MHz (1792 por línea, 312 líneas, 50 Hz).
+- `next_video.cpp`: ULA (estándar, Timex 1/hi-color/hi-res, LoRes, ULANext), Layer 2 (256×192, 320×256,
+  640×256), tilemap (40/80 col, sin modo texto), 128 sprites (ancla/relativos/4bpp/escala/rotación),
+  Copper (granularidad de 8 px), orden de capas `$15`. Se dibuja línea a línea directo a 320×256 RGBA
+  (mismo tamaño que el bridge de CLK). Sin mezcla de colores (`$15` = 110/111) ni modo texto del tilemap.
+- La línea `0` de la Next = primera línea de papel; INT de trama en la 248; coordenadas de sprites/tilemap
+  = píxel del framebuffer (papel en 32,32).
+- Al cargar un `.nex` se imita a NextZXOS: **`$4A` (color de reserva) = 0** (el core lo deja en `$E3`
+  magenta; los juegos ponen `$14`=0 y esperan negro) y ROM 48K en `$0000-$3FFF`.
+- Bridge: `ZX_MODEL_NEXT`; `zx_create` detecta la extensión `.nex` (ignora el modelo) y usa `ZxHandle::next`.
+  Teclado/joystick (Kempston `$1F`)/audio/reset funcionan igual; cinta y Gigascreen no aplican.
+- **Pendiente**: API esxDOS (`RST 8`) para los `.nex` que leen archivos (p. ej. Fred In Space); teclas
+  extendidas de la Next; ratón Kempston; CTC/UART/divMMC; blend de colores; miniatura sacada del `.nex`.
+- Probar sin Flutter: `tools/nextest.cpp` (`clang++ -std=c++17 -O2 tools/nextest.cpp native/next/*.cpp`;
+  `nextest juego.nex <s> [out.ppm]`; env `NX_REGS`, `NX_PIX=x,y`, `NX_DUMP=addr,n`, `NX_TRACE`,
+  `NX_KEYS="t:0xFFBB:1;..."`). `tools/nexgen.py` genera un `.nex` de prueba propio (L2 + sprites + tilemap +
+  Copper + DMA). Corre ×10-×15 tiempo real a 28 MHz en el PC. `.nex` reales de prueba (repos de GitHub:
+  JohnGreening/maze, robgmoran/DougieDo, serdjukdev/ZxNextStudio-TechDemo) no se incluyen en el repo.
 
 ---
 

@@ -16,5 +16,6 @@ String zxErrorText(AppLocalizations t, String code) => switch (code) {
       'unsupported_format' => t.errUnsupportedFormat,
       'machine_failed' => t.errMachineFailed,
       'open_failed' => t.errOpenFailed,
+      'bad_nex' => t.errBadNex,
       _ => code,
     };

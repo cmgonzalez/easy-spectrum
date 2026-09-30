@@ -98,4 +98,4 @@ enum JoyMapping {
 }
 
 /// Extensiones que acepta el emulador.
-const zxMediaExtensions = ['tap', 'tzx', 'csw', 'z80', 'sna', 'szx', 'dsk'];
+const zxMediaExtensions = ['tap', 'tzx', 'csw', 'z80', 'sna', 'szx', 'dsk', 'nex'];

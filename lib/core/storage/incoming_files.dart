@@ -45,6 +45,7 @@ class IncomingFiles {
     if (starts('ZXTape!')) return '$name.tzx';
     if (starts('PK\x03\x04')) return '$name.zip';
     if (starts('ZXST')) return '$name.szx';
+    if (starts('Next') && b.length >= 512) return '$name.nex';
     if (b.length == 49179 || b.length == 131103 || b.length == 147487) return '$name.sna';
     return name;
   }

@@ -33,6 +33,7 @@
   "errUnsupportedFormat": "Unsupported file format.",
   "errMachineFailed": "Could not start the machine.",
   "errOpenFailed": "Could not open the file.",
+  "errBadNex": "Not a valid ZX Spectrum Next (.nex) file.",
   "fire": "Fire",
   "space": "SPACE",
   "machine": "Machine",

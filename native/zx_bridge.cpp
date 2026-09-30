@@ -10,6 +10,7 @@
  */
 
 #include "zx_bridge.h"
+#include "next/next_machine.h"
 
 #include "Machines/Sinclair/ZXSpectrum/ZXSpectrum.hpp"
 #include "Machines/Sinclair/Keyboard/Keyboard.hpp"
@@ -399,6 +400,9 @@ std::unique_ptr<Analyser::Static::Target> load_sna128(const std::string &path) {
 // ---------------------------------------------------------------------------
 
 struct ZxHandle {
+	// ZX Spectrum Next (solo .nex): máquina propia; si está, `machine` queda vacío.
+	std::unique_ptr<nx::NextMachine> next;
+	std::vector<uint8_t> next_file;	// copia del .nex para reiniciar
 	std::unique_ptr<Sinclair::ZXSpectrum::Machine> machine;
 	MachineTypes::TimedMachine *timed = nullptr;
 	MachineTypes::KeyboardMachine *keyboard = nullptr;
@@ -447,6 +451,20 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 		const std::string dir = rom_dir ? rom_dir : "";
 		const std::string path = media_path ? media_path : "";
 		const std::string ext = lower_ext(path);
+
+		if(ext == "nex") {
+			std::vector<uint8_t> nex, rom;
+			if(!read_file(path, nex)) { g_last_error = "open_failed"; return nullptr; }
+			if(!read_file(dir + "/48.rom", rom) || rom.size() < 0x4000) { g_last_error = "missing_roms"; return nullptr; }
+			auto h = std::make_unique<ZxHandle>();
+			h->next = std::make_unique<nx::NextMachine>(audio_freq);
+			h->next->set_rom(rom.data(), rom.size());
+			std::string err;
+			if(!h->next->load_nex(nex.data(), nex.size(), err)) { g_last_error = err; return nullptr; }
+			h->next_file = std::move(nex);
+			LOGI("Next creada: %s", path.c_str());
+			return h.release();
+		}
 
 		std::unique_ptr<Target> target;
 		bool type_load = false;
@@ -563,6 +581,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 
 void zx_destroy(ZxHandle *h) {
 	if(!h) return;
+	if(h->next) { delete h; return; }
 	if(h->speaker) h->speaker->set_delegate(nullptr);
 	h->machine.reset();
 	delete h;
@@ -570,6 +589,7 @@ void zx_destroy(ZxHandle *h) {
 
 int zx_run(ZxHandle *h, double seconds) {
 	if(!h || seconds <= 0.0) return 0;
+	if(h->next) return h->next->run(seconds);
 	if(h->script_pos < h->script.size()) {
 		h->clock += seconds;
 		while(h->script_pos < h->script.size() && h->script[h->script_pos].at <= h->clock) {
@@ -619,35 +639,41 @@ int zx_run(ZxHandle *h, double seconds) {
 }
 
 double zx_get_emulated_time(ZxHandle *h) {
+	if(h && h->next) return h->next->emulated_seconds();
 	return h ? h->emulated : 0.0;
 }
 
 int zx_is_turbo(ZxHandle *h) {
+	if(h && h->next) return 0;
 	return (h && h->in_turbo) ? 1 : 0;
 }
 
 const uint8_t *zx_get_framebuffer(ZxHandle *h) {
+	if(h && h->next) return h->next->frame();
 	return h ? h->scan_target.front() : nullptr;
 }
 
 void zx_set_key(ZxHandle *h, int key, int pressed) {
+	if(h && h->next) { h->next->set_key(key, pressed != 0); return; }
 	if(!h || !h->keyboard) return;
 	if(pressed && h->in_turbo) h->turbo_suppressed = true;
 	h->keyboard->set_key_state(uint16_t(key), pressed != 0);
 }
 
 void zx_clear_keys(ZxHandle *h) {
+	if(h && h->next) { h->next->clear_keys(); return; }
 	if(h && h->keyboard) h->keyboard->clear_all_keys();
 }
 
 void zx_type(ZxHandle *h, const char *utf8) {
-	if(!h || !h->keyboard || !utf8) return;
+	if(!h || h->next || !h->keyboard || !utf8) return;
 	std::wstring w;
 	for(const char *p = utf8; *p; ++p) w.push_back(wchar_t(uint8_t(*p)));	// ASCII basta
 	h->keyboard->type_string(w);
 }
 
 void zx_set_joystick(ZxHandle *h, int mask) {
+	if(h && h->next) { h->next->set_joystick(mask); return; }
 	if(!h || !h->joysticks) return;
 	const auto &sticks = h->joysticks->get_joysticks();
 	if(sticks.empty()) return;
@@ -667,23 +693,29 @@ void zx_set_joystick(ZxHandle *h, int mask) {
 }
 
 int zx_get_audio(ZxHandle *h, int16_t *out, int max_samples) {
+	if(h && h->next) return out && max_samples > 0 ? h->next->drain_audio(out, max_samples) : 0;
 	return (h && out && max_samples > 0) ? h->audio.drain(out, max_samples) : 0;
 }
 
 void zx_reset(ZxHandle *h) {
+	if(h && h->next) {
+		std::string err;
+		h->next->load_nex(h->next_file.data(), h->next_file.size(), err);
+		return;
+	}
 	if(h && h->resettable) h->resettable->soft_reset();
 }
 
 void zx_set_tape_playing(ZxHandle *h, int playing) {
-	if(h) h->machine->set_tape_is_playing(playing != 0);
+	if(h && !h->next) h->machine->set_tape_is_playing(playing != 0);
 }
 
 int zx_get_tape_playing(ZxHandle *h) {
-	return (h && h->machine->get_tape_is_playing()) ? 1 : 0;
+	return (h && !h->next && h->machine->get_tape_is_playing()) ? 1 : 0;
 }
 
 void zx_set_quickload(ZxHandle *h, int enabled) {
-	if(!h) return;
+	if(!h || h->next) return;
 	h->turbo_load = enabled != 0;
 	if(!h->configurable) return;
 	auto options = h->configurable->get_options();
@@ -696,10 +728,11 @@ void zx_set_quickload(ZxHandle *h, int enabled) {
 }
 
 void zx_set_gigascreen(ZxHandle *h, int enabled) {
-	if(h) h->scan_target.set_gigascreen(enabled != 0);
+	if(h && !h->next) h->scan_target.set_gigascreen(enabled != 0);
 }
 
 void zx_set_speed(ZxHandle *h, double multiplier) {
+	if(h && h->next) { h->next->set_speed(multiplier); return; }
 	if(h) h->timed->set_speed_multiplier(multiplier);
 }
 

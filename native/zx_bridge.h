@@ -19,6 +19,7 @@ typedef struct ZxHandle ZxHandle;
 #define ZX_MODEL_PLUS2  3
 #define ZX_MODEL_PLUS2A 4
 #define ZX_MODEL_PLUS3  5
+#define ZX_MODEL_NEXT   6	/* ZX Spectrum Next: solo archivos .nex (máquina propia, sin CLK) */
 
 /* Joystick (Kempston + Sinclair a la vez) — bitmask de zx_set_joystick. */
 #define ZX_JOY_UP    (1u << 0)
@@ -31,14 +32,14 @@ typedef struct ZxHandle ZxHandle;
  * zx_create — crea la máquina.
  *   rom_dir:    carpeta con 48.rom, 128.rom, plus2.rom, plus3.rom.
  *   model:      ZX_MODEL_* (ignorado si media_path es un snapshot: manda el snapshot).
- *   media_path: .tap .tzx .csw .z80 .sna .szx .dsk — o NULL/"" para arrancar en BASIC.
+ *   media_path: .tap .tzx .csw .z80 .sna .szx .dsk .nex — o NULL/"" para arrancar en BASIC.
  *   audio_freq: tasa de salida (ej. 48000). Audio: s16le estéreo intercalado.
  * Devuelve NULL si falla (ROM ausente, archivo inválido). zx_last_error() da el motivo.
  */
 ZxHandle* zx_create(const char* rom_dir, int model, const char* media_path, int audio_freq);
 
 /* Código del último error de zx_create (estático, no liberar):
- * bad_snapshot, cpc_snapshot, unsupported_format, machine_failed, missing_roms, open_failed,
+ * bad_snapshot, cpc_snapshot, unsupported_format, machine_failed, missing_roms, open_failed, bad_nex,
  * o el texto de la excepción de CLK si no es ninguno de esos. */
 const char* zx_last_error(void);
 

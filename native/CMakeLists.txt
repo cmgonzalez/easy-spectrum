@@ -160,8 +160,16 @@ set_source_files_properties("${ZX_PATCHED}" PROPERTIES
     INCLUDE_DIRECTORIES "${CLK}/Machines/Sinclair/ZXSpectrum")
 list(APPEND CLK_SOURCES "${ZX_PATCHED}")
 
+# ZX Spectrum Next (solo .nex): máquina propia, sin CLK (ver next/next_machine.h).
+set(NEXT_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/next/z80n.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/next/next_machine.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/next/next_video.cpp"
+)
+
 add_library(zx_bridge SHARED
     "${CMAKE_CURRENT_SOURCE_DIR}/zx_bridge.cpp"
+    ${NEXT_SOURCES}
     ${CLK_SOURCES}
 )
 

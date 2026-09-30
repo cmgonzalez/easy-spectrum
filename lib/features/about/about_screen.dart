@@ -33,6 +33,7 @@ class AboutScreen extends StatelessWidget {
             title: t.formatsTitle,
             body: '${t.formatTapes}: .tap .tzx .csw\n'
                 'Snapshots: .z80 .sna .szx\n'
+                'ZX Spectrum Next: .nex\n'
                 '${t.formatDisks}: .dsk\n'
                 '${t.formatZip}',
           ),

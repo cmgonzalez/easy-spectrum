@@ -33,6 +33,7 @@
   "errUnsupportedFormat": "Formato de arquivo não suportado.",
   "errMachineFailed": "Não foi possível iniciar a máquina.",
   "errOpenFailed": "Não foi possível abrir o arquivo.",
+  "errBadNex": "Não é um arquivo .nex válido do ZX Spectrum Next.",
   "fire": "Fogo",
   "space": "ESPAÇO",
   "machine": "Máquina",

@@ -8,7 +8,7 @@
 ; - Runtime de VC++ copiado junto al .exe (despliegue local: no hace falta instalar el
 ;   redistribuible).
 ; - Tipos de archivo: Easy Spectrum queda siempre en "Abrir con" de .tap .tzx .z80 .sna
-;   .szx .dsk .csw (y .zip); con la tarea "associate" pasa a ser el predeterminado de
+;   .szx .dsk .csw .nex (y .zip); con la tarea "associate" pasa a ser el predeterminado de
 ;   esos (no de .zip). Al desinstalar se quita todo.
 ; - Queda registrada en "Aplicaciones predeterminadas" (RegisteredApplications): si otro
 ;   programa ya es el predeterminado, Windows solo deja cambiarlo al usuario; la casilla
@@ -77,11 +77,11 @@ Name: "it"; MessagesFile: "compiler:Languages\Italian.isl"
 Name: "ru"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [CustomMessages]
-es.Associate=Abrir con {#AppName} los archivos de Spectrum (.tap .tzx .z80 .sna .szx .dsk .csw)
-en.Associate=Open Spectrum files with {#AppName} (.tap .tzx .z80 .sna .szx .dsk .csw)
-pt.Associate=Abrir arquivos do Spectrum com o {#AppName} (.tap .tzx .z80 .sna .szx .dsk .csw)
-it.Associate=Apri i file dello Spectrum con {#AppName} (.tap .tzx .z80 .sna .szx .dsk .csw)
-ru.Associate=Открывать файлы Spectrum в {#AppName} (.tap .tzx .z80 .sna .szx .dsk .csw)
+es.Associate=Abrir con {#AppName} los archivos de Spectrum (.tap .tzx .z80 .sna .szx .dsk .csw .nex)
+en.Associate=Open Spectrum files with {#AppName} (.tap .tzx .z80 .sna .szx .dsk .csw .nex)
+pt.Associate=Abrir arquivos do Spectrum com o {#AppName} (.tap .tzx .z80 .sna .szx .dsk .csw .nex)
+it.Associate=Apri i file dello Spectrum con {#AppName} (.tap .tzx .z80 .sna .szx .dsk .csw .nex)
+ru.Associate=Открывать файлы Spectrum в {#AppName} (.tap .tzx .z80 .sna .szx .dsk .csw .nex)
 es.FileTypes=Tipos de archivo:
 en.FileTypes=File types:
 pt.FileTypes=Tipos de arquivo:
@@ -150,8 +150,11 @@ Root: HKA; Subkey: "Software\Classes\.dsk\OpenWithProgids"; ValueType: string; V
 Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\SupportedTypes"; ValueType: string; ValueName: ".dsk"; ValueData: ""
 Root: HKA; Subkey: "Software\Classes\.dsk"; ValueType: string; ValueData: "{#ProgId}"; Flags: uninsdeletevalue; Tasks: associate
 Root: HKA; Subkey: "Software\Classes\.csw\OpenWithProgids"; ValueType: string; ValueName: "{#ProgId}"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.nex\OpenWithProgids"; ValueType: string; ValueName: "{#ProgId}"; ValueData: ""; Flags: uninsdeletevalue
 Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\SupportedTypes"; ValueType: string; ValueName: ".csw"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\SupportedTypes"; ValueType: string; ValueName: ".nex"; ValueData: ""
 Root: HKA; Subkey: "Software\Classes\.csw"; ValueType: string; ValueData: "{#ProgId}"; Flags: uninsdeletevalue; Tasks: associate
+Root: HKA; Subkey: "Software\Classes\.nex"; ValueType: string; ValueData: "{#ProgId}"; Flags: uninsdeletevalue; Tasks: associate
 ; .zip: solo "Abrir con" (no se apropia de todos los zip del sistema).
 Root: HKA; Subkey: "Software\Classes\.zip\OpenWithProgids"; ValueType: string; ValueName: "{#ProgId}"; ValueData: ""; Flags: uninsdeletevalue
 Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}\SupportedTypes"; ValueType: string; ValueName: ".zip"; ValueData: ""
@@ -170,6 +173,7 @@ Root: HKA; Subkey: "{#CapKey}\FileAssociations"; ValueType: string; ValueName: "
 Root: HKA; Subkey: "{#CapKey}\FileAssociations"; ValueType: string; ValueName: ".szx"; ValueData: "{#ProgId}"
 Root: HKA; Subkey: "{#CapKey}\FileAssociations"; ValueType: string; ValueName: ".dsk"; ValueData: "{#ProgId}"
 Root: HKA; Subkey: "{#CapKey}\FileAssociations"; ValueType: string; ValueName: ".csw"; ValueData: "{#ProgId}"
+Root: HKA; Subkey: "{#CapKey}\FileAssociations"; ValueType: string; ValueName: ".nex"; ValueData: "{#ProgId}"
 Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "{#RegApp}"; ValueData: "{#CapKey}"; Flags: uninsdeletevalue
 ; Windows 11 solo lista en "Abrir con" los programas que ya "reconoció" para la extensión
 ; (valor <ProgId>_<ext> en ApplicationAssociationToasts, que normalmente pone su aviso
@@ -187,7 +191,9 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\ApplicationAssoci
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\ApplicationAssociationToasts"; ValueType: dword; ValueName: "{#ProgId}_.dsk"; ValueData: 0; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\ApplicationAssociationToasts"; ValueType: dword; ValueName: "Applications\{#AppExe}_.dsk"; ValueData: 0; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\ApplicationAssociationToasts"; ValueType: dword; ValueName: "{#ProgId}_.csw"; ValueData: 0; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\ApplicationAssociationToasts"; ValueType: dword; ValueName: "{#ProgId}_.nex"; ValueData: 0; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\ApplicationAssociationToasts"; ValueType: dword; ValueName: "Applications\{#AppExe}_.csw"; ValueData: 0; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\ApplicationAssociationToasts"; ValueType: dword; ValueName: "Applications\{#AppExe}_.nex"; ValueData: 0; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\ApplicationAssociationToasts"; ValueType: dword; ValueName: "{#ProgId}_.zip"; ValueData: 0; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\ApplicationAssociationToasts"; ValueType: dword; ValueName: "Applications\{#AppExe}_.zip"; ValueData: 0; Flags: uninsdeletevalue
 
