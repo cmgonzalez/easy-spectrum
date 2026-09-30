@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "native_menu.h"
+#include "single_instance.h"
 #include "win32_window.h"
 
 // A window that does nothing but host a Flutter view.
@@ -32,6 +33,9 @@ class FlutterWindow : public Win32Window {
 
   // Barra de menús nativa (la describe Dart).
   std::unique_ptr<NativeMenu> menu_;
+
+  // Archivos que llegan de otra instancia (ver single_instance.h) → Dart.
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> open_channel_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

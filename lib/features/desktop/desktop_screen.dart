@@ -19,6 +19,7 @@ import '../../core/theme/easy_theme.dart';
 import '../../core/video_mode.dart';
 import '../about/about_screen.dart';
 import '../game/game_display.dart';
+import 'desktop_app.dart';
 import 'native_menu.dart';
 import 'pc_keyboard.dart';
 
@@ -40,6 +41,10 @@ class _DesktopScreenState extends State<DesktopScreen>
   static const _prefRecent = 'desktop_recent';
   static const _maxRecent = 10;
   static const _speeds = [0.5, 1.0, 2.0, 4.0];
+
+  /// Archivos abiertos con el emulador ya en marcha (doble clic en el Explorador, PRISMA…):
+  /// el runner de Windows los recibe de la nueva instancia y los manda aquí.
+  static const _openArgs = MethodChannel('cl.easysoft.easyspectrum/open_args');
 
   final _zx = ZxBridge.instance;
   final _audio = ZxAudio();
@@ -66,6 +71,7 @@ class _DesktopScreenState extends State<DesktopScreen>
   void initState() {
     super.initState();
     windowManager.addListener(this);
+    _openArgs.setMethodCallHandler(_onOpenArgs);
     _ticker = createTicker(_onTick);
     _boot();
   }
@@ -88,8 +94,20 @@ class _DesktopScreenState extends State<DesktopScreen>
     _ticker.start();
   }
 
+  Future<void> _onOpenArgs(MethodCall call) async {
+    if (call.method != 'open' || !_zx.isRunning) return;
+    final (file, model) = DesktopApp.parseArgs((call.arguments as List).cast<String>());
+    if (model != null) _settings.model = model;
+    if (file != null) {
+      await _openPath(file);
+    } else if (model != null) {
+      await _reload();
+    }
+  }
+
   @override
   void dispose() {
+    _openArgs.setMethodCallHandler(null);
     windowManager.removeListener(this);
     _ticker.dispose();
     _audio.stop();

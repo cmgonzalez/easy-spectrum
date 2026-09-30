@@ -2,6 +2,7 @@
 *.apk
 *.aab
 EasySpectrum-win-*.zip
+EasySpectrum-Setup-*.exe
 
 # Flutter/Dart
 .dart_tool/

@@ -2,6 +2,8 @@
 
 #include <optional>
 
+#include <flutter/standard_method_codec.h>
+
 #include "flutter/generated_plugin_registrant.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -27,6 +29,10 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   menu_ = std::make_unique<NativeMenu>(
       flutter_controller_->engine()->messenger(), GetHandle());
+  open_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), "cl.easysoft.easyspectrum/open_args",
+      &flutter::StandardMethodCodec::GetInstance());
+  SetPropW(GetHandle(), kMainWindowProp, reinterpret_cast<HANDLE>(1));
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -42,7 +48,9 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  RemovePropW(GetHandle(), kMainWindowProp);
   menu_ = nullptr;
+  open_channel_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -71,6 +79,17 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   }
 
   switch (message) {
+    case WM_COPYDATA: {
+      std::vector<std::string> args;
+      if (open_channel_ &&
+          DecodeOpenArgs(reinterpret_cast<const COPYDATASTRUCT*>(lparam), &args)) {
+        flutter::EncodableList list;
+        for (auto& a : args) list.emplace_back(a);
+        open_channel_->InvokeMethod("open", std::make_unique<flutter::EncodableValue>(list));
+        return TRUE;
+      }
+      break;
+    }
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;

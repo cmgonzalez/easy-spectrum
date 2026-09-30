@@ -280,6 +280,17 @@ con `window_manager`, audio con la misma `ZxAudio` que Android.
   la barra entera en cada build y solo se reenvía si cambió; un cambio con un menú abierto se aplica
   al cerrarlo. `WM_COMMAND` → `select(id)`. Alt solo no activa la barra (es el fuego del joystick);
   Alt + letra sí. En pantalla completa se quita con `setVisible(false)`.
+- **Instancia única** (`windows/runner/single_instance.cpp`): mutex `Local\EasySpectrum.SingleInstance`;
+  si ya hay una ventana (marcada con la propiedad `EasySpectrum.MainWindow`), la nueva instancia le
+  manda sus argumentos por `WM_COPYDATA` (rutas ya absolutas), la trae al frente y sale. El runner
+  los pasa a Dart por el canal `cl.easysoft.easyspectrum/open_args` → `_onOpenArgs`.
+- **Instalador** (`installer/easy_spectrum.iss`, Inno Setup 6 — se usa el de `C:\prismain\Inno Setup 6`):
+  `bash build-app.sh installer` → `EasySpectrum-Setup-<ver>-<code>.exe`. Por usuario sin UAC (con
+  opción "todos los usuarios"; registro en HKA), runtime VC++ copiado junto al .exe, idiomas
+  es/en/pt/it/ru. Tipos: siempre en "Abrir con" (.tap .tzx .z80 .sna .szx .dsk .csw y .zip); la tarea
+  "associate" (marcada) lo hace predeterminado salvo .zip. Si el usuario ya eligió otro programa con
+  "usar siempre" (UserChoice), Windows no deja que un instalador lo cambie: se elige en "Abrir con".
+  Verificado: instalación silenciosa, arranque desde la copia instalada y desinstalación sin restos.
 - **Línea de comandos** (para PRISMA u otras herramientas):
   `EasySpectrum.exe juego.tap --model 48k|128k|+2|+2a|+3|16k`. Recargar (F2) vuelve a leer el
   archivo del disco: recompilar el .tap y F2.
@@ -308,6 +319,7 @@ bash build-app.sh aab              # AAB de las dos (Play Store)
 bash build-app.sh release pro      # solo una edición
 bash build-app.sh release all push # + commit + push
 bash build-app.sh windows          # EasySpectrum.exe (+ zip)
+bash build-app.sh installer        # instalador Inno Setup
 ```
 Equivale a `flutter build apk --release --flavor free` (o `pro`).
 El versionCode está en `pubspec.yaml` y en `android/app/build.gradle.kts`: subir los dos.
