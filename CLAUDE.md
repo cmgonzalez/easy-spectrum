@@ -213,8 +213,23 @@ Mezcla en luz lineal (gamma 2,2 con tablas), no promedio sRGB: negro + blanco (2
 parpadeo en un CRT. Es solo visual; se combina con cualquier modo de video. Verificado en Windows con
 un SNA 128K que alterna pantalla normal (negra) y sombra (blanca) en cada frame: sin Gigascreen
 0/215 alternando, con Gigascreen 157 fijo. Escritorio: menú Pantalla › Gigascreen.
-ULA+ **no** está (CLK tiene paleta fija de 16 colores y salida Red2Green2Blue2): habría que parchear
-Video.hpp (puertos BF3B/FF3B, paleta de 64, bloque PLTT de .szx).
+
+## ULAplus (siempre activo, en Android y Windows)
+
+CLK no lo trae: va por parches generados en CMake (mismo mecanismo que `ZXSpectrum_patched.cpp`,
+funciones `clk_patch` / `clk_patch_block`). Si CLK cambia upstream, el configure falla con el nombre
+del parche.
+- `ZXSpectrum.cpp`: puertos `0xBF3B` (registro) y `0xFF3B` (dato, lectura y escritura, decodificación
+  completa: no chocan con FE/7FFD/FFFD/BFFD/1FFD/Kempston) y `soft_reset` apaga el modo ULAplus.
+- `Video.hpp`: se genera una copia en el dir de build (con `State.hpp` copiado al lado, para que su
+  `#include "Video.hpp"` tome la parcheada). Salida **Red8Green8Blue8** (antes Red2Green2Blue2: la
+  paleta ULAplus es GRB 3-3-2); tinta/papel/borde por `ink_colour`/`paper_colour`/`border_rgb`.
+  Código nuevo en `native/clk_patches/ulaplus_{public,private}.inc`. Con modo activo: CLUT =
+  FLASH*2+BRIGHT (tintas 0-7, papeles 8-15), FLASH no parpadea, borde = papeles de la CLUT 0. El color
+  se resuelve al leer cada par de bytes (vale para cambios de paleta a mitad de línea).
+- Los 16 colores normales quedan con los niveles de siempre (0xD7 / 0xFF).
+- Verificado con un SNA 48K propio: paleta 8 = rojo, 24 = verde, modo on, lectura de FF3B → borde y
+  tercio superior (255,0,0), resto (0,255,0). Pendiente: bloque `PLTT` de los `.szx` (CLK lo ignora).
 
 ## Modos de video (`lib/core/video_mode.dart`)
 

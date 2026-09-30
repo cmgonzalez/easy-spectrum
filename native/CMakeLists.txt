@@ -61,13 +61,34 @@ configure_file("${ZX_SRC}" "${ZX_PATCHED}.orig" COPYONLY)  # re-configura si cam
 file(READ "${ZX_SRC}" ZX_TEXT)
 string(REPLACE "\r\n" "\n" ZX_TEXT "${ZX_TEXT}")  # por si el checkout usa CRLF
 
-function(zx_patch NAME FIND REPLACEMENT)
-    string(FIND "${ZX_TEXT}" "${FIND}" POS)
+# Reemplaza FIND por REPLACEMENT (todas las apariciones) en la variable VAR; si el texto no
+# está (CLK cambió upstream) el configure falla con un error claro.
+function(clk_patch VAR NAME FIND REPLACEMENT)
+    string(FIND "${${VAR}}" "${FIND}" POS)
     if(POS EQUAL -1)
-        message(FATAL_ERROR "Parche ZXSpectrum.cpp '${NAME}': no se encontró el texto (¿cambió CLK upstream?)")
+        message(FATAL_ERROR "Parche ${VAR} '${NAME}': no se encontró el texto (¿cambió CLK upstream?)")
     endif()
-    string(REPLACE "${FIND}" "${REPLACEMENT}" RESULT "${ZX_TEXT}")
-    set(ZX_TEXT "${RESULT}" PARENT_SCOPE)
+    string(REPLACE "${FIND}" "${REPLACEMENT}" RESULT "${${VAR}}")
+    set(${VAR} "${RESULT}" PARENT_SCOPE)
+endfunction()
+
+# Reemplaza el tramo de VAR que va de START hasta END (incluidos) por REPLACEMENT.
+function(clk_patch_block VAR NAME START END REPLACEMENT)
+    string(FIND "${${VAR}}" "${START}" A)
+    string(FIND "${${VAR}}" "${END}" B)
+    if(A EQUAL -1 OR B EQUAL -1 OR B LESS A)
+        message(FATAL_ERROR "Parche ${VAR} '${NAME}': no se encontró el tramo (¿cambió CLK upstream?)")
+    endif()
+    string(LENGTH "${END}" END_LEN)
+    math(EXPR B "${B} + ${END_LEN}")
+    string(SUBSTRING "${${VAR}}" 0 ${A} HEAD)
+    string(SUBSTRING "${${VAR}}" ${B} -1 TAIL)
+    set(${VAR} "${HEAD}${REPLACEMENT}${TAIL}" PARENT_SCOPE)
+endfunction()
+
+function(zx_patch NAME FIND REPLACEMENT)
+    clk_patch(ZX_TEXT "${NAME}" "${FIND}" "${REPLACEMENT}")
+    set(ZX_TEXT "${ZX_TEXT}" PARENT_SCOPE)
 endfunction()
 
 # 1. Bug: al instalar el estado de un snapshot 128K asigna port7ffd_ y actualiza el
@@ -84,9 +105,57 @@ zx_patch(cinta-terminada
     "\t\treturn tape_player_.motor_control();\n"
     "\t\treturn tape_player_.motor_control() && !tape_player_.is_at_end();\n")
 
+# 3. ULAplus: puertos BF3B (registro) y FF3B (dato); el reset apaga el modo ULAplus.
+#    La paleta y la salida de color están en la copia parcheada de Video.hpp (más abajo).
+zx_patch(ulaplus-escritura
+    "\t\t\t\t// Test for classic 128kb paging register (i.e. port 7ffd).\n"
+    "\t\t\t\t// ULAplus.\n\t\t\t\tif(address == 0xbf3b) video_->ulaplus_write_register(*cycle.value);\n\t\t\t\tif(address == 0xff3b) video_->ulaplus_write_data(*cycle.value);\n\n\t\t\t\t// Test for classic 128kb paging register (i.e. port 7ffd).\n")
+zx_patch(ulaplus-lectura
+    "\t\t\t\tif constexpr (model <= Model::Plus2) {\n\t\t\t\t\tif(!did_match) {\n"
+    "\t\t\t\tif(address == 0xff3b) {\n\t\t\t\t\tdid_match = true;\n\t\t\t\t\t*cycle.value = video_->ulaplus_read_data();\n\t\t\t\t}\n\n\t\t\t\tif constexpr (model <= Model::Plus2) {\n\t\t\t\t\tif(!did_match) {\n")
+zx_patch(ulaplus-reset
+    "\t\tupdate_video_base();\n\t\tz80_.set_power_on_reset();\n"
+    "\t\tupdate_video_base();\n\t\tvideo_->ulaplus_reset();\n\t\tz80_.set_power_on_reset();\n")
+
 file(WRITE "${ZX_PATCHED}" "${ZX_TEXT}")
-# La copia está fuera de su carpeta: sus #include "State.hpp"/"Video.hpp" relativos
-# tienen que encontrar la original.
+
+# Video.hpp parcheado (ULAplus): salida Red8Green8Blue8 en vez de Red2Green2Blue2 (la
+# paleta ULAplus tiene 3 bits por canal), colores de tinta/papel/borde por funciones que
+# miran la paleta ULAplus, y FLASH sin parpadeo con ULAplus activo. El código nuevo está en
+# native/clk_patches/*.inc. State.hpp se copia sin cambios junto a la copia de
+# ZXSpectrum.cpp para que su #include "Video.hpp" encuentre la parcheada.
+set(ZX_DIR "${CLK}/Machines/Sinclair/ZXSpectrum")
+set(PATCH_DIR "${CMAKE_CURRENT_SOURCE_DIR}/clk_patches")
+configure_file("${ZX_DIR}/Video.hpp" "${CMAKE_CURRENT_BINARY_DIR}/Video.hpp.orig" COPYONLY)
+configure_file("${ZX_DIR}/State.hpp" "${CMAKE_CURRENT_BINARY_DIR}/State.hpp" COPYONLY)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${PATCH_DIR}/ulaplus_public.inc" "${PATCH_DIR}/ulaplus_private.inc")
+file(READ "${ZX_DIR}/Video.hpp" VIDEO_TEXT)
+string(REPLACE "\r\n" "\n" VIDEO_TEXT "${VIDEO_TEXT}")
+file(READ "${PATCH_DIR}/ulaplus_public.inc" ULAPLUS_PUBLIC)
+file(READ "${PATCH_DIR}/ulaplus_private.inc" ULAPLUS_PRIVATE)
+string(REPLACE "\r\n" "\n" ULAPLUS_PUBLIC "${ULAPLUS_PUBLIC}")
+string(REPLACE "\r\n" "\n" ULAPLUS_PRIVATE "${ULAPLUS_PRIVATE}")
+
+clk_patch(VIDEO_TEXT salida-rgb8 "InputDataType::Red2Green2Blue2" "InputDataType::Red8Green8Blue8")
+clk_patch(VIDEO_TEXT buffer-pixeles "\tuint8_t *pixel_target_ = nullptr;" "\tuint32_t *pixel_target_ = nullptr;")
+clk_patch(VIDEO_TEXT begin-data "pixel_target_ = crt_.begin_data(256);"
+    "pixel_target_ = reinterpret_cast<uint32_t *>(crt_.begin_data(256, alignof(uint32_t)));")
+clk_patch(VIDEO_TEXT nivel-borde "crt_.output_level<uint8_t>(" "crt_.output_level<uint32_t>(")
+clk_patch(VIDEO_TEXT color-borde "\tuint8_t border_colour_ = 0;" "\tuint32_t border_colour_ = 0;")
+clk_patch(VIDEO_TEXT set-borde "border_colour_ = palette[colour];" "border_colour_ = border_rgb(colour);")
+clk_patch(VIDEO_TEXT flash "masks[flash_mask_ & (last_fetches_[n+1] >> 7)]"
+    "masks[flash_mask_ & flash_enable_ & (last_fetches_[n+1] >> 7)]")
+clk_patch(VIDEO_TEXT tipo-colores "const uint8_t colours[2] = {" "const uint32_t colours[2] = {")
+clk_patch(VIDEO_TEXT papel "palette[(last_fetches_[n+1] & 0x78) >> 3]," "paper_colour(last_fetches_[n+1]),")
+clk_patch(VIDEO_TEXT tinta "palette[((last_fetches_[n+1] & 0x40) >> 3) | (last_fetches_[n+1] & 0x07)],"
+    "ink_colour(last_fetches_[n+1]),")
+clk_patch(VIDEO_TEXT api-ulaplus "\t/// Sets the scan target.\n" "${ULAPLUS_PUBLIC}\t/// Sets the scan target.\n")
+clk_patch_block(VIDEO_TEXT paleta "#define RGB(r, g, b)" "#undef RGB\n" "${ULAPLUS_PRIVATE}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/Video.hpp" "${VIDEO_TEXT}")
+
+# La copia de ZXSpectrum.cpp está fuera de su carpeta: sus #include "State.hpp"/"Video.hpp"
+# encuentran primero las copias de al lado (build); el resto de includes relativos, la original.
 set_source_files_properties("${ZX_PATCHED}" PROPERTIES
     INCLUDE_DIRECTORIES "${CLK}/Machines/Sinclair/ZXSpectrum")
 list(APPEND CLK_SOURCES "${ZX_PATCHED}")
