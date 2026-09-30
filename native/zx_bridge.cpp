@@ -639,6 +639,7 @@ static pdp::Host pdp_host(ZxHandle *h) {
 	host.emulated_seconds = [h] { return zx_get_emulated_time(h); };
 	host.set_key = [h](int key, bool down) { zx_set_key(h, key, down ? 1 : 0); };
 	host.set_joy = [h](int mask) { zx_set_joystick(h, mask); };
+	host.frame = [h] { return zx_get_framebuffer(h); };
 	host.type = [h](const std::string &text) { zx_type(h, text.c_str()); };
 	return host;
 }

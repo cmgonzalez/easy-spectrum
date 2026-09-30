@@ -1,4 +1,4 @@
-# PDP — Prisma Debug Protocol (fases 1 a 3)
+# PDP — Prisma Debug Protocol (fases 1 a 4)
 
 Depurador del core CLK (Spectrum 16K–+3) para juegos PRISMA. JSON por línea sobre TCP,
 solo `127.0.0.1`. Un objeto por línea; cada petición lleva `id` y `cmd`; la respuesta repite el `id`
@@ -67,6 +67,13 @@ Desde C: `zx_pdp_start(h, port)` / `zx_pdp_stop(h)` (zx_bridge.h).
 - **`idle` del frame-log** = T-states gastados ejecutando HALT en ese frame: margen libre del juego.
 - `frame-log` guarda 8192 frames en anillo.
 
+### Fase 4: captura y activación desde la app
+- `screenshot`: `path` (escribe un PNG) o, sin él, `png_base64`; `paper:true` = solo 256×192 sin borde.
+  PNG sin dependencias (deflate "stored"), 320×256 por defecto.
+- **App de Flutter (escritorio)**: con `EASYSPECTRUM_PDP_PORT=7878` en el entorno, cada máquina que arranca
+  abre el servidor en ese puerto (`ZxBridge.start`). Sin la variable no se abre nada. Android: no se activa.
+- `zx_pdp.cpp` pasa `clang -fsyntax-only` con el NDK (x86_64-android24); falta una compilación Android completa.
+
 Evento asíncrono a todos los clientes al detenerse: `{"event":"stopped","reason":...,"pc":...}`.
 `reason`: `pause`, `breakpoint`, `step`, `until`. `next` salta CALL/RST/HALT/bloques (LDIR…).
 
@@ -83,5 +90,4 @@ Evento asíncrono a todos los clientes al detenerse: `{"event":"stopped","reason
   solo mueve bytes.
 
 ## Pendiente (fases siguientes)
-Líneas C (`.lst`), `setreg`, pantalla/captura por PDP, ZX Spectrum Next, Android (no compilado
-aún), activar desde la app de Flutter.
+Líneas C (`.lst`), `setreg`, ZX Spectrum Next, compilación Android completa.

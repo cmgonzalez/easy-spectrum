@@ -34,6 +34,8 @@ typedef _AudioN = Int32 Function(Pointer<Void> h, Pointer<Int16> out, Int32 max)
 typedef _Audio = int Function(Pointer<Void> h, Pointer<Int16> out, int max);
 typedef _TypeN = Void Function(Pointer<Void> h, Pointer<Utf8> text);
 typedef _Type = void Function(Pointer<Void> h, Pointer<Utf8> text);
+typedef _PdpStartN = Int32 Function(Pointer<Void> h, Int32 port);
+typedef _PdpStart = int Function(Pointer<Void> h, int port);
 typedef _SpeedN = Void Function(Pointer<Void> h, Double m);
 typedef _Speed = void Function(Pointer<Void> h, double m);
 
@@ -62,6 +64,7 @@ class ZxBridge {
     _setSpeed = lib.lookupFunction<_SpeedN, _Speed>('zx_set_speed');
     _isTurbo = lib.lookupFunction<_IntRetN, _IntRet>('zx_is_turbo');
     _setGiga = lib.lookupFunction<_IntArgN, _IntArg>('zx_set_gigascreen');
+    _pdpStart = lib.lookupFunction<_PdpStartN, _PdpStart>('zx_pdp_start');
   }
 
   static final ZxBridge instance = ZxBridge._();
@@ -83,6 +86,7 @@ class ZxBridge {
   late final _Speed _setSpeed;
   late final _IntRet _isTurbo;
   late final _IntArg _setGiga;
+  late final _PdpStart _pdpStart;
 
   Pointer<Void> _h = nullptr;
   Pointer<Int16>? _audioBuf;
@@ -126,6 +130,11 @@ class ZxBridge {
     }
     if (_h == nullptr) return _lastError().toDartString();
     if (!quickLoad) _setQuick(_h, 0);
+    // Depurador PDP (doc/PDP.md): opt-in con EASYSPECTRUM_PDP_PORT (solo escritorio).
+    final pdpPort = int.tryParse(Platform.environment['EASYSPECTRUM_PDP_PORT'] ?? '');
+    if (pdpPort != null && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      _pdpStart(_h, pdpPort);
+    }
     return null;
   }
 

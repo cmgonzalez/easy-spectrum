@@ -239,6 +239,17 @@ def input_test():
         c.cmd("resume", frames=2, wait=True)
         check(keyrow() & 1, "key up suelta")
         check(not c.cmd("key", name="zzz")["ok"], "tecla desconocida da error")
+        png = os.path.join(os.environ.get("TEMP", "."), "pdp_shot.png")
+        r = c.cmd("screenshot", path=png, paper=True)
+        data = open(png, "rb").read()
+        check(r["ok"] and data[:4] == bytes([0x89, 0x50, 0x4E, 0x47]), "screenshot escribe un PNG")
+        w, h = struct.unpack(">II", data[16:24])
+        import zlib
+        i = data.index(b"IDAT")
+        n = struct.unpack(">I", data[i - 4:i])[0]
+        raw = zlib.decompress(data[i + 4:i + 4 + n])
+        check((w, h) == (256, 192) and len(raw) == h * (w * 3 + 1), "PNG valido %dx%d, %d bytes descomprimidos" % (w, h, len(raw)))
+        check(len(c.cmd("screenshot")["png_base64"]) > 1000, "screenshot en base64")
     finally:
         host.kill()
 

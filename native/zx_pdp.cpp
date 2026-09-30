@@ -328,6 +328,64 @@ std::string quote(const std::string &s) {
 
 std::string hex16(unsigned v) { char b[16]; snprintf(b, sizeof b, "\"0x%04X\"", v & 0xffff); return b; }
 
+// ---------------------------------------------------------------- PNG mínimo (sin zlib: bloques deflate "stored")
+
+uint32_t crc32_bytes(const uint8_t *d, size_t n, uint32_t crc = 0) {
+	static uint32_t table[256];
+	if(!table[1]) for(uint32_t i = 0; i < 256; ++i) { uint32_t c = i; for(int k = 0; k < 8; ++k) c = (c & 1) ? 0xEDB88320u ^ (c >> 1) : c >> 1; table[i] = c; }
+	crc = ~crc;
+	for(size_t i = 0; i < n; ++i) crc = table[(crc ^ d[i]) & 0xff] ^ (crc >> 8);
+	return ~crc;
+}
+
+void put32(std::string &o, uint32_t v) { for(int s = 24; s >= 0; s -= 8) o += char((v >> s) & 0xff); }
+
+void png_chunk(std::string &o, const char *type, const std::string &data) {
+	put32(o, uint32_t(data.size()));
+	std::string body = std::string(type, 4) + data;
+	o += body;
+	put32(o, crc32_bytes(reinterpret_cast<const uint8_t *>(body.data()), body.size()));
+}
+
+// RGBA (stride en bytes) → PNG RGB de w×h.
+std::string make_png(const uint8_t *rgba, int stride, int w, int h) {
+	std::string raw;
+	raw.reserve(size_t(h) * (size_t(w) * 3 + 1));
+	for(int y = 0; y < h; ++y) {
+		raw += char(0);
+		for(int x = 0; x < w; ++x) { const uint8_t *p = rgba + size_t(y) * stride + size_t(x) * 4; raw += char(p[0]); raw += char(p[1]); raw += char(p[2]); }
+	}
+	std::string z = "\x78\x01";
+	for(size_t i = 0; i < raw.size(); i += 65535) {
+		const size_t n = std::min<size_t>(65535, raw.size() - i);
+		z += char(i + n >= raw.size() ? 1 : 0);
+		z += char(n & 0xff); z += char(n >> 8); z += char(~n & 0xff); z += char((~n >> 8) & 0xff);
+		z.append(raw, i, n);
+	}
+	uint32_t a = 1, b = 0;
+	for(const char ch : raw) { a = (a + (uint8_t)ch) % 65521; b = (b + a) % 65521; }
+	put32(z, (b << 16) | a);
+	std::string o = "\x89PNG\r\n\x1a\n", ihdr;
+	put32(ihdr, uint32_t(w)); put32(ihdr, uint32_t(h));
+	ihdr += char(8); ihdr += char(2); ihdr += char(0); ihdr += char(0); ihdr += char(0);
+	png_chunk(o, "IHDR", ihdr);
+	png_chunk(o, "IDAT", z);
+	png_chunk(o, "IEND", "");
+	return o;
+}
+
+std::string base64(const std::string &in) {
+	static const char *t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	std::string o;
+	for(size_t i = 0; i < in.size(); i += 3) {
+		const uint32_t v = (uint8_t(in[i]) << 16) | (i + 1 < in.size() ? uint8_t(in[i + 1]) << 8 : 0) | (i + 2 < in.size() ? uint8_t(in[i + 2]) : 0);
+		o += t[(v >> 18) & 63]; o += t[(v >> 12) & 63];
+		o += i + 1 < in.size() ? t[(v >> 6) & 63] : '=';
+		o += i + 2 < in.size() ? t[v & 63] : '=';
+	}
+	return o;
+}
+
 // ---------------------------------------------------------------- comandos (hilo del emulador)
 
 struct Pending { int client; std::string id; };
@@ -781,6 +839,22 @@ void handle(const Host &h, int client, const std::string &line) {
 		if(!h.type) { fail(client, id, "type no disponible"); return; }
 		h.type(m.get("text"));
 		reply(client, id, true, "");
+	} else if(cmd == "screenshot") {
+		const uint8_t *fb = h.frame ? h.frame() : nullptr;
+		if(!fb) { fail(client, id, "sin framebuffer"); return; }
+		const bool paper = m.flag("paper");	// solo la pantalla 256x192, sin borde
+		const int x0 = paper ? 32 : 0, y0 = paper ? 32 : 0, w = paper ? 256 : 320, hh = paper ? 192 : 256;
+		const std::string png = make_png(fb + (size_t(y0) * 320 + size_t(x0)) * 4, 320 * 4, w, hh);
+		const std::string path = m.get("path");
+		if(!path.empty()) {
+			FILE *f = fopen(path.c_str(), "wb");
+			if(!f) { fail(client, id, "no se pudo escribir " + path); return; }
+			fwrite(png.data(), 1, png.size(), f);
+			fclose(f);
+			reply(client, id, true, "\"width\":" + std::to_string(w) + ",\"height\":" + std::to_string(hh) + ",\"path\":" + quote(path));
+		} else {
+			reply(client, id, true, "\"width\":" + std::to_string(w) + ",\"height\":" + std::to_string(hh) + ",\"png_base64\":\"" + base64(png) + "\"");
+		}
 	} else if(cmd == "reset") {
 		zxdbg::drain();
 		g_pending.clear();

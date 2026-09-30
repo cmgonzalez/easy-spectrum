@@ -3,6 +3,7 @@
 // comandos se ejecutan en el hilo del emulador, dentro de pdp_pump() (llamado desde zx_run).
 #pragma once
 #include <functional>
+#include <stdint.h>
 #include <string>
 
 namespace pdp {
@@ -14,6 +15,7 @@ struct Host {
 	std::function<double()> emulated_seconds;
 	std::function<void(int key, bool down)> set_key;	// key = (fila << 8) | bit
 	std::function<void(int mask)> set_joy;			// ZX_JOY_*
+	std::function<const uint8_t *()> frame;			// framebuffer RGBA 320x256 (o null)
 	std::function<void(const std::string &)> type;	// texto con el Typer de CLK
 };
 
