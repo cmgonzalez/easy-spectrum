@@ -36,13 +36,14 @@ class ConsoleView extends StatelessWidget {
       final w = box.maxWidth, h = box.maxHeight;
       final k = w / _skinWidth;
       final frame = _frame * k, cap = _cap * k;
-      final side = frame + w * 0.025;
+      // Solo una línea fina para el arte de los cantos: pantalla y teclado a todo el ancho.
+      final side = frame + 3;
 
       // Pantalla: todo el ancho útil, sin pasar del ~40% del alto (los controles
       // necesitan su espacio en teléfonos bajos).
-      const glass = 10.0;
+      const glass = 5.0;
       var gameW = w - 2 * side - 2 * glass;
-      gameW = math.min(gameW, h * 0.40 * 320 / 256);
+      gameW = math.min(gameW, h * 0.46 * 320 / 256);
       final gameH = gameW * 256 / 320;
       final lcdW = w * 0.56;
       final actionsH = w * 0.085;
@@ -69,10 +70,13 @@ class ConsoleView extends StatelessWidget {
           ),
           if (rainbow) CustomPaint(painter: _RainbowPainter(frame: frame)),
           Padding(
-            padding: EdgeInsets.fromLTRB(side, cap * 0.3, side, frame + 6),
+            padding: EdgeInsets.fromLTRB(0, cap * 0.3, 0, frame + 6),
             child: Column(
               children: [
-                const SizedBox(height: 28, child: _TopRow()),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: side),
+                  child: const SizedBox(height: 28, child: _TopRow()),
+                ),
                 const SizedBox(height: 6),
                 _Bezel(
                   padding: glass,
@@ -81,8 +85,17 @@ class ConsoleView extends StatelessWidget {
                 const SizedBox(height: 12),
                 SizedBox(width: lcdW, height: lcdW / LcdPanel.aspect, child: lcd),
                 SizedBox(height: w * 0.035),
-                SizedBox(height: actionsH, child: actions),
-                Expanded(child: controls),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: side),
+                  child: SizedBox(height: actionsH, child: actions),
+                ),
+                // El teclado (sin arcoíris propio del cuerpo) ocupa todo el ancho útil.
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: rainbow ? side : frame + 2),
+                    child: controls,
+                  ),
+                ),
               ],
             ),
           ),
