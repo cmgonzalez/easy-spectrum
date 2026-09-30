@@ -19,6 +19,7 @@ import '../../core/theme/easy_theme.dart';
 import '../../core/video_mode.dart';
 import '../about/about_screen.dart';
 import '../game/game_display.dart';
+import 'native_menu.dart';
 import 'pc_keyboard.dart';
 
 /// Ventana del emulador en escritorio: salida del Spectrum a toda la ventana, barra de
@@ -45,7 +46,9 @@ class _DesktopScreenState extends State<DesktopScreen>
   late final _keyboard = PcKeyboard(_zx);
   late final Ticker _ticker;
   final _focus = FocusNode(debugLabel: 'spectrum');
-  final _menuKey = GlobalKey();
+  late final _menu = NativeMenuBar(onMenuLoop: (open) {
+    if (open) _keyboard.releaseAll();
+  });
 
   AppSettings _settings = AppSettings();
   List<String> _recent = [];
@@ -300,10 +303,9 @@ class _DesktopScreenState extends State<DesktopScreen>
     if (!mounted) return;
     final content = MediaQuery.sizeOf(context);
     final outer = await windowManager.getSize();
-    final menu = _menuKey.currentContext?.size?.height ?? 0;
     await windowManager.setSize(Size(
       zxFbWidth * n + outer.width - content.width,
-      zxFbHeight * n + menu + outer.height - content.height,
+      zxFbHeight * n + outer.height - content.height,
     ));
   }
 
@@ -315,7 +317,7 @@ class _DesktopScreenState extends State<DesktopScreen>
         LogicalKeyboardKey.f2 => _reload,
         LogicalKeyboardKey.f3 => _pickFile,
         LogicalKeyboardKey.f5 => () async => _zx.reset(),
-        LogicalKeyboardKey.f6 => () async => setState(() => _zx.tapePlaying = !_zx.tapePlaying),
+        LogicalKeyboardKey.f6 => () async => _toggleTape(),
         LogicalKeyboardKey.f8 || LogicalKeyboardKey.pause => () async => _setPaused(!_paused),
         LogicalKeyboardKey.f11 => () => _setFullscreen(!_fullscreen),
         LogicalKeyboardKey.escape when _fullscreen => () => _setFullscreen(false),
@@ -348,171 +350,86 @@ class _DesktopScreenState extends State<DesktopScreen>
     _focus.requestFocus();
   }
 
-  Widget _menuBar(AppLocalizations t) {
+  /// Barra de menús nativa de Windows. Se describe entera en cada build; [NativeMenuBar]
+  /// solo la reenvía si cambió.
+  List<MenuEntry> _menus(AppLocalizations t) {
     final hasMedia = _media.isNotEmpty;
-    void refocus() => _focus.requestFocus();
-    return MenuBar(
-      key: _menuKey,
-      style: const MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(ZxColors.body),
-        elevation: WidgetStatePropertyAll(0),
-      ),
-      children: [
-        SubmenuButton(
-          onClose: refocus,
-          menuChildren: [
-            MenuItemButton(
-              shortcut: const SingleActivator(LogicalKeyboardKey.f3),
-              onPressed: _pickFile,
-              child: Text(t.openFile),
-            ),
-            MenuItemButton(
-              shortcut: const SingleActivator(LogicalKeyboardKey.f2),
-              onPressed: hasMedia ? _reload : null,
-              child: Text(t.reloadFile),
-            ),
-            SubmenuButton(
-              menuChildren: [
-                for (final path in _recent)
-                  MenuItemButton(onPressed: () => _openPath(path), child: Text(_baseName(path))),
-                if (_recent.isEmpty) MenuItemButton(child: Text(t.noRecentFiles)),
-              ],
-              child: Text(t.recentFiles),
-            ),
-            const Divider(height: 1),
-            MenuItemButton(onPressed: () => _start(''), child: Text(t.powerOnBasic)),
-            const Divider(height: 1),
-            MenuItemButton(onPressed: windowManager.close, child: Text(t.exit)),
-          ],
-          child: Text(t.menuFile),
-        ),
-        SubmenuButton(
-          onClose: refocus,
-          menuChildren: [
-            SubmenuButton(
-              menuChildren: [
-                for (final m in ZxModel.values)
-                  RadioMenuButton<ZxModel>(
-                    value: m,
-                    groupValue: _settings.model,
-                    onChanged: (v) => _setModel(v!),
-                    child: Text(m.label),
-                  ),
-              ],
-              child: Text(t.model),
-            ),
-            MenuItemButton(
-              shortcut: const SingleActivator(LogicalKeyboardKey.f5),
-              onPressed: _zx.reset,
-              child: Text(t.reset),
-            ),
-            CheckboxMenuButton(
-              value: _paused,
-              shortcut: const SingleActivator(LogicalKeyboardKey.f8),
-              onChanged: (v) => _setPaused(v ?? false),
-              child: Text(t.pause),
-            ),
-            SubmenuButton(
-              menuChildren: [
-                for (final s in _speeds)
-                  RadioMenuButton<double>(
-                    value: s,
-                    groupValue: _speed,
-                    onChanged: (v) => _setSpeed(v!),
-                    child: Text('${(s * 100).round()} %'),
-                  ),
-              ],
-              child: Text(t.speed),
-            ),
-            const Divider(height: 1),
-            CheckboxMenuButton(
-              value: _settings.quickLoad,
-              onChanged: (v) => _setQuickLoad(v ?? true),
-              child: Text(t.quickLoad),
-            ),
-            MenuItemButton(
-              shortcut: const SingleActivator(LogicalKeyboardKey.f6),
-              onPressed: hasMedia ? () => setState(() => _zx.tapePlaying = !_zx.tapePlaying) : null,
-              child: Text(_zx.tapePlaying ? t.stopTape : t.playTape),
-            ),
-          ],
-          child: Text(t.machine),
-        ),
-        SubmenuButton(
-          onClose: refocus,
-          menuChildren: [
-            for (final m in VideoMode.values)
-              RadioMenuButton<VideoMode>(
-                value: m,
-                groupValue: _settings.videoMode,
-                onChanged: (v) => _setVideo(v!),
-                child: Text(m.label(t)),
-              ),
-            const Divider(height: 1),
-            CheckboxMenuButton(
-              value: _settings.gigascreen,
-              onChanged: (v) => _setGigascreen(v ?? false),
-              child: const Text('Gigascreen'),
-            ),
-            const Divider(height: 1),
-            SubmenuButton(
-              menuChildren: [
-                for (final n in [1, 2, 3, 4])
-                  MenuItemButton(onPressed: () => _setScale(n), child: Text('×$n')),
-              ],
-              child: Text(t.windowSize),
-            ),
-            CheckboxMenuButton(
-              value: _fullscreen,
-              shortcut: const SingleActivator(LogicalKeyboardKey.f11),
-              onChanged: (v) => _setFullscreen(v ?? false),
-              child: Text(t.fullscreen),
-            ),
-          ],
-          child: Text(t.screen),
-        ),
-        SubmenuButton(
-          onClose: refocus,
-          menuChildren: [
-            RadioMenuButton<JoyMapping?>(
-              value: null,
-              groupValue: _keyboard.joystick,
-              onChanged: (_) => _setJoystick(null),
-              child: Text(t.arrowsAsCursors),
-            ),
-            for (final j in JoyMapping.values)
-              RadioMenuButton<JoyMapping?>(
-                value: j,
-                groupValue: _keyboard.joystick,
-                onChanged: (_) => _setJoystick(j),
-                child: Text(j.label),
-              ),
-            const Divider(height: 1),
-            MenuItemButton(onPressed: _showKeyMap, child: Text('${t.keyMap}…')),
-          ],
-          child: Text(t.joystick),
-        ),
-        SubmenuButton(
-          onClose: refocus,
-          menuChildren: [
-            MenuItemButton(onPressed: _showKeyMap, child: Text('${t.keyMap}…')),
-            MenuItemButton(onPressed: _showAbout, child: Text(t.about)),
-          ],
-          child: Text(t.menuHelp),
-        ),
-      ],
-    );
+    // "&" marca la letra de Alt: en nombres de archivo se escapa.
+    String esc(String s) => s.replaceAll('&', '&&');
+    return [
+      MenuEntry.submenu('&${t.menuFile}', [
+        MenuEntry(t.openFile, shortcut: 'F3', onSelected: _pickFile),
+        MenuEntry(t.reloadFile, shortcut: 'F2', onSelected: hasMedia ? _reload : null),
+        MenuEntry.submenu(t.recentFiles, [
+          for (final path in _recent) MenuEntry(esc(_baseName(path)), onSelected: () => _openPath(path)),
+          if (_recent.isEmpty) MenuEntry(t.noRecentFiles),
+        ]),
+        const MenuEntry.separator(),
+        MenuEntry(t.powerOnBasic, onSelected: () => _start('')),
+        const MenuEntry.separator(),
+        MenuEntry(t.exit, shortcut: 'Alt+F4', onSelected: windowManager.close),
+      ]),
+      MenuEntry.submenu('&${t.machine}', [
+        MenuEntry.submenu(t.model, [
+          for (final m in ZxModel.values)
+            MenuEntry(m.label,
+                radio: true, checked: m == _settings.model, onSelected: () => _setModel(m)),
+        ]),
+        MenuEntry(t.reset, shortcut: 'F5', onSelected: _zx.reset),
+        MenuEntry(t.pause, shortcut: 'F8', checked: _paused, onSelected: () => _setPaused(!_paused)),
+        MenuEntry.submenu(t.speed, [
+          for (final s in _speeds)
+            MenuEntry('${(s * 100).round()} %',
+                radio: true, checked: s == _speed, onSelected: () => _setSpeed(s)),
+        ]),
+        const MenuEntry.separator(),
+        MenuEntry(t.quickLoad,
+            checked: _settings.quickLoad, onSelected: () => _setQuickLoad(!_settings.quickLoad)),
+        MenuEntry(_zx.tapePlaying ? t.stopTape : t.playTape,
+            shortcut: 'F6', onSelected: hasMedia ? _toggleTape : null),
+      ]),
+      MenuEntry.submenu('&${t.screen}', [
+        for (final m in VideoMode.values)
+          MenuEntry(m.label(t),
+              radio: true, checked: m == _settings.videoMode, onSelected: () => _setVideo(m)),
+        const MenuEntry.separator(),
+        MenuEntry('Gigascreen',
+            checked: _settings.gigascreen, onSelected: () => _setGigascreen(!_settings.gigascreen)),
+        const MenuEntry.separator(),
+        MenuEntry.submenu(t.windowSize, [
+          for (final n in [1, 2, 3, 4]) MenuEntry('×$n', onSelected: () => _setScale(n)),
+        ]),
+        MenuEntry(t.fullscreen, shortcut: 'F11', checked: _fullscreen, onSelected: () => _setFullscreen(true)),
+      ]),
+      MenuEntry.submenu('&${t.joystick}', [
+        MenuEntry(t.arrowsAsCursors,
+            radio: true, checked: _keyboard.joystick == null, onSelected: () => _setJoystick(null)),
+        for (final j in JoyMapping.values)
+          MenuEntry(j.label,
+              radio: true, checked: _keyboard.joystick == j, onSelected: () => _setJoystick(j)),
+        const MenuEntry.separator(),
+        MenuEntry('${t.keyMap}…', onSelected: _showKeyMap),
+      ]),
+      MenuEntry.submenu('&${t.menuHelp}', [
+        MenuEntry('${t.keyMap}…', onSelected: _showKeyMap),
+        MenuEntry(t.about, onSelected: _showAbout),
+      ]),
+    ];
   }
+
+  void _toggleTape() => setState(() => _zx.tapePlaying = !_zx.tapePlaying);
 
   @override
   Widget build(BuildContext context) {
     final t = context.l10n;
+    _menu
+      ..set(_menus(t))
+      ..setVisible(!_fullscreen);
     return Scaffold(
       backgroundColor: Colors.black,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!_fullscreen) _menuBar(t),
           Expanded(
             child: DropTarget(
               onDragEntered: (_) => setState(() => _dragging = true),

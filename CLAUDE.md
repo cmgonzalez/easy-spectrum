@@ -269,11 +269,17 @@ solo procesa flavors → para la Free apartar temporalmente ese yaml.
 
 Mismo proyecto, otra interfaz: en escritorio `main.dart` abre `DesktopApp`
 (`lib/features/desktop/`) en vez de la biblioteca y la consola táctil. Ventana con solo la salida
-del Spectrum (`GameDisplay`, mismos modos de video y shader CRT) y `MenuBar`: Archivo (abrir,
+del Spectrum (`GameDisplay`, mismos modos de video y shader CRT) y barra de menús **nativa Win32**: Archivo (abrir,
 recargar, recientes, BASIC), Máquina (modelo, reset, pausa, velocidad, carga rápida, cinta),
 Pantalla (modo, tamaño ×1-×4, pantalla completa), Joystick, Ayuda. Sin anuncios ni biblioteca:
 los archivos se abren en su sitio (`.zip` → temporal); arrastrar y soltar (`desktop_drop`), ventana
 con `window_manager`, audio con la misma `ZxAudio` que Android.
+- **Menú nativo** (no el `MenuBar` de Flutter, que no se comporta como los de Windows):
+  `windows/runner/native_menu.cpp` arma un HMENU con lo que manda Dart por el canal
+  `cl.easysoft.easyspectrum/menu` (`native_menu.dart`: `MenuEntry`, `NativeMenuBar`). Dart describe
+  la barra entera en cada build y solo se reenvía si cambió; un cambio con un menú abierto se aplica
+  al cerrarlo. `WM_COMMAND` → `select(id)`. Alt solo no activa la barra (es el fuego del joystick);
+  Alt + letra sí. En pantalla completa se quita con `setVisible(false)`.
 - **Línea de comandos** (para PRISMA u otras herramientas):
   `EasySpectrum.exe juego.tap --model 48k|128k|+2|+2a|+3|16k`. Recargar (F2) vuelve a leer el
   archivo del disco: recompilar el .tap y F2.
