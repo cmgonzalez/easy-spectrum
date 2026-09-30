@@ -22,6 +22,7 @@ import 'game_display.dart';
 import 'console_parts.dart';
 import 'console_view.dart';
 import '../settings/settings_screen.dart';
+import 'external_input.dart';
 import 'joystick_pad.dart';
 import 'zx_keyboard.dart';
 
@@ -68,7 +69,19 @@ class _GameScreenState extends State<GameScreen>
   double _captureClock = 0; // s reales desde que paró la cinta (o desde el inicio)
   double _shotClock = 0;
   Uint8List? _loadingShot; // última pantalla con color vista durante la carga
-  int _joyMask = 0;
+  int _joyMask = 0; // lo que se aplicó al core (táctil + externo)
+  int _touchJoy = 0;
+  int _extJoy = 0;
+  final _focus = FocusNode();
+  late final _external = ExternalInput(
+    zx: _zx,
+    pad: () => _pad,
+    cursorsInsteadOfJoystick: widget.mediaPath.isEmpty,
+    onJoystick: (m) {
+      _extJoy = m;
+      _applyJoystick();
+    },
+  );
 
   final _audio = ZxAudio();
 
@@ -223,6 +236,12 @@ class _GameScreenState extends State<GameScreen>
   void _onKey(int code, bool pressed) => _zx.setKey(code, pressed);
 
   void _onJoystick(int mask) {
+    _touchJoy = mask;
+    _applyJoystick();
+  }
+
+  void _applyJoystick() {
+    final mask = _touchJoy | _extJoy;
     final keys = _pad.directionKeys;
     if (keys == null) {
       _zx.setJoystick(mask);
@@ -238,7 +257,9 @@ class _GameScreenState extends State<GameScreen>
 
   /// Suelta todo lo pulsado (al cambiar de controles o abrir un panel).
   void _releaseInputs() {
+    _external.releaseAll();
     _zx.clearKeys();
+    _extJoy = 0;
     _onJoystick(0);
   }
 
@@ -349,6 +370,7 @@ class _GameScreenState extends State<GameScreen>
     WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     WakelockPlus.disable();
+    _focus.dispose();
     _ticker.dispose();
     _audio.stop();
     _zx.dispose();
@@ -437,7 +459,14 @@ class _GameScreenState extends State<GameScreen>
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: SafeArea(
+        body: Focus(
+          focusNode: _focus,
+          autofocus: true,
+          onKeyEvent: (_, e) {
+            if (_paused || !_started) return KeyEventResult.ignored;
+            return _external.handle(e) ? KeyEventResult.handled : KeyEventResult.ignored;
+          },
+          child: SafeArea(
           child: Column(
             children: [
               _TopBar(
@@ -501,6 +530,7 @@ class _GameScreenState extends State<GameScreen>
               ),
             ],
           ),
+        ),
         ),
       ),
     );
