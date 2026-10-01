@@ -105,11 +105,11 @@ class _MousePadState extends State<MousePad> {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, box) {
-      final h = box.maxHeight;
-      final buttonW = (h * 0.95).clamp(80.0, box.maxWidth * 0.3);
+      // Botón horizontal bajo el área de arrastre.
+      final buttonH = (box.maxHeight * 0.26).clamp(52.0, 84.0);
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
+        child: Column(
           children: [
             Expanded(
               child: Listener(
@@ -131,9 +131,10 @@ class _MousePadState extends State<MousePad> {
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(height: 10),
             SizedBox(
-              width: buttonW,
+              height: buttonH,
+              width: double.infinity,
               child: Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: (e) {
