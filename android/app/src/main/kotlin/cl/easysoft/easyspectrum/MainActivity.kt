@@ -4,6 +4,8 @@ import android.content.Intent
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
+import android.view.WindowManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -16,6 +18,16 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "cl.easysoft.easyspectrum/audio"
     private val OPEN_CHANNEL = "cl.easysoft.easyspectrum/open"
     private var openChannel: MethodChannel? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Con las barras ocultas, el contenido llega hasta el recorte de la cámara (si no,
+        // queda una franja negra arriba). La interfaz respeta el recorte con SafeArea.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

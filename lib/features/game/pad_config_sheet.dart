@@ -15,7 +15,12 @@ class PadConfigEditor extends StatefulWidget {
   final PadConfig initial;
   final JoyMapping fallback;
   final ValueChanged<PadConfig> onChanged;
-  const PadConfigEditor({super.key, required this.initial, required this.fallback, required this.onChanged});
+  /// Aviso bajo el título (para qué se guarda: este juego o los valores por defecto).
+  final String note;
+  /// A qué vuelve "Restablecer" (null = solo el tipo de [fallback]).
+  final PadConfig? resetTo;
+  const PadConfigEditor(
+      {super.key, required this.initial, required this.fallback, required this.onChanged, this.note = '', this.resetTo});
 
   @override
   State<PadConfigEditor> createState() => _PadConfigEditorState();
@@ -54,7 +59,7 @@ class _PadConfigEditorState extends State<PadConfigEditor> {
     return ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           children: [
-            Text(t.padConfigNote, style: const TextStyle(fontSize: 16, color: ZxColors.textDim)),
+            Text(widget.note.isEmpty ? t.padConfigNote : widget.note, style: const TextStyle(fontSize: 16, color: ZxColors.textDim)),
             const SizedBox(height: 16),
             _Section(t.controlType),
             Wrap(
@@ -198,7 +203,7 @@ class _PadConfigEditorState extends State<PadConfigEditor> {
               ),
             const SizedBox(height: 12),
             TextButton(
-              onPressed: () => setState(() => _c = PadConfig(type: widget.fallback)),
+              onPressed: () => setState(() => _c = widget.resetTo?.copy() ?? PadConfig(type: widget.fallback)),
               child: Text(t.padReset, style: const TextStyle(fontSize: 18)),
             ),
           ],

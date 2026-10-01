@@ -27,11 +27,34 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   AppSettings? _s;
+  PadConfig? _defaultPad; // control por defecto de los juegos sin configuración propia
 
   @override
   void initState() {
     super.initState();
-    (widget.gamePath == null ? AppSettings.load() : AppSettings.loadForGame(widget.gamePath!)).then((s) => setState(() => _s = s));
+    _load();
+  }
+
+  Future<void> _load() async {
+    final s = await (widget.gamePath == null ? AppSettings.load() : AppSettings.loadForGame(widget.gamePath!));
+    final def = await PadConfig.loadDefault(s.joyMapping);
+    if (mounted) {
+      setState(() {
+        _s = s;
+        _defaultPad = def;
+      });
+    }
+  }
+
+  /// Cambios del editor de control: del juego abierto, o los valores por defecto.
+  void _padChanged(PadConfig c) {
+    if (widget.gamePath != null) {
+      widget.onPadChanged?.call(c);
+      return;
+    }
+    _defaultPad = c;
+    _s?.joyMapping = c.type; // para que guardar los ajustes no pise joy_type
+    c.saveDefault();
   }
 
   void _update(void Function(AppSettings s) change) {
@@ -64,7 +87,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final s = _s;
     final t = context.l10n;
-    String joyLabel(JoyMapping m) => m == JoyMapping.keyboard ? t.joyQaop : m.label;
     final inGame = widget.gamePath != null;
     final general = s == null
         ? const Center(child: CircularProgressIndicator())
@@ -108,6 +130,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
               ),
               SwitchListTile(
+                secondary: const Icon(Icons.fullscreen_rounded, size: 32),
+                title: Text(t.fullScreen),
+                subtitle: Text(t.fullScreenSubtitle),
+                value: s.fullScreen,
+                onChanged: (v) => _update((s) => s.fullScreen = v),
+              ),
+              SwitchListTile(
                 secondary: const Icon(Icons.fit_screen_rounded, size: 32),
                 title: Text(t.fitWidth),
                 subtitle: Text(t.fitWidthSubtitle),
@@ -137,16 +166,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               // Lo que sigue es de la app entera, no de un juego.
               if (!inGame) ...[
                 _Header(t.controls),
-                ListTile(
-                  leading: const Icon(Icons.sports_esports_rounded, size: 32),
-                  title: Text(t.joystickType),
-                  subtitle: Text('${joyLabel(s.joyMapping)}\n${t.joystickTypeNote}'),
-                  isThreeLine: true,
-                  onTap: () async {
-                    final v = await _choose(t.joystick, JoyMapping.values, joyLabel, s.joyMapping);
-                    if (v != null) _update((s) => s.joyMapping = v);
-                  },
-                ),
                 SwitchListTile(
                   secondary: const Icon(Icons.keyboard_rounded, size: 32),
                   title: Text(t.startWithKeyboard),
@@ -190,7 +209,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: const TextStyle(fontSize: 14, color: ZxColors.cyan, fontWeight: FontWeight.normal)),
       ],
     );
-    final pad = widget.pad;
+    // Con juego: su control; desde el menú principal: el control por defecto.
+    final pad = widget.pad ?? _defaultPad;
     if (pad == null) {
       return Scaffold(appBar: AppBar(title: titleWidget), body: general);
     }
@@ -215,7 +235,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             PadConfigEditor(
               initial: pad,
               fallback: widget.padFallback,
-              onChanged: (c) => widget.onPadChanged?.call(c),
+              note: inGame ? '' : t.configDefaults,
+              resetTo: inGame ? _defaultPad : null,
+              onChanged: _padChanged,
             ),
           ],
         ),

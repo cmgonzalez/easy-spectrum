@@ -63,6 +63,8 @@ class ZxBridge {
     _setQuick = lib.lookupFunction<_IntArgN, _IntArg>('zx_set_quickload');
     _setSpeed = lib.lookupFunction<_SpeedN, _Speed>('zx_set_speed');
     _isTurbo = lib.lookupFunction<_IntRetN, _IntRet>('zx_is_turbo');
+    _getModel = lib.lookupFunction<_IntRetN, _IntRet>('zx_get_model');
+    _isUla = lib.lookupFunction<_IntRetN, _IntRet>('zx_is_ulaplus');
     _setGiga = lib.lookupFunction<_IntArgN, _IntArg>('zx_set_gigascreen');
     _pdpStart = lib.lookupFunction<_PdpStartN, _PdpStart>('zx_pdp_start');
   }
@@ -85,6 +87,8 @@ class ZxBridge {
   late final _IntArg _setQuick;
   late final _Speed _setSpeed;
   late final _IntRet _isTurbo;
+  late final _IntRet _getModel;
+  late final _IntRet _isUla;
   late final _IntArg _setGiga;
   late final _PdpStart _pdpStart;
 
@@ -221,6 +225,12 @@ class ZxBridge {
   set tapePlaying(bool v) {
     if (isRunning) _setTape(_h, v ? 1 : 0);
   }
+
+  /// Modelo real de la máquina (ZX_MODEL_*: 0-5 como [ZxModel.index], 6 = Next).
+  int get modelIndex => isRunning ? _getModel(_h) : 1;
+
+  /// El programa activó la paleta ULAplus.
+  bool get ulaplus => isRunning && _isUla(_h) != 0;
 
   /// true mientras la cinta carga en turbo (emulación acelerada y sin sonido).
   bool get turbo => isRunning && _isTurbo(_h) != 0;

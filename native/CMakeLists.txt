@@ -176,6 +176,10 @@ clk_patch(VIDEO_TEXT tipo-colores "const uint8_t colours[2] = {" "const uint32_t
 clk_patch(VIDEO_TEXT papel "palette[(last_fetches_[n+1] & 0x78) >> 3]," "paper_colour(last_fetches_[n+1]),")
 clk_patch(VIDEO_TEXT tinta "palette[((last_fetches_[n+1] & 0x40) >> 3) | (last_fetches_[n+1] & 0x07)],"
     "ink_colour(last_fetches_[n+1]),")
+clk_patch(VIDEO_TEXT decl-ulaplus "namespace Sinclair::ZXSpectrum::Video {"
+    "extern volatile int zx_ulaplus_active;
+
+namespace Sinclair::ZXSpectrum::Video {")
 clk_patch(VIDEO_TEXT api-ulaplus "\t/// Sets the scan target.\n" "${ULAPLUS_PUBLIC}\t/// Sets the scan target.\n")
 clk_patch_block(VIDEO_TEXT paleta "#define RGB(r, g, b)" "#undef RGB\n" "${ULAPLUS_PRIVATE}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/Video.hpp" "${VIDEO_TEXT}")

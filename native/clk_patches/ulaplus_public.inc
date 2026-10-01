@@ -17,6 +17,7 @@
 			break;
 			case 0x40:
 				ulaplus_mode_ = value;
+				::zx_ulaplus_active = value & 1;	// lo lee la interfaz (zx_is_ulaplus)
 				flash_enable_ = (value & 1) ? 0 : 1;
 			break;
 			default: return;
@@ -36,6 +37,7 @@
 	void ulaplus_reset() {
 		ulaplus_register_ = 0;
 		ulaplus_mode_ = 0;
+		::zx_ulaplus_active = 0;
 		flash_enable_ = 1;
 		set_border_colour(border_byte_);
 	}

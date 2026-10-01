@@ -18,6 +18,7 @@ class AppSettings {
   bool onlineInfo = true;
   VideoMode videoMode = VideoMode.sharp;
   bool gigascreen = false;
+  bool fullScreen = false; // móvil: sin barra de título ni franja superior
   bool fitWidth = true; // vertical: la imagen de borde a borde, sin marco
   ScreenBorder screenBorder = ScreenBorder.half;
 
@@ -43,6 +44,7 @@ class AppSettings {
       if (j['screen_border'] != null) s.screenBorder = ScreenBorder.byName(j['screen_border'] as String?);
       s.gigascreen = j['gigascreen'] as bool? ?? s.gigascreen;
       s.fitWidth = j['fit_width'] as bool? ?? s.fitWidth;
+      s.fullScreen = j['full_screen'] as bool? ?? s.fullScreen;
     } catch (_) {}
     return s;
   }
@@ -65,6 +67,7 @@ class AppSettings {
     s.videoMode = VideoMode.byName(p.getString('video_mode'));
     s.gigascreen = p.getBool('gigascreen') ?? false;
     s.fitWidth = p.getBool('fit_width') ?? true;
+    s.fullScreen = p.getBool('full_screen') ?? false;
     s.screenBorder = ScreenBorder.byName(p.getString('screen_border'));
     return s;
   }
@@ -83,6 +86,7 @@ class AppSettings {
         'screen_border': screenBorder.name,
         'gigascreen': gigascreen,
         'fit_width': fitWidth,
+        'full_screen': fullScreen,
       };
       final base = <String, Object>{
         'model': d.model.index,
@@ -93,6 +97,7 @@ class AppSettings {
         'screen_border': d.screenBorder.name,
         'gigascreen': d.gigascreen,
         'fit_width': d.fitWidth,
+        'full_screen': d.fullScreen,
       };
       final diff = {for (final e in all.entries) if (base[e.key] != e.value) e.key: e.value};
       await MediaDb.put(g, {'cfg': diff.isEmpty ? null : jsonEncode(diff)});
@@ -110,6 +115,7 @@ class AppSettings {
     await p.setString('video_mode', videoMode.name);
     await p.setBool('gigascreen', gigascreen);
     await p.setBool('fit_width', fitWidth);
+    await p.setBool('full_screen', fullScreen);
     await p.setString('screen_border', screenBorder.name);
   }
 }

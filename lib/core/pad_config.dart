@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'emulator/zx_types.dart';
 import 'storage/media_db.dart';
@@ -55,39 +56,60 @@ class PadConfig {
   /// Teclas de los botones Select / Start visibles.
   List<int> get selectKeys => systemKeys.take(system).toList();
 
+  /// Configuración de un juego; sin configuración propia, la por defecto (la de Ajustes).
   static Future<PadConfig> load(String gamePath, JoyMapping fallback) async {
     try {
       final raw = (await MediaDb.get(gamePath, ['pad']))?['pad'] as String?;
-      if (raw != null) {
-        final j = jsonDecode(raw) as Map<String, Object?>;
-        final keys = (j['keys'] as List).cast<int>();
-        // Formato anterior: 'extra' con null = botón apagado y sin 'buttons'. Las
-        // teclas usadas quedan primero (son los botones visibles).
-        final saved = (j['extra'] as List? ?? const []).cast<int?>();
-        final used = saved.whereType<int>().toList();
-        final extra = saved.length == used.length ? used : [...used, ...defaultExtra];
-        final buttons = (j['buttons'] as int?) ?? 1 + used.length;
-        return PadConfig(
-          type: JoyMapping.byName(j['type'] as String?) ?? fallback,
-          keys: keys.length == 5 ? keys : null,
-          buttons: buttons.clamp(1, maxButtons),
-          extra: extra.length >= 3 ? extra.take(3).toList() : null,
-          system: ((j['system'] as int?) ?? 0).clamp(0, maxSystem),
-          systemKeys: (j['systemKeys'] as List?)?.cast<int>(),
-          jump: j['jump'] as int?,
-        );
-      }
+      if (raw != null) return _decode(raw, fallback);
+    } catch (_) {}
+    return loadDefault(fallback);
+  }
+
+  static const _defaultKey = 'pad_default';
+
+  /// Configuración por defecto de los juegos sin configuración propia. Si nunca se
+  /// editó, solo el tipo de control de Ajustes ([fallback]).
+  static Future<PadConfig> loadDefault(JoyMapping fallback) async {
+    try {
+      final raw = (await SharedPreferences.getInstance()).getString(_defaultKey);
+      if (raw != null) return _decode(raw, fallback);
     } catch (_) {}
     return PadConfig(type: fallback);
+  }
+
+  /// Guarda esta configuración como la por defecto. El tipo también va a `joy_type`
+  /// (el "control por defecto" que leen los ajustes y los .nex sin configuración).
+  Future<void> saveDefault() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_defaultKey, _encode());
+    await p.setString('joy_type', type.name);
+  }
+
+  static PadConfig _decode(String raw, JoyMapping fallback) {
+    final j = jsonDecode(raw) as Map<String, Object?>;
+    final keys = (j['keys'] as List).cast<int>();
+    // Formato anterior: 'extra' con null = botón apagado y sin 'buttons'. Las
+    // teclas usadas quedan primero (son los botones visibles).
+    final saved = (j['extra'] as List? ?? const []).cast<int?>();
+    final used = saved.whereType<int>().toList();
+    final extra = saved.length == used.length ? used : [...used, ...defaultExtra];
+    final buttons = (j['buttons'] as int?) ?? 1 + used.length;
+    return PadConfig(
+      type: JoyMapping.byName(j['type'] as String?) ?? fallback,
+      keys: keys.length == 5 ? keys : null,
+      buttons: buttons.clamp(1, maxButtons),
+      extra: extra.length >= 3 ? extra.take(3).toList() : null,
+      system: ((j['system'] as int?) ?? 0).clamp(0, maxSystem),
+      systemKeys: (j['systemKeys'] as List?)?.cast<int>(),
+      jump: j['jump'] as int?,
+    );
   }
 
   /// true si el juego tiene configuración propia (si no, sigue el tipo de Ajustes).
   static Future<bool> isSaved(String gamePath) async =>
       (await MediaDb.get(gamePath, ['pad']))?['pad'] != null;
 
-  Future<void> save(String gamePath) => MediaDb.put(
-      gamePath,
-      {'pad': jsonEncode({
+  String _encode() => jsonEncode({
         'type': type.name,
         'keys': keys,
         'buttons': buttons,
@@ -95,5 +117,7 @@ class PadConfig {
         'system': system,
         'systemKeys': systemKeys,
         'jump': jump,
-      })});
+      });
+
+  Future<void> save(String gamePath) => MediaDb.put(gamePath, {'pad': _encode()});
 }

@@ -429,7 +429,11 @@ std::unique_ptr<Analyser::Static::Target> load_sna128(const std::string &path) {
 
 // ---------------------------------------------------------------------------
 
+/* Estado de ULAplus: lo escribe el parche de Video.hpp (native/clk_patches). */
+volatile int zx_ulaplus_active = 0;
+
 struct ZxHandle {
+	int model = ZX_MODEL_48K;	// modelo real (ver zx_get_model)
 	// ZX Spectrum Next (solo .nex): máquina propia; si está, `machine` queda vacío.
 	std::unique_ptr<nx::NextMachine> next;
 	std::vector<uint8_t> next_file;	// copia del .nex para reiniciar
@@ -477,6 +481,7 @@ const char *zx_last_error(void) {
 ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int audio_freq) {
 	using Target = Analyser::Static::ZXSpectrum::Target;
 	g_last_error.clear();
+	zx_ulaplus_active = 0;
 
 	try {
 		const std::string dir = rom_dir ? rom_dir : "";
@@ -502,6 +507,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 			}
 			std::string err;
 			if(!h->next->load_nex(nex.data(), nex.size(), err)) { g_last_error = err; return nullptr; }
+			h->model = ZX_MODEL_NEXT;
 			h->next_file = std::move(nex);
 			LOGI("Next creada: %s", path.c_str());
 			return h.release();
@@ -571,6 +577,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 		};
 
 		auto h = std::make_unique<ZxHandle>();
+		h->model = int(target->model);
 		h->machine = Sinclair::ZXSpectrum::Machine::create(*target, fetcher);
 		if(!h->machine) { g_last_error = "machine_failed"; return nullptr; }
 
@@ -706,6 +713,14 @@ static int run_machine(ZxHandle *h, double seconds) {
 double zx_get_emulated_time(ZxHandle *h) {
 	if(h && h->next) return h->next->emulated_seconds();
 	return h ? h->emulated : 0.0;
+}
+
+int zx_get_model(ZxHandle *h) {
+	return h ? h->model : ZX_MODEL_48K;
+}
+
+int zx_is_ulaplus(ZxHandle *h) {
+	return (h && !h->next && zx_ulaplus_active) ? 1 : 0;
 }
 
 int zx_is_turbo(ZxHandle *h) {

@@ -54,6 +54,12 @@ double zx_get_emulated_time(ZxHandle* h);
 /* 1 si el último zx_run corrió en turbo de carga (cinta girando). */
 int zx_is_turbo(ZxHandle* h);
 
+/* Modelo real de la máquina (ZX_MODEL_*; manda el snapshot si lo hay, ZX_MODEL_NEXT para .nex). */
+int zx_get_model(ZxHandle* h);
+
+/* 1 si el programa activó la paleta ULAplus (puerto FF3B, modo 1). */
+int zx_is_ulaplus(ZxHandle* h);
+
 /* Framebuffer RGBA8888 ZX_FB_WIDTH×ZX_FB_HEIGHT del último frame completo. */
 const uint8_t* zx_get_framebuffer(ZxHandle* h);
 

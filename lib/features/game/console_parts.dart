@@ -150,13 +150,23 @@ class LcdPanel extends StatefulWidget {
   final String spaceLabel;
   final void Function(int code, bool pressed) onKey;
   final bool haptics;
+  /// Franja fija inferior: modelo ("128K", "+2"…), y los indicadores ULA+ y NEXT
+  /// (apagados = tenues, como los segmentos de un LCD). [ulaplus] se consulta en cada cuadro.
+  final String modelLabel;
+  final bool next;
+  final bool Function() ulaplus;
   const LcdPanel({
     super.key,
     required this.text,
     required this.spaceLabel,
     required this.onKey,
     this.haptics = true,
+    this.modelLabel = '',
+    this.next = false,
+    this.ulaplus = _never,
   });
+
+  static bool _never() => false;
 
   @override
   State<LcdPanel> createState() => _LcdPanelState();
@@ -207,6 +217,9 @@ class _LcdPanelState extends State<LcdPanel> with SingleTickerProviderStateMixin
                 enter: _pointers.containsValue(ZxKey.enter),
                 space: _pointers.containsValue(ZxKey.space),
                 spaceLabel: widget.spaceLabel,
+                modelLabel: widget.modelLabel,
+                next: widget.next,
+                ulaplus: widget.ulaplus,
               ),
             ),
           ],
@@ -229,12 +242,18 @@ class _LcdPainter extends CustomPainter {
   final bool enter;
   final bool space;
   final String spaceLabel;
+  final String modelLabel;
+  final bool next;
+  final bool Function() ulaplus;
   _LcdPainter({
     required this.clock,
     required this.text,
     required this.enter,
     required this.space,
     required this.spaceLabel,
+    required this.modelLabel,
+    required this.next,
+    required this.ulaplus,
   }) : super(repaint: clock);
 
   static const _ink = Color(0xFF263022);
@@ -242,6 +261,7 @@ class _LcdPainter extends CustomPainter {
   // Vidrio dentro de lcd.png (582×134): (14, 14)-(568, 120).
   static const _glass = Rect.fromLTRB(14 / 582, 14 / 134, 568 / 582, 120 / 134);
 
+  double _lastLeft = 0;
   static String? _cachedText;
   static double? _cachedSize;
   static TextPainter? _cached;
@@ -266,6 +286,9 @@ class _LcdPainter extends CustomPainter {
             _glass.right * size.width, _glass.bottom * size.height)
         .deflate(size.height * 0.04);
     final fontSize = screen.height * 0.46;
+    // Franja fija inferior (modelo, ULA+, NEXT); el letrero ocupa lo de arriba.
+    final stripH = screen.height * 0.27;
+    final main = Rect.fromLTRB(screen.left, screen.top, screen.right, screen.bottom - stripH);
     canvas.save();
     canvas.clipRect(screen);
     if (text.isNotEmpty) {
@@ -274,7 +297,7 @@ class _LcdPainter extends CustomPainter {
           : (_cached = _paintText(text, fontSize, _ink.withValues(alpha: 0.9)));
       _cachedText = text;
       _cachedSize = fontSize;
-      final y = screen.center.dy - tp.height / 2;
+      final y = main.center.dy - tp.height / 2;
       if (tp.width <= screen.width) {
         tp.paint(canvas, Offset(screen.center.dx - tp.width / 2, y));
       } else {
@@ -286,6 +309,21 @@ class _LcdPainter extends CustomPainter {
         }
       }
     }
+    // Franja: modelo a la izquierda; ULA+ y NEXT a la derecha (tenues si están apagados).
+    final strip = Rect.fromLTRB(screen.left, screen.bottom - stripH, screen.right, screen.bottom);
+    canvas.drawLine(strip.topLeft + const Offset(4, 0), strip.topRight - const Offset(4, 0),
+        Paint()..color = _ink.withValues(alpha: 0.18)..strokeWidth = 1);
+    final sf = stripH * 0.74;
+    final pad = screen.width * 0.025;
+    void stripText(String s, double alpha, {bool right = false, double? edge}) {
+      final tp = _paintText(s, sf, _ink.withValues(alpha: alpha));
+      final x = right ? (edge ?? strip.right - pad) - tp.width : strip.left + pad;
+      tp.paint(canvas, Offset(x, strip.center.dy - tp.height / 2 + 1));
+      _lastLeft = x;
+    }
+    if (modelLabel.isNotEmpty) stripText(modelLabel, 0.9);
+    stripText('NEXT', next ? 0.9 : 0.14, right: true);
+    stripText('ULA+', ulaplus() ? 0.9 : 0.14, right: true, edge: _lastLeft - sf * 1.0);
     final halves = [
       (enter, Rect.fromLTRB(screen.left, screen.top, screen.center.dx, screen.bottom), 'ENTER'),
       (space, Rect.fromLTRB(screen.center.dx, screen.top, screen.right, screen.bottom), spaceLabel),
@@ -300,5 +338,10 @@ class _LcdPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_LcdPainter old) => old.text != text || old.enter != enter || old.space != space;
+  bool shouldRepaint(_LcdPainter old) =>
+      old.text != text ||
+      old.enter != enter ||
+      old.space != space ||
+      old.modelLabel != modelLabel ||
+      old.next != next;
 }

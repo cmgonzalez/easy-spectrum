@@ -160,7 +160,7 @@
   "keyMap": "Mapa de teclas",
   "menuHelp": "Ayuda",
   "dropHint": "Suelta el juego para cargarlo",
-  "keyMapText": "Letras, números, Enter y Espacio: las mismas teclas del Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nRetroceso = DELETE · Esc = BREAK\nSignos (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + su tecla\nFlechas = joystick elegido (o cursores con «Ninguno») · Alt o Tab = fuego\n\nF2 recargar · F3 abrir · F5 reiniciar · F6 cinta · F8 pausa · F11 pantalla completa\nDoble clic: pantalla completa · Arrastra un archivo a la ventana para cargarlo",
+  "keyMapText": "Letras, números, Enter y Espacio: las mismas teclas del Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nRetroceso = DELETE · Esc = BREAK\nSignos (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + su tecla\nFlechas = joystick elegido (o cursores con «Ninguno») · Alt o Tab = fuego\n\nF2 recargar · F3 abrir · F5 reiniciar · F6 cinta · F8 pausa · F11 / Alt+Enter pantalla completa\nDoble clic: pantalla completa · Arrastra un archivo a la ventana para cargarlo",
   "gigascreenSubtitle": "Mezcla cada imagen con la anterior: más colores en los programas que alternan dos pantallas.",
   "tabGame": "Controles",
   "tabGeneral": "General",
@@ -168,5 +168,10 @@
   "configThisGame": "Solo para este juego",
   "configDefaults": "Por defecto para los juegos nuevos",
   "fitWidth": "Ajustar al ancho",
-  "fitWidthSubtitle": "La imagen ocupa todo el ancho, sin marco (vertical)"
+  "fitWidthSubtitle": "La imagen ocupa todo el ancho, sin marco (vertical)",
+  "toolbarSave": "Guardar",
+  "comingSoon": "Próximamente",
+  "tapeBrowser": "Explorador de cinta",
+  "fullScreen": "Pantalla completa",
+  "fullScreenSubtitle": "Sin barra de título: el juego usa toda la pantalla (vertical)"
 }

@@ -135,6 +135,13 @@ class _GameScreenState extends State<GameScreen>
     _ticker.start();
   }
 
+  /// Modelo real en marcha (un snapshot puede cambiar el elegido); vacío para la Next.
+  String _modelLabel() {
+    if (!_started) return '';
+    final i = _zx.modelIndex;
+    return i >= 0 && i < ZxModel.values.length ? ZxModel.values[i].label : '';
+  }
+
   Future<AppSettings> _loadSettings() => AppSettings.loadForGame(widget.mediaPath);
 
   Future<void> _onTick(Duration now) async {
@@ -473,6 +480,7 @@ class _GameScreenState extends State<GameScreen>
   Widget _landscape() {
     const fade = 0.62;
     return SafeArea(
+      top: !_settings.fullScreen,
       child: LayoutBuilder(builder: (context, box) {
         final w = box.maxWidth, h = box.maxHeight;
         final kbW = math.min(w * 0.52, h * 0.45 * zxKeyboardCompactAspect);
@@ -589,8 +597,12 @@ class _GameScreenState extends State<GameScreen>
             return _external.handle(e) ? KeyEventResult.handled : KeyEventResult.ignored;
           },
           child: landscape ? _landscape() : SafeArea(
-          child: Column(
+          top: !_settings.fullScreen,
+          child: Stack(
             children: [
+          Column(
+            children: [
+              if (!_settings.fullScreen)
               _TopBar(
                 title: _title,
                 paused: _paused,
@@ -633,6 +645,9 @@ class _GameScreenState extends State<GameScreen>
                           spaceLabel: context.l10n.space,
                           onKey: _onKey,
                           haptics: _settings.vibration,
+                          modelLabel: _modelLabel(),
+                          next: _zx.modelIndex == 6,
+                          ulaplus: () => _zx.ulaplus,
                         ),
                         actions: ActionButtons(
                           onAction: _onPadAction,
@@ -653,6 +668,34 @@ class _GameScreenState extends State<GameScreen>
                               ),
                       ),
               ),
+            ],
+          ),
+          // Sin barra de título: pausa y menú ⋮ flotan arriba a la derecha (atrás y
+          // teclado ya están en los botones de colores).
+          if (_settings.fullScreen)
+            Positioned(
+              top: 2,
+              right: 4,
+              child: Opacity(
+                opacity: 0.8,
+                child: Row(
+                  children: [
+                    IconButton(
+                      color: Colors.white,
+                      iconSize: 28,
+                      icon: Icon(_paused ? Icons.play_arrow_rounded : Icons.pause_rounded),
+                      onPressed: () => _setPaused(!_paused),
+                    ),
+                    IconButton(
+                      color: Colors.white,
+                      iconSize: 28,
+                      icon: const Icon(Icons.more_vert_rounded),
+                      onPressed: _showMenu,
+                    ),
+                  ],
+                ),
+              ),
+            ),
             ],
           ),
         ),

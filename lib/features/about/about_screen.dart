@@ -29,6 +29,12 @@ class AboutScreen extends StatelessWidget {
                 '${t.engineBody}',
           ),
           _Section(title: t.romsTitle, body: t.romsBody),
+          const _Section(
+            title: 'UIcons',
+            body: 'UIcons Regular Rounded — Freepik\n'
+                'flaticon.com/uicons\n'
+                'CC BY 4.0 (creativecommons.org/licenses/by/4.0)',
+          ),
           _Section(
             title: t.formatsTitle,
             body: '${t.formatTapes}: .tap .tzx .csw\n'

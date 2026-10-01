@@ -25,6 +25,7 @@ import '../game/zx_keyboard.dart';
 import 'desktop_app.dart';
 import 'native_menu.dart';
 import 'pc_keyboard.dart';
+import 'toolbar.dart';
 
 /// Ventana del emulador en escritorio: salida del Spectrum a toda la ventana, barra de
 /// menús y teclado físico. Los archivos se abren en su sitio (sin biblioteca): así una
@@ -89,6 +90,7 @@ class _DesktopScreenState extends State<DesktopScreen>
     final joy = p.getString(_prefJoystick);
     _keyboard.joystick = joy == 'none' ? null : JoyMapping.byName(joy) ?? JoyMapping.kempston;
     _recent = p.getStringList(_prefRecent) ?? [];
+    _audio.setMuted(!_settings.soundOn);
     await _audio.start();
     if (!mounted) return;
     final file = widget.initialFile;
@@ -300,6 +302,12 @@ class _DesktopScreenState extends State<DesktopScreen>
     await _settings.save();
   }
 
+  Future<void> _toggleMute() async {
+    setState(() => _settings.soundOn = !_settings.soundOn);
+    _audio.setMuted(!_settings.soundOn);
+    await _settings.save();
+  }
+
   Future<void> _setQuickLoad(bool v) async {
     setState(() => _settings.quickLoad = v);
     _zx.setQuickLoad(v);
@@ -332,17 +340,28 @@ class _DesktopScreenState extends State<DesktopScreen>
     final outer = await windowManager.getSize();
     // Con el teclado abierto y la ventana alargada, el teclado conserva su sitio.
     final c = _settings.screenBorder.crop;
+    final bar = _fullscreen ? 0.0 : DesktopToolbar.height;
     final imgW = (zxFbWidth - 2 * c) * n.toDouble(), imgH = (zxFbHeight - 2 * c) * n.toDouble();
     if (_kbFits) _kbExtra = _kbHeight(imgW);
     await windowManager.setSize(Size(
       imgW + outer.width - content.width,
-      imgH + _kbExtra + outer.height - content.height,
+      imgH + bar + _kbExtra + outer.height - content.height,
     ));
   }
 
   // --- Teclado ---------------------------------------------------------------
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    // Alt+Enter: pantalla completa (Alt solo es el fuego del joystick; se suelta antes).
+    if (e.logicalKey == LogicalKeyboardKey.enter || e.logicalKey == LogicalKeyboardKey.numpadEnter) {
+      if (HardwareKeyboard.instance.isAltPressed) {
+        if (e is KeyDownEvent) {
+          _keyboard.releaseAll();
+          _setFullscreen(!_fullscreen);
+        }
+        return KeyEventResult.handled;
+      }
+    }
     if (e is KeyDownEvent) {
       final action = switch (e.logicalKey) {
         LogicalKeyboardKey.f2 => _reload,
@@ -409,6 +428,7 @@ class _DesktopScreenState extends State<DesktopScreen>
         ]),
         MenuEntry(t.reset, shortcut: 'F5', onSelected: _zx.reset),
         MenuEntry(t.pause, shortcut: 'F8', checked: _paused, onSelected: () => _setPaused(!_paused)),
+        MenuEntry(t.sound, checked: _settings.soundOn, onSelected: _toggleMute),
         MenuEntry.submenu(t.speed, [
           for (final s in _speeds)
             MenuEntry('${(s * 100).round()} %',
@@ -431,7 +451,7 @@ class _DesktopScreenState extends State<DesktopScreen>
         MenuEntry.submenu(t.windowSize, [
           for (final n in [1, 2, 3, 4]) MenuEntry('×$n', onSelected: () => _setScale(n)),
         ]),
-        MenuEntry(t.fullscreen, shortcut: 'F11', checked: _fullscreen, onSelected: () => _setFullscreen(true)),
+        MenuEntry(t.fullscreen, shortcut: 'F11 / Alt+Enter', checked: _fullscreen, onSelected: () => _setFullscreen(true)),
       ]),
       MenuEntry.submenu('&${t.joystick}', [
         MenuEntry(t.arrowsAsCursors,
@@ -462,6 +482,28 @@ class _DesktopScreenState extends State<DesktopScreen>
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!_fullscreen)
+            DesktopToolbar(items: [
+              ToolItem('nuevo', t.powerOnBasic, onTap: () => _start('')),
+              ToolItem('abrir', t.openFile, onTap: _pickFile),
+              ToolItem('guardar', '${t.toolbarSave} (${t.comingSoon})'),
+              null,
+              ToolItem('tape', '${t.tapeBrowser} (${t.comingSoon})'),
+              null,
+              ToolItem('recargar', t.reset, onTap: () {
+                _zx.reset();
+                _focus.requestFocus();
+              }),
+              ToolItem(_paused ? 'play' : 'pause', t.pause, active: _paused, onTap: () {
+                _setPaused(!_paused);
+                _focus.requestFocus();
+              }),
+              ToolItem(_settings.soundOn ? 'volume' : 'mute', t.sound, active: !_settings.soundOn, onTap: () {
+                _toggleMute();
+                _focus.requestFocus();
+              }),
+              ToolItem('keyboard', t.showKeyboard, active: _showKeyboard, onTap: _toggleKeyboard),
+            ]),
           Expanded(
             child: DropTarget(
               onDragEntered: (_) => setState(() => _dragging = true),
