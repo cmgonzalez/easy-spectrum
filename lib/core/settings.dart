@@ -18,6 +18,7 @@ class AppSettings {
   bool onlineInfo = true;
   VideoMode videoMode = VideoMode.sharp;
   bool gigascreen = false;
+  bool fitWidth = true; // vertical: la imagen de borde a borde, sin marco
   ScreenBorder screenBorder = ScreenBorder.half;
 
   /// Juego al que pertenecen estos ajustes (null = valores por defecto, que usan
@@ -41,6 +42,7 @@ class AppSettings {
       if (j['video_mode'] != null) s.videoMode = VideoMode.byName(j['video_mode'] as String?);
       if (j['screen_border'] != null) s.screenBorder = ScreenBorder.byName(j['screen_border'] as String?);
       s.gigascreen = j['gigascreen'] as bool? ?? s.gigascreen;
+      s.fitWidth = j['fit_width'] as bool? ?? s.fitWidth;
     } catch (_) {}
     return s;
   }
@@ -62,6 +64,7 @@ class AppSettings {
     s.onlineInfo = p.getBool('online_info') ?? true;
     s.videoMode = VideoMode.byName(p.getString('video_mode'));
     s.gigascreen = p.getBool('gigascreen') ?? false;
+    s.fitWidth = p.getBool('fit_width') ?? true;
     s.screenBorder = ScreenBorder.byName(p.getString('screen_border'));
     return s;
   }
@@ -69,17 +72,30 @@ class AppSettings {
   Future<void> save() async {
     final g = gamePath;
     if (g != null) {
-      await MediaDb.put(g, {
-        'cfg': jsonEncode({
-          'model': model.index,
-          'quick_load': quickLoad,
-          'sound_on': soundOn,
-          'vibration': vibration,
-          'video_mode': videoMode.name,
-          'screen_border': screenBorder.name,
-          'gigascreen': gigascreen,
-        })
-      });
+      // Solo lo que difiere de los valores por defecto: lo demás sigue al menú principal.
+      final d = await AppSettings.load();
+      final all = <String, Object>{
+        'model': model.index,
+        'quick_load': quickLoad,
+        'sound_on': soundOn,
+        'vibration': vibration,
+        'video_mode': videoMode.name,
+        'screen_border': screenBorder.name,
+        'gigascreen': gigascreen,
+        'fit_width': fitWidth,
+      };
+      final base = <String, Object>{
+        'model': d.model.index,
+        'quick_load': d.quickLoad,
+        'sound_on': d.soundOn,
+        'vibration': d.vibration,
+        'video_mode': d.videoMode.name,
+        'screen_border': d.screenBorder.name,
+        'gigascreen': d.gigascreen,
+        'fit_width': d.fitWidth,
+      };
+      final diff = {for (final e in all.entries) if (base[e.key] != e.value) e.key: e.value};
+      await MediaDb.put(g, {'cfg': diff.isEmpty ? null : jsonEncode(diff)});
       return;
     }
     final p = await SharedPreferences.getInstance();
@@ -93,6 +109,7 @@ class AppSettings {
     await p.setBool('online_info', onlineInfo);
     await p.setString('video_mode', videoMode.name);
     await p.setBool('gigascreen', gigascreen);
+    await p.setBool('fit_width', fitWidth);
     await p.setString('screen_border', screenBorder.name);
   }
 }

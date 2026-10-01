@@ -116,5 +116,7 @@
   "tabGeneral": "Geral",
   "sound": "Som",
   "configThisGame": "Somente para este jogo",
-  "configDefaults": "Padrão para os novos jogos"
+  "configDefaults": "Padrão para os novos jogos",
+  "fitWidth": "Ajustar à largura",
+  "fitWidthSubtitle": "A imagem ocupa toda a largura, sem moldura (vertical)"
 }

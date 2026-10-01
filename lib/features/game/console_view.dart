@@ -18,6 +18,11 @@ class ConsoleView extends StatelessWidget {
   final bool rainbow;
   /// Proporción ancho/alto de la pantalla (depende de cuánto borde se muestra).
   final double screenAspect;
+  /// La imagen ocupa todo el ancho, sin el vidrio ni el marco lateral.
+  final bool fitWidth;
+  /// Proporción ancho/alto del control (teclado): se le reserva el alto que necesita para
+  /// llenar todo el ancho y la imagen del juego cede lo que haga falta.
+  final double? controlsAspect;
 
   const ConsoleView({
     super.key,
@@ -27,6 +32,8 @@ class ConsoleView extends StatelessWidget {
     required this.controls,
     this.rainbow = true,
     this.screenAspect = 320 / 256,
+    this.fitWidth = false,
+    this.controlsAspect,
   });
 
   static const _skinWidth = 1393.0; // ancho de las piezas del cuerpo
@@ -67,10 +74,19 @@ class ConsoleView extends StatelessWidget {
       // necesitan su espacio en teléfonos bajos).
       const glass = 5.0;
       var gameW = w - 2 * side - 2 * glass;
-      gameW = math.min(gameW, h * 0.46 * screenAspect);
-      final gameH = gameW / screenAspect;
+      gameW = fitWidth ? math.min(w, h * 0.5 * screenAspect) : math.min(gameW, h * 0.46 * screenAspect);
       final lcdW = w * 0.56;
       final actionsH = w * 0.085;
+      var gameH = gameW / screenAspect;
+      final ca = controlsAspect;
+      final kbH = ca == null ? null : (w - 4) / ca;
+      if (ca != null && kbH != null) {
+        // Todo lo que no es imagen ni control, para saber cuánto alto queda.
+        final other = cap * 0.3 + 28 + 6 + 12 + lcdW / LcdPanel.aspect + w * 0.035 + actionsH + frame + 6 +
+            (fitWidth ? 0 : 2 * glass + 5);
+        gameH = math.min(gameH, math.max(h - other - kbH, w * 0.4 / screenAspect));
+        gameW = gameH * screenAspect;
+      }
 
       return Stack(
         fit: StackFit.expand,
@@ -102,10 +118,13 @@ class ConsoleView extends StatelessWidget {
                   child: const SizedBox(height: 28, child: _TopRow()),
                 ),
                 const SizedBox(height: 6),
-                _Bezel(
-                  padding: glass,
-                  child: SizedBox(width: gameW, height: gameH, child: screen),
-                ),
+                if (fitWidth)
+                  SizedBox(width: gameW, height: gameH, child: screen)
+                else
+                  _Bezel(
+                    padding: glass,
+                    child: SizedBox(width: gameW, height: gameH, child: screen),
+                  ),
                 const SizedBox(height: 12),
                 SizedBox(width: lcdW, height: lcdW / LcdPanel.aspect, child: lcd),
                 SizedBox(height: w * 0.035),
@@ -116,8 +135,9 @@ class ConsoleView extends StatelessWidget {
                 // El teclado (sin arcoíris propio del cuerpo) ocupa todo el ancho útil.
                 Expanded(
                   child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: rainbow ? side : frame + 2),
-                    child: controls,
+                    padding: EdgeInsets.symmetric(horizontal: rainbow ? side : 2),
+                    // Con teclado, alto fijo (no se estira más de lo previsto); centrado en el hueco.
+                    child: kbH == null ? controls : Center(child: SizedBox(height: kbH, child: controls)),
                   ),
                 ),
               ],

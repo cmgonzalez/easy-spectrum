@@ -198,6 +198,10 @@ Pantalla de 6912 bytes ($4000) → imagen 256×192. Guardadas en `MediaDb`.
     mando sin el relleno interior y con un **marco redibujado** con el perfil de relieve real de
     cada lado (origen (121,146), controles ×1,10). Pegar trozos del marco original dejaba
     escalones y muescas en las curvas de las esquinas.
+  - **Teclado compacto** (móvil): `assets/skin/keyboard_keys.jpg` = recorte de `keyboard.jpg` (x 24..1512,
+    y 180..899, sin cabecera ni márgenes; `_skinCompact` en `zx_keyboard.dart`, origen (24,240)). Se hizo con
+    PIL a mano (no está en `make_skins.py`): si se regenera `keyboard.jpg`, repetir el recorte. En vertical se
+    estira ×1,2 en alto (`ConsoleView.controlsAspect`); Windows sigue usando la foto completa.
   - Mando: cruceta (ángulo, 8 dir., se puede deslizar), botón redondo = FUEGO, botones de
     colores = teclas 1-4, LCD partido = ENTER | ESPACIO (rótulos pintados encima).
   - Distribución actual: ver "Consola portátil" más abajo.
@@ -380,6 +384,10 @@ con `window_manager`, audio con la misma `ZxAudio` que Android.
   `setup.exe modify ... --passive` exige consola elevada (si no, sale con 5007).
 - `bash build-app.sh windows` → `build/windows/x64/runner/Release/EasySpectrum.exe` y
   `EasySpectrum-win-<ver>-<code>.zip` en la raíz. Primera compilación ~5 min.
+- **Actualizar la instalación local rápido** (sin instalador): tras `bash build-app.sh windows`, cerrar la app y
+  copiar `build\windowsdunner\Release\*` sobre `%LOCALAPPDATA%\Programs\Easy Spectrum`
+  (`Get-Process EasySpectrum | Stop-Process -Force; Copy-Item ... -Recurse -Force`). Solo cambian binarios:
+  asociaciones y registro del instalador quedan intactos.
 - Captura de la ventana para verificar: PrintWindow desde un proceso DPI-aware
   (`SetProcessDPIAware`), si no sale recortada con escalado 150%.
 

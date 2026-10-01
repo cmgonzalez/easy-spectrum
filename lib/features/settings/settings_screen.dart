@@ -108,6 +108,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
               ),
               SwitchListTile(
+                secondary: const Icon(Icons.fit_screen_rounded, size: 32),
+                title: Text(t.fitWidth),
+                subtitle: Text(t.fitWidthSubtitle),
+                value: s.fitWidth,
+                onChanged: (v) => _update((s) => s.fitWidth = v),
+              ),
+              SwitchListTile(
                 secondary: const Icon(Icons.layers_rounded, size: 32),
                 title: const Text('Gigascreen'),
                 subtitle: Text(t.gigascreenSubtitle),

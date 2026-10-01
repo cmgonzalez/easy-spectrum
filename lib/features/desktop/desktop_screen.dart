@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:archive/archive.dart';
@@ -20,6 +21,7 @@ import '../../core/theme/easy_theme.dart';
 import '../../core/video_mode.dart';
 import '../about/about_screen.dart';
 import '../game/game_display.dart';
+import '../game/zx_keyboard.dart';
 import 'desktop_app.dart';
 import 'native_menu.dart';
 import 'pc_keyboard.dart';
@@ -65,6 +67,9 @@ class _DesktopScreenState extends State<DesktopScreen>
   bool _turbo = false;
   bool _fullscreen = false;
   bool _dragging = false;
+  bool _showKeyboard = false; // teclado del Spectrum en pantalla, para el ratón
+  double _kbExtra = 0; // alto que la ventana creció para el teclado (0 = no se alargó)
+  bool _kbFits = false; // la ventana creció lo suficiente: el teclado va a todo el ancho
   double _speed = 1;
   Duration _lastTick = Duration.zero;
 
@@ -325,9 +330,13 @@ class _DesktopScreenState extends State<DesktopScreen>
     if (!mounted) return;
     final content = MediaQuery.sizeOf(context);
     final outer = await windowManager.getSize();
+    // Con el teclado abierto y la ventana alargada, el teclado conserva su sitio.
+    final c = _settings.screenBorder.crop;
+    final imgW = (zxFbWidth - 2 * c) * n.toDouble(), imgH = (zxFbHeight - 2 * c) * n.toDouble();
+    if (_kbFits) _kbExtra = _kbHeight(imgW);
     await windowManager.setSize(Size(
-      zxFbWidth * n + outer.width - content.width,
-      zxFbHeight * n + outer.height - content.height,
+      imgW + outer.width - content.width,
+      imgH + _kbExtra + outer.height - content.height,
     ));
   }
 
@@ -466,7 +475,13 @@ class _DesktopScreenState extends State<DesktopScreen>
                 focusNode: _focus,
                 autofocus: true,
                 onKeyEvent: _onKey,
-                child: GestureDetector(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    GestureDetector(
                   onTap: _focus.requestFocus,
                   onDoubleTap: () => _setFullscreen(!_fullscreen),
                   child: Stack(
@@ -498,11 +513,119 @@ class _DesktopScreenState extends State<DesktopScreen>
                     ],
                   ),
                 ),
+                    // Fuera del GestureDetector: clics aquí no cuentan como doble clic.
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: Tooltip(
+                        message: t.showKeyboard,
+                        child: GestureDetector(
+                          onTap: _toggleKeyboard,
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: Opacity(
+                              opacity: _showKeyboard ? 0.95 : 0.55,
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0xFF2C2F33),
+                                  border: Border.all(
+                                      color: _showKeyboard ? ZxColors.cyan : Colors.white70, width: 2),
+                                ),
+                                child: const Icon(Icons.keyboard_rounded, size: 24, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                    ),
+                    // Teclado bajo la imagen: el juego se reduce para dejarle sitio.
+                    if (_showKeyboard)
+                      LayoutBuilder(builder: (context, box) {
+                        // Ventana alargada: el teclado va a todo el ancho; si no, se acota al alto.
+                        final kbW = _kbFits
+                            ? box.maxWidth
+                            : math.min(box.maxWidth, MediaQuery.sizeOf(context).height * 0.42 * 1536 / 899);
+                        return ColoredBox(
+                          color: Colors.black,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Center(
+                              child: SizedBox(
+                                width: kbW,
+                                height: kbW * 899 / 1536,
+                                child: ZxKeyboard(
+                                  haptics: false,
+                                  onKey: (code, pressed) => _zx.setKey(code, pressed),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
+                ),
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// Alto del panel del teclado para un ancho dado (imagen 1536×899 + aire).
+  double _kbHeight(double width) => width * 899 / 1536 + 12;
+
+  /// Muestra u oculta el teclado bajo la imagen. La ventana se alarga lo que mide el
+  /// teclado (y vuelve a su alto al cerrarlo), así el juego no se reduce; en pantalla
+  /// completa o maximizada no hay dónde crecer y el juego cede el espacio.
+  Future<void> _toggleKeyboard() async {
+    final open = !_showKeyboard;
+    _keyboard.releaseAll();
+    _zx.clearKeys();
+    final canResize = !_fullscreen && !await windowManager.isMaximized();
+    if (!mounted) return;
+    if (open) {
+      final want = canResize ? _kbHeight(MediaQuery.sizeOf(context).width) : 0.0;
+      var grown = 0.0;
+      if (want > 0) {
+        // La ventana crece hasta donde cabe en la pantalla (sube si hace falta); lo que
+        // no quepa lo cede la imagen del juego.
+        final view = View.of(context);
+        final screenH = view.display.size.height / view.devicePixelRatio - 70; // barra de tareas
+        final outer = await windowManager.getSize();
+        final pos = await windowManager.getPosition();
+        final newH = math.min(outer.height + want, screenH);
+        grown = math.max(0.0, newH - outer.height);
+        if (grown > 0) {
+          await windowManager.setSize(Size(outer.width, newH));
+          final y = math.max(0.0, math.min(pos.dy, screenH - newH));
+          if (y != pos.dy) await windowManager.setPosition(Offset(pos.dx, y));
+        }
+        if (!mounted) return;
+      }
+      setState(() {
+        _showKeyboard = true;
+        _kbExtra = grown;
+        _kbFits = want > 0 && grown >= want - 1;
+      });
+    } else {
+      final extra = _kbExtra;
+      setState(() {
+        _showKeyboard = false;
+        _kbExtra = 0;
+        _kbFits = false;
+      });
+      if (extra > 0 && canResize) {
+        final outer = await windowManager.getSize();
+        await windowManager.setSize(Size(outer.width, math.max(240, outer.height - extra)));
+      }
+    }
+    _focus.requestFocus();
   }
 }

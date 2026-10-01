@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -384,13 +385,24 @@ class _GameScreenState extends State<GameScreen>
   Future<void> _showMenu() async {
     final tape = _zx.tapePlaying;
     final t = context.l10n;
+    // En horizontal no hay botones de colores: la configuración y el sonido van aquí.
+    final landscape = MediaQuery.orientationOf(context) == Orientation.landscape;
     final choice = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: ZxColors.bodyLight,
       builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (landscape) ...[
+              _MenuTile(icon: Icons.tune_rounded, label: t.settings, value: 'config'),
+              _MenuTile(
+                  icon: _settings.soundOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                  label: t.sound,
+                  value: 'sound'),
+            ],
             _MenuTile(icon: Icons.tv_rounded, label: t.videoMode, value: 'video'),
             _MenuTile(icon: Icons.restart_alt_rounded, label: t.reset, value: 'reset'),
             if (widget.mediaPath.isNotEmpty)
@@ -402,9 +414,14 @@ class _GameScreenState extends State<GameScreen>
             _MenuTile(icon: Icons.exit_to_app_rounded, label: t.exitGame, value: 'exit'),
           ],
         ),
+        ),
       ),
     );
     switch (choice) {
+      case 'config':
+        _whilePaused(_openSettings);
+      case 'sound':
+        _toggleSound();
       case 'video':
         _chooseVideo();
       case 'reset':
@@ -450,8 +467,113 @@ class _GameScreenState extends State<GameScreen>
     await _settings.save();
   }
 
+  /// Horizontal: el juego ocupa todo el alto y los controles van a los costados,
+  /// translúcidos sobre él; el teclado es una capa translúcida que se alterna con
+  /// el botón verde de arriba.
+  Widget _landscape() {
+    const fade = 0.62;
+    return SafeArea(
+      child: LayoutBuilder(builder: (context, box) {
+        final w = box.maxWidth, h = box.maxHeight;
+        final kbW = math.min(w * 0.52, h * 0.45 * zxKeyboardCompactAspect);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(
+              child: AspectRatio(
+                aspectRatio: GameDisplay.aspectFor(_settings.screenBorder),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    GameDisplay(
+                        frame: _frame, turbo: _turbo, mode: _settings.videoMode, border: _settings.screenBorder),
+                    if (_paused)
+                      const ColoredBox(
+                        color: Colors.black54,
+                        child: Center(child: Icon(Icons.pause_circle_filled_rounded, size: 96, color: Colors.white70)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Opacity(
+              opacity: fade,
+              child: JoystickPad(
+                landscape: true,
+                onJoystick: _onJoystick,
+                onKey: _onKey,
+                extraKeys: _pad.extraKeys,
+                selectKeys: _pad.selectKeys,
+                jumpButton: _pad.jumpButton,
+                jumpLabel: context.l10n.jump.toUpperCase(),
+                haptics: _settings.vibration,
+              ),
+            ),
+            if (_showKeyboard)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: Opacity(
+                  opacity: fade,
+                  child: SizedBox(
+                    width: kbW,
+                    height: kbW / zxKeyboardCompactAspect,
+                    child: ZxKeyboard(onKey: _onKey, haptics: _settings.vibration, compact: true),
+                  ),
+                ),
+              ),
+            Positioned(
+              right: 12,
+              top: 8,
+              child: Opacity(
+                opacity: fade,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _toggleInput,
+                  child: Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF2C2F33),
+                      border: Border.all(color: _showKeyboard ? ZxColors.cyan : Colors.white70, width: 3),
+                    ),
+                    child: const Icon(Icons.keyboard_rounded, size: 34, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 2,
+              left: 4,
+              child: Opacity(
+                opacity: 0.7,
+                child: Row(
+                  children: [
+                    IconButton(
+                      color: Colors.white,
+                      iconSize: 30,
+                      icon: Icon(_paused ? Icons.play_arrow_rounded : Icons.pause_rounded),
+                      onPressed: () => _setPaused(!_paused),
+                    ),
+                    IconButton(
+                      color: Colors.white,
+                      iconSize: 30,
+                      icon: const Icon(Icons.more_vert_rounded),
+                      onPressed: _showMenu,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final landscape = MediaQuery.orientationOf(context) == Orientation.landscape;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -466,7 +588,7 @@ class _GameScreenState extends State<GameScreen>
             if (_paused || !_started) return KeyEventResult.ignored;
             return _external.handle(e) ? KeyEventResult.handled : KeyEventResult.ignored;
           },
-          child: SafeArea(
+          child: landscape ? _landscape() : SafeArea(
           child: Column(
             children: [
               _TopBar(
@@ -485,6 +607,9 @@ class _GameScreenState extends State<GameScreen>
                     ? _ErrorView(message: zxErrorText(context.l10n, _error!), onBack: () => Navigator.pop(context))
                     : ConsoleView(
                         rainbow: !_showKeyboard,
+                        fitWidth: _settings.fitWidth,
+                        // Teclado: un poco más alto que su proporción (teclas más cómodas).
+                        controlsAspect: _showKeyboard ? zxKeyboardCompactAspect / 1.2 : null,
                         screenAspect: GameDisplay.aspectFor(_settings.screenBorder),
                         screen: Stack(
                           fit: StackFit.expand,
@@ -516,7 +641,7 @@ class _GameScreenState extends State<GameScreen>
                           haptics: _settings.vibration,
                         ),
                         controls: _showKeyboard
-                            ? ZxKeyboard(onKey: _onKey, haptics: _settings.vibration)
+                            ? ZxKeyboard(onKey: _onKey, haptics: _settings.vibration, compact: true, stretch: true)
                             : JoystickPad(
                                 onJoystick: _onJoystick,
                                 onKey: _onKey,

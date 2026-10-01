@@ -21,7 +21,7 @@ class GameDisplay extends StatefulWidget {
       {super.key, this.frame, this.turbo = false, this.mode = VideoMode.sharp, this.border = ScreenBorder.half});
 
   /// Proporción de la parte visible (320×256 menos el borde recortado).
-  static double aspectFor(ScreenBorder b) => (zxFbWidth - 2 * b.px) / (zxFbHeight - 2 * b.px);
+  static double aspectFor(ScreenBorder b) => (zxFbWidth - 2 * b.crop) / (zxFbHeight - 2 * b.crop);
 
   @override
   State<GameDisplay> createState() => _GameDisplayState();
@@ -65,7 +65,7 @@ class _GameDisplayState extends State<GameDisplay> {
             painter: _FramePainter(
               frame,
               mode: mode,
-              border: widget.border.px,
+              border: widget.border.crop,
               shader: mode.crt != null ? _shader : null,
               dpr: MediaQuery.devicePixelRatioOf(context),
             ),

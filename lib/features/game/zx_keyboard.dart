@@ -12,6 +12,14 @@ import 'skin.dart';
 /// cabecera queda en y = 60..235 de estas coordenadas.
 const _skin = SkinImage('assets/skin/keyboard.jpg', 1536, 899, origin: Offset(0, 60));
 
+/// Solo las teclas (sin la cabecera ni los márgenes laterales): para el móvil, donde cada
+/// píxel de ancho cuenta. Recorte de keyboard.jpg: x 24..1512, y 180..899 (asset).
+const _skinCompact = SkinImage('assets/skin/keyboard_keys.jpg', 1488, 719, origin: Offset(24, 240));
+
+/// Proporción ancho/alto de cada versión del teclado.
+const zxKeyboardAspect = 1536 / 899;
+const zxKeyboardCompactAspect = 1488 / 719;
+
 const _rowBands = [(354.0, 421.0), (492.0, 560.0), (630.0, 698.0), (765.0, 837.0)];
 
 const _rowKeys = <List<(double, double, int)>>[
@@ -75,7 +83,11 @@ int? _keyAt(Offset p) {
 class ZxKeyboard extends StatefulWidget {
   final void Function(int code, bool pressed) onKey;
   final bool haptics;
-  const ZxKeyboard({super.key, required this.onKey, this.haptics = true});
+  /// Versión recortada (solo teclas). Con [stretch] rellena todo el alto dado (teclas más altas).
+  final bool compact;
+  final bool stretch;
+  const ZxKeyboard(
+      {super.key, required this.onKey, this.haptics = true, this.compact = false, this.stretch = false});
 
   @override
   State<ZxKeyboard> createState() => _ZxKeyboardState();
@@ -135,7 +147,8 @@ class _ZxKeyboardState extends State<ZxKeyboard> {
   @override
   Widget build(BuildContext context) {
     return SkinView(
-      skin: _skin,
+      skin: widget.compact ? _skinCompact : _skin,
+      stretch: widget.stretch,
       onDown: (id, p) {
         final code = _keyAt(p);
         if (code == null || _pointers.containsValue(code)) return;

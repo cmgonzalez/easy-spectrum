@@ -116,5 +116,7 @@
   "tabGeneral": "Generale",
   "sound": "Suono",
   "configThisGame": "Solo per questo gioco",
-  "configDefaults": "Predefinito per i nuovi giochi"
+  "configDefaults": "Predefinito per i nuovi giochi",
+  "fitWidth": "Adatta alla larghezza",
+  "fitWidthSubtitle": "L'immagine occupa tutta la larghezza, senza cornice (verticale)"
 }

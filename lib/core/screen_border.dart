@@ -3,14 +3,14 @@ import 'l10n.dart';
 /// Cuánto del borde del Spectrum se muestra alrededor de la pantalla (256×192).
 /// El framebuffer trae 32 px de borde por lado. Se guarda por nombre en Ajustes.
 enum ScreenBorder {
-  full(32),
+  full(0),
   half(16),
-  none(0);
+  none(32);
 
-  const ScreenBorder(this.px);
+  const ScreenBorder(this.crop);
 
-  /// Píxeles de borde por lado que se dibujan.
-  final int px;
+  /// Píxeles de borde por lado que se recortan del framebuffer (32 = todo el borde).
+  final int crop;
 
   String label(AppLocalizations t) => switch (this) {
         ScreenBorder.full => t.borderFull,

@@ -116,5 +116,7 @@
   "tabGeneral": "General",
   "sound": "Sound",
   "configThisGame": "This game only",
-  "configDefaults": "Default for new games"
+  "configDefaults": "Default for new games",
+  "fitWidth": "Fit to width",
+  "fitWidthSubtitle": "The picture fills the full width, no frame (portrait)"
 }

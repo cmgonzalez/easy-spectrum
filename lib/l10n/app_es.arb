@@ -166,5 +166,7 @@
   "tabGeneral": "General",
   "sound": "Sonido",
   "configThisGame": "Solo para este juego",
-  "configDefaults": "Por defecto para los juegos nuevos"
+  "configDefaults": "Por defecto para los juegos nuevos",
+  "fitWidth": "Ajustar al ancho",
+  "fitWidthSubtitle": "La imagen ocupa todo el ancho, sin marco (vertical)"
 }

@@ -29,7 +29,7 @@ class MediaDb {
     final dir = await getApplicationSupportDirectory();
     return openDatabase(
       '${dir.path}/$_file',
-      version: 2,
+      version: 3,
       onCreate: (db, _) async {
         await db.execute('''
           CREATE TABLE media(
@@ -54,6 +54,9 @@ class MediaDb {
       },
       onUpgrade: (db, from, _) async {
         if (from < 2) await db.execute('ALTER TABLE media ADD COLUMN cfg TEXT');
+        // v3: cfg guarda solo lo que difiere de los valores por defecto; las copias
+        // completas de la v2 los dejaban fijados y no seguían al menú principal.
+        if (from < 3) await db.execute('UPDATE media SET cfg = NULL');
       },
     );
   }

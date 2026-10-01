@@ -48,6 +48,9 @@ class JoystickPad extends StatefulWidget {
   final int? jumpButton;
   final String jumpLabel;
   final bool haptics;
+  /// Horizontal: cruceta y botonera en los costados de una pantalla ancha (Select /
+  /// Start bajo la cruceta), para dibujarse translúcidos sobre el juego.
+  final bool landscape;
 
   const JoystickPad({
     super.key,
@@ -58,6 +61,7 @@ class JoystickPad extends StatefulWidget {
     this.jumpButton,
     this.jumpLabel = 'JUMP',
     this.haptics = true,
+    this.landscape = false,
   });
 
   @override
@@ -69,6 +73,21 @@ class _Layout {
   final Rect dpad, cluster;
   final Rect? select;
   _Layout(this.dpad, this.cluster, this.select);
+
+  /// Horizontal: piezas a los costados; Select / Start debajo de la cruceta.
+  factory _Layout.landscape(Size size, int selects) {
+    final w = size.width, h = size.height;
+    final sel = _selects[selects];
+    final d = math.min(h * 0.56, w * 0.22);
+    final selW = sel == null ? 0.0 : d * (selects == 2 ? 0.95 : 0.6);
+    final selH = sel == null ? 0.0 : selW * sel.$1.height / sel.$1.width;
+    final top = h - d - selH - h * 0.1;
+    final cy = top + d / 2;
+    final dpad = Rect.fromCenter(center: Offset(w * 0.04 + d / 2, cy), width: d * 0.9, height: d * 0.9);
+    final cluster = Rect.fromLTWH(w - w * 0.04 - d, top, d, d);
+    final select = sel == null ? null : Rect.fromLTWH(dpad.center.dx - selW / 2, top + d + h * 0.02, selW, selH);
+    return _Layout(dpad, cluster, select);
+  }
 
   factory _Layout.of(Size size, int selects) {
     final w = size.width, h = size.height;
@@ -232,7 +251,9 @@ class _JoystickPadState extends State<JoystickPad> {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, box) {
-      final l = _layout = _Layout.of(box.biggest, widget.selectKeys.length);
+      final l = _layout = widget.landscape
+          ? _Layout.landscape(box.biggest, widget.selectKeys.length)
+          : _Layout.of(box.biggest, widget.selectKeys.length);
       Widget place(Rect r, Widget child) =>
           Positioned(left: r.left, top: r.top, width: r.width, height: r.height, child: child);
       final n = widget.extraKeys.length + 1;
