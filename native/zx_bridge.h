@@ -72,6 +72,12 @@ void zx_type(ZxHandle* h, const char* utf8);
 
 void zx_set_joystick(ZxHandle* h, int mask);
 
+/* Ratón: mode 0 = sin ratón, 1 = Kempston, 2 = AMX. dx/dy son desplazamientos relativos
+ * (dy positivo = hacia abajo); buttons: bit 0 izquierdo, bit 1 derecho, bit 2 central. */
+void zx_set_mouse_mode(ZxHandle* h, int mode);
+void zx_mouse_move(ZxHandle* h, int dx, int dy);
+void zx_mouse_buttons(ZxHandle* h, int buttons);
+
 /* Drena audio: hasta max_samples int16 (L,R,L,R…). Devuelve cuántos int16 copió. */
 int zx_get_audio(ZxHandle* h, int16_t* out, int max_samples);
 

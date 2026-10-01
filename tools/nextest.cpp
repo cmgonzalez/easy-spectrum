@@ -38,6 +38,11 @@ int main(int argc, char **argv) {
 	std::string err;
 	if(!m.load_nex(nex.data(), nex.size(), err)) { printf("error: %s\n", err.c_str()); return 1; }
 
+	if(getenv("NX_MOUSE")) {
+		m.mouse().mode = 1;
+		m.mouse().move(10, -4);
+		m.mouse().buttons = 1;
+	}
 	const double secs = atof(argv[2]);
 	int frames = 0;
 	long audio = 0;

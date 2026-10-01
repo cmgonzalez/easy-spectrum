@@ -117,6 +117,15 @@ zx_patch(ulaplus-reset
     "\t\tupdate_video_base();\n\t\tz80_.set_power_on_reset();\n"
     "\t\tupdate_video_base();\n\t\tvideo_->ulaplus_reset();\n\t\tz80_.set_power_on_reset();\n")
 
+# 4. Ratón Kempston (zx_mouse.h): FBDF/FFDF/FADF. Va antes de la lectura del joystick Kempston
+#    porque esos puertos (byte bajo DF) también tienen A5 a 0 y el joystick los taparía.
+zx_patch(raton-include
+    "#include \"ZXSpectrum.hpp\"\n"
+    "#include \"ZXSpectrum.hpp\"\n#include \"zx_mouse.h\"\n")
+zx_patch(raton-lectura
+    "\t\t\t\tif(!(address&32)) {\n\t\t\t\t\tdid_match = true;\n\t\t\t\t\t*cycle.value &= static_cast<Joystick *>(joysticks_[0].get())->get_kempston();\n\t\t\t\t}\n"
+    "\t\t\t\tuint8_t mouse_value;\n\t\t\t\tif(g_zx_mouse.read(address, mouse_value)) {\n\t\t\t\t\tdid_match = true;\n\t\t\t\t\t*cycle.value = mouse_value;\n\t\t\t\t} else if(!(address&32)) {\n\t\t\t\t\tdid_match = true;\n\t\t\t\t\t*cycle.value &= static_cast<Joystick *>(joysticks_[0].get())->get_kempston();\n\t\t\t\t}\n")
+
 # Métodos de depuración que se inyectan dentro de ConcreteMachine (native/clk_patches/pdp_methods.inc).
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/clk_patches/pdp_methods.inc" PDP_METHODS)
 string(REPLACE "

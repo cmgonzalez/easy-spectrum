@@ -285,6 +285,10 @@ uint8_t NextMachine::in(uint16_t port) {
 			if(!(port & (0x100 << row))) r &= uint8_t(~key_rows_[row]);
 		return uint8_t(r | 0xA0);
 	}
+	{
+		uint8_t mv;
+		if(mouse_.read(port, mv)) return mv;
+	}
 	if((port & 0xC007) == 0xC005) {
 		const int chip = (nr_[0x08] & 0x02) ? ay_selected_ : 0;
 		return ay_[chip].reg[ay_[chip].selected & 15];

@@ -3,6 +3,7 @@
 // como referencia de consulta el driver BSD de MAME; no contiene código copiado de emuladores GPL.
 #pragma once
 #include "z80n.h"
+#include "../zx_mouse.h"
 
 #include <cstddef>
 #include <cstdio>
@@ -60,6 +61,7 @@ public:
 	void set_key(int key, bool pressed);
 	void clear_keys();
 	void set_joystick(int mask);
+	ZxMouse &mouse() { return mouse_; }
 	void set_speed(double multiplier) { speed_multiplier_ = multiplier; }
 	double emulated_seconds() const { return emulated_; }
 	int cpu_speed() const { return cpu_speed_; }	// 0..3 = 3,5 / 7 / 14 / 28 MHz
@@ -209,6 +211,7 @@ private:
 	// --- teclado / mandos ---
 	uint8_t key_rows_[8];
 	uint8_t joy_ = 0;
+	ZxMouse mouse_;
 	uint8_t kempston() const;
 
 	// --- audio ---

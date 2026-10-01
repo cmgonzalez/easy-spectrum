@@ -77,6 +77,28 @@ class _PadConfigEditorState extends State<PadConfigEditor> {
                   ),
               ],
             ),
+            const SizedBox(height: 16),
+            _Section(t.mouse),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final m in MouseType.selectable)
+                  ChoiceChip(
+                    label: Text(m == MouseType.none ? t.mouseNone : m.label, style: const TextStyle(fontSize: 18)),
+                    selected: _c.mouse == m,
+                    selectedColor: ZxColors.cyan,
+                    labelStyle: TextStyle(color: _c.mouse == m ? Colors.black : null),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    onSelected: (_) => setState(() => _c.mouse = m),
+                  ),
+              ],
+            ),
+            if (_c.mouse != MouseType.none)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(t.mouseHint, style: const TextStyle(fontSize: 14, color: ZxColors.textDim)),
+              ),
             if (_c.type == JoyMapping.keyboard) ...[
               const SizedBox(height: 16),
               _Section(t.padKeys),

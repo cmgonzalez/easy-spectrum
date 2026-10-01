@@ -20,6 +20,7 @@ class PadConfig {
   int buttons; // 1-4 botones en la botonera (el rojo siempre es fuego)
   final List<int> extra; // teclas de amarillo, verde y azul
   int system; // 0-2 botones Select / Start
+  MouseType mouse; // ratón conectado (en Android muestra el touchpad en vez del mando)
   int? jump; // botón (1-3 = amarillo, verde, azul) que hace de "arriba"; null = cruceta
   final List<int> systemKeys;
 
@@ -31,6 +32,7 @@ class PadConfig {
     this.system = 0,
     List<int>? systemKeys,
     this.jump,
+    this.mouse = MouseType.none,
   })  : keys = List.of(keys ?? defaultPadKeys),
         extra = List.of(extra ?? defaultExtra),
         systemKeys = List.of(systemKeys ?? defaultSystem);
@@ -42,7 +44,8 @@ class PadConfig {
       extra: extra,
       system: system,
       systemKeys: systemKeys,
-      jump: jump);
+      jump: jump,
+      mouse: mouse);
 
   /// Teclas de cada dirección, o null si es Kempston (joystick real).
   List<int>? get directionKeys => type == JoyMapping.keyboard ? keys : type.keys;
@@ -102,6 +105,7 @@ class PadConfig {
       system: ((j['system'] as int?) ?? 0).clamp(0, maxSystem),
       systemKeys: (j['systemKeys'] as List?)?.cast<int>(),
       jump: j['jump'] as int?,
+      mouse: MouseType.byName(j['mouse'] as String?),
     );
   }
 
@@ -117,6 +121,7 @@ class PadConfig {
         'system': system,
         'systemKeys': systemKeys,
         'jump': jump,
+        'mouse': mouse.name,
       });
 
   Future<void> save(String gamePath) => MediaDb.put(gamePath, {'pad': _encode()});

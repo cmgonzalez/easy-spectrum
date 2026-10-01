@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:archive/archive.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/gestures.dart' show kMiddleMouseButton, kPrimaryButton, kSecondaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -23,6 +24,7 @@ import '../about/about_screen.dart';
 import '../game/game_display.dart';
 import '../game/zx_keyboard.dart';
 import 'desktop_app.dart';
+import 'mouse_capture.dart';
 import 'native_menu.dart';
 import 'pc_keyboard.dart';
 import 'toolbar.dart';
@@ -43,6 +45,10 @@ class _DesktopScreenState extends State<DesktopScreen>
     with SingleTickerProviderStateMixin, WindowListener {
   static const _prefJoystick = 'desktop_joystick';
   static const _prefRecent = 'desktop_recent';
+  static const _prefMouse = 'desktop_mouse';
+  final _capture = MouseCapture();
+  MouseType _mouse = MouseType.none;
+  bool _mouseCaptured = false;
   static const _maxRecent = 10;
   static const _speeds = [0.5, 1.0, 2.0, 4.0];
 
@@ -90,6 +96,8 @@ class _DesktopScreenState extends State<DesktopScreen>
     final joy = p.getString(_prefJoystick);
     _keyboard.joystick = joy == 'none' ? null : JoyMapping.byName(joy) ?? JoyMapping.kempston;
     _recent = p.getStringList(_prefRecent) ?? [];
+    _mouse = MouseType.byName(p.getString(_prefMouse));
+    _zx.mouseMode = _mouse.index;
     _audio.setMuted(!_settings.soundOn);
     await _audio.start();
     if (!mounted) return;
@@ -117,6 +125,7 @@ class _DesktopScreenState extends State<DesktopScreen>
   void dispose() {
     _openArgs.setMethodCallHandler(null);
     windowManager.removeListener(this);
+    _capture.stop();
     _ticker.dispose();
     _audio.stop();
     _zx.dispose();
@@ -126,7 +135,55 @@ class _DesktopScreenState extends State<DesktopScreen>
   }
 
   @override
-  void onWindowBlur() => _keyboard.releaseAll();
+  void onWindowBlur() {
+    _keyboard.releaseAll();
+    _releaseMouse();
+  }
+
+  // --- Ratón (Kempston / AMX) ------------------------------------------------
+
+  void _grabMouse() {
+    _capture.pixelsPerStep = _pixelsPerStep();
+    if (_capture.start(_zx.mouseMove)) setState(() => _mouseCaptured = true);
+  }
+
+  void _releaseMouse() {
+    if (!_capture.active) return;
+    _capture.stop();
+    _zx.mouseButtons(0);
+    if (mounted) setState(() => _mouseCaptured = false);
+  }
+
+  /// Píxeles de pantalla (físicos) por píxel del Spectrum visible, para la sensibilidad.
+  double _pixelsPerStep() {
+    final size = MediaQuery.sizeOf(context);
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final visibleW = zxFbWidth - 2 * _settings.screenBorder.crop;
+    final h = size.height * dpr, visibleH = zxFbHeight - 2 * _settings.screenBorder.crop;
+    final byWidth = size.width * dpr / visibleW, byHeight = h / visibleH;
+    return (byWidth < byHeight ? byWidth : byHeight).clamp(1.0, 12.0);
+  }
+
+  Future<void> _setMouse(MouseType m) async {
+    _releaseMouse();
+    setState(() => _mouse = m);
+    _zx.mouseMode = m.index;
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_prefMouse, m.name);
+  }
+
+  void _mousePointer(PointerEvent e) {
+    if (_mouse == MouseType.none) return;
+    if (!_capture.active) {
+      if (e is PointerDownEvent && e.buttons == kPrimaryButton) _grabMouse();
+      return;
+    }
+    var mask = 0;
+    if (e.buttons & kPrimaryButton != 0) mask |= 1;
+    if (e.buttons & kSecondaryButton != 0) mask |= 2;
+    if (e.buttons & kMiddleMouseButton != 0) mask |= 4;
+    _zx.mouseButtons(mask);
+  }
 
   // --- Emulación -------------------------------------------------------------
 
@@ -370,6 +427,7 @@ class _DesktopScreenState extends State<DesktopScreen>
         LogicalKeyboardKey.f6 => () async => _toggleTape(),
         LogicalKeyboardKey.f8 || LogicalKeyboardKey.pause => () async => _setPaused(!_paused),
         LogicalKeyboardKey.f11 => () => _setFullscreen(!_fullscreen),
+        LogicalKeyboardKey.f9 when _capture.active => () async => _releaseMouse(),
         LogicalKeyboardKey.escape when _fullscreen => () => _setFullscreen(false),
         _ => null,
       };
@@ -460,6 +518,12 @@ class _DesktopScreenState extends State<DesktopScreen>
           MenuEntry(j.label,
               radio: true, checked: _keyboard.joystick == j, onSelected: () => _setJoystick(j)),
         const MenuEntry.separator(),
+        MenuEntry.submenu(t.mouse, [
+          for (final m in MouseType.selectable)
+            MenuEntry(m == MouseType.none ? t.mouseNone : m.label,
+                radio: true, checked: _mouse == m, onSelected: () => _setMouse(m)),
+        ]),
+        const MenuEntry.separator(),
         MenuEntry('${t.keyMap}…', onSelected: _showKeyMap),
       ]),
       MenuEntry.submenu('&${t.menuHelp}', [
@@ -523,9 +587,12 @@ class _DesktopScreenState extends State<DesktopScreen>
                       child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    GestureDetector(
+                    Listener(
+                  onPointerDown: _mousePointer,
+                  onPointerUp: _mousePointer,
+                  child: GestureDetector(
                   onTap: _focus.requestFocus,
-                  onDoubleTap: () => _setFullscreen(!_fullscreen),
+                  onDoubleTap: _mouse == MouseType.none ? () => _setFullscreen(!_fullscreen) : null,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -552,8 +619,26 @@ class _DesktopScreenState extends State<DesktopScreen>
                           child: Text(t.dropHint,
                               style: const TextStyle(fontSize: 24, color: ZxColors.cyan)),
                         ),
+                      if (_mouseCaptured)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 14,
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.65),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(t.mouseRelease,
+                                  style: const TextStyle(fontSize: 16, color: ZxColors.cyan)),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
+                ),
                 ),
                     // Fuera del GestureDetector: clics aquí no cuentan como doble clic.
                     Positioned(

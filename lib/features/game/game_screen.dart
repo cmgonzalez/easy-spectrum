@@ -25,6 +25,7 @@ import 'console_view.dart';
 import '../settings/settings_screen.dart';
 import 'external_input.dart';
 import 'joystick_pad.dart';
+import 'mouse_pad.dart';
 import 'zx_keyboard.dart';
 
 class GameScreen extends StatefulWidget {
@@ -113,6 +114,7 @@ class _GameScreenState extends State<GameScreen>
     _showKeyboard = widget.mediaPath.isEmpty || _settings.startWithKeyboard;
     if (_settings.keepScreenOn) WakelockPlus.enable();
 
+    _zx.mouseMode = _pad.mouse.index;
     final err = await _zx.start(
       model: _settings.model,
       mediaPath: widget.mediaPath,
@@ -231,7 +233,7 @@ class _GameScreenState extends State<GameScreen>
       _title,
       if (info != null && info.subtitle.isNotEmpty) info.subtitle,
       if (info?.genre != null) info!.genre!,
-      control,
+      if (_pad.mouse != MouseType.none) '${t.mouse} ${_pad.mouse.label}' else control,
       if (extras.isNotEmpty) '${t.extraButtons} ${extras.map(zxKeyLabel).join(' ')}',
       if (_pad.jumpButton != null) '${t.jumpButton} ${_pad.jumpButton! + 1}',
       if (_pad.selectKeys.isNotEmpty) 'SELECT/START ${_pad.selectKeys.map(zxKeyLabel).join(' ')}',
@@ -242,6 +244,12 @@ class _GameScreenState extends State<GameScreen>
   // --- Entrada ---------------------------------------------------------------
 
   void _onKey(int code, bool pressed) => _zx.setKey(code, pressed);
+
+  Widget _mousePad() => MousePad(
+        onMove: _zx.mouseMove,
+        onButton: (down) => _zx.mouseButtons(down ? 1 : 0),
+        haptics: _settings.vibration,
+      );
 
   void _onJoystick(int mask) {
     _touchJoy = mask;
@@ -326,6 +334,7 @@ class _GameScreenState extends State<GameScreen>
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _zx.setGigascreen(s.gigascreen);
     _audio.setMuted(!s.soundOn);
+    _zx.mouseMode = pad.mouse.index;
     setState(() {
       _settings = s;
       _pad = pad;
@@ -504,6 +513,15 @@ class _GameScreenState extends State<GameScreen>
                 ),
               ),
             ),
+            if (_pad.mouse != MouseType.none)
+              Align(
+                alignment: Alignment.bottomRight,
+                child: Opacity(
+                  opacity: fade,
+                  child: SizedBox(width: math.min(w * 0.45, 420), height: math.min(h * 0.4, 170), child: _mousePad()),
+                ),
+              )
+            else
             Opacity(
               opacity: fade,
               child: JoystickPad(
@@ -657,7 +675,9 @@ class _GameScreenState extends State<GameScreen>
                         ),
                         controls: _showKeyboard
                             ? ZxKeyboard(onKey: _onKey, haptics: _settings.vibration, compact: true, stretch: true)
-                            : JoystickPad(
+                            : _pad.mouse != MouseType.none
+                                ? _mousePad()
+                                : JoystickPad(
                                 onJoystick: _onJoystick,
                                 onKey: _onKey,
                                 extraKeys: _pad.extraKeys,

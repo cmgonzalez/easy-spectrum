@@ -97,5 +97,21 @@ enum JoyMapping {
   }
 }
 
+/// Ratón conectado a la máquina (zx_set_mouse_mode): el índice es el modo nativo.
+enum MouseType {
+  none('—'),
+  kempston('Kempston'),
+  amx('AMX');
+
+  const MouseType(this.label);
+  final String label;
+
+  /// Los que se ofrecen en la interfaz. AMX (PIO Z80 con interrupciones) aún no está hecho.
+  static const selectable = [MouseType.none, MouseType.kempston];
+
+  static MouseType byName(String? name) =>
+      values.firstWhere((m) => m.name == name, orElse: () => MouseType.none);
+}
+
 /// Extensiones que acepta el emulador.
 const zxMediaExtensions = ['tap', 'tzx', 'csw', 'z80', 'sna', 'szx', 'dsk', 'nex'];

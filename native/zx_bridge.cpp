@@ -11,6 +11,7 @@
 
 #include "zx_bridge.h"
 #include "next/next_machine.h"
+#include "zx_mouse.h"
 #include "zx_debug.h"
 #include "zx_pdp.h"
 
@@ -481,6 +482,7 @@ const char *zx_last_error(void) {
 ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int audio_freq) {
 	using Target = Analyser::Static::ZXSpectrum::Target;
 	g_last_error.clear();
+	g_zx_mouse = ZxMouse();
 	zx_ulaplus_active = 0;
 
 	try {
@@ -750,6 +752,23 @@ void zx_type(ZxHandle *h, const char *utf8) {
 	std::wstring w;
 	for(const char *p = utf8; *p; ++p) w.push_back(wchar_t(uint8_t(*p)));	// ASCII basta
 	h->keyboard->type_string(w);
+}
+
+static ZxMouse *mouse_of(ZxHandle *h) {
+	if(!h) return nullptr;
+	return h->next ? &h->next->mouse() : &g_zx_mouse;
+}
+
+void zx_set_mouse_mode(ZxHandle *h, int mode) {
+	if(ZxMouse *m = mouse_of(h)) m->mode = mode < 0 || mode > 2 ? 0 : mode;
+}
+
+void zx_mouse_move(ZxHandle *h, int dx, int dy) {
+	if(ZxMouse *m = mouse_of(h)) m->move(dx, dy);
+}
+
+void zx_mouse_buttons(ZxHandle *h, int buttons) {
+	if(ZxMouse *m = mouse_of(h)) m->buttons = uint8_t(buttons & 7);
 }
 
 void zx_set_joystick(ZxHandle *h, int mask) {

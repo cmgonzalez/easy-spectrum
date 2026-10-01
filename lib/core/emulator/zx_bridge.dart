@@ -27,6 +27,8 @@ typedef _FbN = Pointer<Uint8> Function(Pointer<Void> h);
 typedef _SetKeyN = Void Function(Pointer<Void> h, Int32 key, Int32 pressed);
 typedef _SetKey = void Function(Pointer<Void> h, int key, int pressed);
 typedef _IntArgN = Void Function(Pointer<Void> h, Int32 v);
+typedef _Int2N = Void Function(Pointer<Void> h, Int32 a, Int32 b);
+typedef _Int2 = void Function(Pointer<Void> h, int a, int b);
 typedef _IntArg = void Function(Pointer<Void> h, int v);
 typedef _IntRetN = Int32 Function(Pointer<Void> h);
 typedef _IntRet = int Function(Pointer<Void> h);
@@ -56,6 +58,9 @@ class ZxBridge {
     _clearKeys = lib.lookupFunction<_VoidHN, _VoidH>('zx_clear_keys');
     _type = lib.lookupFunction<_TypeN, _Type>('zx_type');
     _setJoy = lib.lookupFunction<_IntArgN, _IntArg>('zx_set_joystick');
+    _setMouseMode = lib.lookupFunction<_IntArgN, _IntArg>('zx_set_mouse_mode');
+    _mouseMove = lib.lookupFunction<_Int2N, _Int2>('zx_mouse_move');
+    _mouseButtons = lib.lookupFunction<_IntArgN, _IntArg>('zx_mouse_buttons');
     _audio = lib.lookupFunction<_AudioN, _Audio>('zx_get_audio');
     _reset = lib.lookupFunction<_VoidHN, _VoidH>('zx_reset');
     _setTape = lib.lookupFunction<_IntArgN, _IntArg>('zx_set_tape_playing');
@@ -80,6 +85,10 @@ class ZxBridge {
   late final _VoidH _clearKeys;
   late final _Type _type;
   late final _IntArg _setJoy;
+  late final _IntArg _setMouseMode;
+  late final _Int2 _mouseMove;
+  late final _IntArg _mouseButtons;
+  int _mouseMode = 0;
   late final _Audio _audio;
   late final _VoidH _reset;
   late final _IntArg _setTape;
@@ -133,6 +142,7 @@ class ZxBridge {
       calloc.free(pMedia);
     }
     if (_h == nullptr) return _lastError().toDartString();
+    if (_mouseMode != 0) _setMouseMode(_h, _mouseMode);
     if (!quickLoad) _setQuick(_h, 0);
     // Depurador PDP (doc/PDP.md): opt-in con EASYSPECTRUM_PDP_PORT (solo escritorio).
     final pdpPort = int.tryParse(Platform.environment['EASYSPECTRUM_PDP_PORT'] ?? '');
@@ -206,6 +216,24 @@ class ZxBridge {
 
   void setJoystick(int mask) {
     if (isRunning) _setJoy(_h, mask);
+  }
+
+  /// Ratón: 0 = ninguno, 1 = Kempston, 2 = AMX. Se recuerda y se reaplica al crear la
+  /// máquina (cada máquina nueva empieza sin ratón).
+  int get mouseMode => _mouseMode;
+  set mouseMode(int mode) {
+    _mouseMode = mode;
+    if (isRunning) _setMouseMode(_h, mode);
+  }
+
+  /// Desplazamiento relativo del ratón (dy positivo = hacia abajo).
+  void mouseMove(int dx, int dy) {
+    if (isRunning && _mouseMode != 0 && (dx != 0 || dy != 0)) _mouseMove(_h, dx, dy);
+  }
+
+  /// Botones: bit 0 izquierdo, bit 1 derecho, bit 2 central.
+  void mouseButtons(int mask) {
+    if (isRunning && _mouseMode != 0) _mouseButtons(_h, mask);
   }
 
   /// Audio pendiente como PCM s16le estéreo (bytes), o null si no hay.
