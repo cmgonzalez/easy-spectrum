@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/edition.dart';
 import '../../core/l10n.dart';
@@ -28,6 +29,14 @@ class AboutScreen extends StatelessWidget {
                 'github.com/TomHarte/CLK\n\n'
                 '${t.engineBody}',
           ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.privacy_tip_outlined, size: 32),
+            title: Text(t.privacyPolicy, style: const TextStyle(fontSize: 20)),
+            onTap: () => launchUrl(Uri.parse('https://www.easysoft.cl/easy-spectrum/privacy.html'),
+                mode: LaunchMode.externalApplication),
+          ),
+          const SizedBox(height: 16),
           _Section(title: t.romsTitle, body: t.romsBody),
           const _Section(
             title: 'UIcons',

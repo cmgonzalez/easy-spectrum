@@ -4,8 +4,8 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
-  permission_handler_windows
   screen_retriever_windows
+  url_launcher_windows
   window_manager
 )
 
