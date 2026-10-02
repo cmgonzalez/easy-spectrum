@@ -152,7 +152,59 @@ zx_patch(pdp-hook
 zx_patch(pdp-clock
     "\tvoid advance(const HalfCycles duration) {\n"
     "\tvoid advance(const HalfCycles duration) {\n\t\tif(zxdbg::g.armed) zxdbg::g.clock += duration.get();\n")
+
+# 5. Grabación de SAVE (gestor de cintas, doc/TAPE_MANAGER.md): con la grabación activa, al
+#    entrar en SA-BYTES (0x04C2) del ROM 48 BASIC se copia el bloque (A = flag, IX = origen,
+#    DE = longitud) y se devuelve con RET sin emitir sonido. Los guardadores con rutina propia
+#    no pasan por aquí y no se capturan.
+zx_patch(cinta-grabar-include
+    "#include \"ZXSpectrum.hpp\"\n"
+    "#include \"ZXSpectrum.hpp\"\n#include \"zx_tape.h\"\n")
+zx_patch(cinta-grabar
+    "\t\t\tcase PartialMachineCycle::ReadOpcode:\n\t\t\t\t// Fast loading: ROM version.\n"
+    "\t\t\tcase PartialMachineCycle::ReadOpcode:\n\t\t\t\tif(address == 0x04c2 && zxtape::recording() && banks_[0].read == &rom_[classic_rom_offset()]) {\n\t\t\t\t\tusing Register = CPU::Z80::Register;\n\t\t\t\t\tconst uint8_t flag = uint8_t(z80_.value_of(Register::A));\n\t\t\t\t\tuint16_t length = z80_.value_of(Register::DE);\n\t\t\t\t\tuint16_t source = z80_.value_of(Register::IX);\n\t\t\t\t\tstd::vector<uint8_t> block;\n\t\t\t\t\tblock.reserve(size_t(length) + 2);\n\t\t\t\t\tblock.push_back(flag);\n\t\t\t\t\tuint8_t parity = flag;\n\t\t\t\t\twhile(length--) {\n\t\t\t\t\t\tconst uint8_t byte = banks_[source >> 14].read[source];\n\t\t\t\t\t\tblock.push_back(byte);\n\t\t\t\t\t\tparity ^= byte;\n\t\t\t\t\t\t++source;\n\t\t\t\t\t}\n\t\t\t\t\tblock.push_back(parity);\n\t\t\t\t\tzxtape::record_block(block.data(), block.size());\n\t\t\t\t\t*cycle.value = 0xc9;\t// RET\n\t\t\t\t\tbreak;\n\t\t\t\t}\n\t\t\t\t// Fast loading: ROM version.\n")
 file(WRITE "${ZX_PATCHED}" "${ZX_TEXT}")
+
+# Posición de la cinta (gestor de cintas): copias de ZXSpectrumTAP.cpp y TZX.cpp que avisan
+# a zx_tape.h el offset de cada bloque justo cuando empieza a sonar (offset >= tamaño = fin).
+function(tape_patched_copy SRC OUT VAR)
+    configure_file("${CLK}/${SRC}" "${OUT}.orig" COPYONLY)  # re-configura si cambia
+    file(READ "${CLK}/${SRC}" TEXT)
+    string(REPLACE "\r\n" "\n" TEXT "${TEXT}")
+    set(${VAR} "${TEXT}" PARENT_SCOPE)
+endfunction()
+
+set(TAP_PATCHED "${CMAKE_CURRENT_BINARY_DIR}/ZXSpectrumTAP_patched.cpp")
+tape_patched_copy(Storage/Tape/Formats/ZXSpectrumTAP.cpp "${TAP_PATCHED}" TAP_TEXT)
+clk_patch(TAP_TEXT cinta-bloque-include
+    "#include \"ZXSpectrumTAP.hpp\"\n" "#include \"ZXSpectrumTAP.hpp\"\n#include \"zx_tape.h\"\n")
+clk_patch(TAP_TEXT cinta-bloque-fin
+    "\tif(file_.tell() == file_.stats().st_size) {\n\t\tphase_ = Phase::Gap;\n"
+    "\tif(file_.tell() == file_.stats().st_size) {\n\t\tzxtape::note_block(long(file_.tell()));\n\t\tphase_ = Phase::Gap;\n")
+# Último bloque de datos: CLK da la cinta por terminada en cuanto empieza su pausa final.
+clk_patch(TAP_TEXT cinta-bloque-ultimo
+    "\t\t\t\t\tif(block_type_) {\n\t\t\t\t\t\tdistance_into_phase_ = 0;\n\t\t\t\t\t\tphase_ = Phase::Gap;\n"
+    "\t\t\t\t\tif(block_type_) {\n\t\t\t\t\t\tdistance_into_phase_ = 0;\n\t\t\t\t\t\tphase_ = Phase::Gap;\n\t\t\t\t\t\tif(file_.tell() == file_.stats().st_size) zxtape::note_block(long(file_.tell()));\n")
+clk_patch(TAP_TEXT cinta-bloque
+    "\t} else {\n\t\tblock_length_ = file_.get_le<uint16_t>();\n"
+    "\t} else {\n\t\tzxtape::note_block(long(file_.tell()));\n\t\tblock_length_ = file_.get_le<uint16_t>();\n")
+file(WRITE "${TAP_PATCHED}" "${TAP_TEXT}")
+
+set(TZX_PATCHED "${CMAKE_CURRENT_BINARY_DIR}/TZX_patched.cpp")
+tape_patched_copy(Storage/Tape/Formats/TZX.cpp "${TZX_PATCHED}" TZX_TEXT)
+clk_patch(TZX_TEXT cinta-bloque-include
+    "#include \"TZX.hpp\"\n" "#include \"TZX.hpp\"\n#include \"zx_tape.h\"\n")
+clk_patch(TZX_TEXT cinta-bloque
+    "\twhile(empty()) {\n\t\tconst uint8_t chunk_id = file_.get();\n"
+    "\twhile(empty()) {\n\t\tzxtape::note_block(long(file_.tell()));\n\t\tconst uint8_t chunk_id = file_.get();\n")
+file(WRITE "${TZX_PATCHED}" "${TZX_TEXT}")
+
+list(REMOVE_ITEM CLK_SOURCES
+    "${CLK}/Storage/Tape/Formats/ZXSpectrumTAP.cpp"
+    "${CLK}/Storage/Tape/Formats/TZX.cpp")
+set_source_files_properties("${TAP_PATCHED}" "${TZX_PATCHED}" PROPERTIES
+    INCLUDE_DIRECTORIES "${CLK}/Storage/Tape/Formats")
+list(APPEND CLK_SOURCES "${TAP_PATCHED}" "${TZX_PATCHED}")
 
 # Video.hpp parcheado (ULAplus): salida Red8Green8Blue8 en vez de Red2Green2Blue2 (la
 # paleta ULAplus tiene 3 bits por canal), colores de tinta/papel/borde por funciones que

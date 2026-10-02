@@ -11,6 +11,7 @@ class AppSettings {
   ZxModel model = ZxModel.k128;
   JoyMapping joyMapping = JoyMapping.kempston;
   bool quickLoad = true;
+  bool muteTape = false; // gestor de cintas: sin sonido mientras gira la cinta (global)
   bool vibration = true;
   bool soundOn = true;
   bool keepScreenOn = true;
@@ -59,6 +60,7 @@ class AppSettings {
     s.joyMapping = JoyMapping.byName(p.getString('joy_type')) ??
         legacy[(p.getInt('joy_mapping') ?? 0).clamp(0, legacy.length - 1)];
     s.quickLoad = p.getBool('quick_load') ?? true;
+    s.muteTape = p.getBool('mute_tape') ?? false;
     s.vibration = p.getBool('vibration') ?? true;
     s.soundOn = p.getBool('sound_on') ?? true;
     s.keepScreenOn = p.getBool('keep_screen_on') ?? true;
@@ -107,6 +109,7 @@ class AppSettings {
     await p.setInt('model', model.index);
     await p.setString('joy_type', joyMapping.name);
     await p.setBool('quick_load', quickLoad);
+    await p.setBool('mute_tape', muteTape);
     await p.setBool('vibration', vibration);
     await p.setBool('sound_on', soundOn);
     await p.setBool('keep_screen_on', keepScreenOn);

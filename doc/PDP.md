@@ -1,6 +1,6 @@
 # PDP — Prisma Debug Protocol (fases 1 a 4)
 
-Depurador del core CLK (Spectrum 16K–+3) para juegos PRISMA. JSON por línea sobre TCP,
+Depurador del core CLK (Spectrum 16K–+3) y de la Next (`.nex`) para juegos PRISMA. JSON por línea sobre TCP,
 solo `127.0.0.1`. Un objeto por línea; cada petición lleva `id` y `cmd`; la respuesta repite el `id`
 con `ok` (o `error`). Direcciones: decimal, `0x1F`, `$1F`; en las respuestas, `"0x1F00"`.
 
@@ -90,4 +90,22 @@ Evento asíncrono a todos los clientes al detenerse: `{"event":"stopped","reason
   solo mueve bytes.
 
 ## Pendiente (fases siguientes)
-Líneas C (`.lst`), `setreg`, ZX Spectrum Next, compilación Android completa.
+Líneas C (`.lst`), `setreg`, compilación Android completa.
+
+## ZX Spectrum Next (`.nex`)
+
+La máquina propia de `native/next/` también se depura con el mismo servidor (`hello` → `machine:"next"`).
+No hay hook de bus ni deuda de ciclos como en CLK: `NextMachine::cpu_step()` llama a `zxdbg::on_fetch`
+antes de cada instrucción y, si para, `run_line()` sale sin ejecutarla (la línea se retoma al reanudar,
+`dbg_skip_` evita re-evaluar el punto de parada de la instrucción en la que se paró). Al ser parada
+entre instrucciones, `regs` es exacto. Diferencias:
+- **Watchpoints**: se evalúan en `read()`/`write()` del bus (no en el fetch de opcodes/inmediatos); la
+  instrucción termina antes de parar, y `regs` la refleja ya ejecutada (`pc` = inicio de la instrucción).
+  Los accesos de la DMA también cuentan.
+- `mem`/`poke`/`get` usan el mapa **actual** del MMU (slot 0 = ROM si `$FF`). Extras: `bank` = banco de
+  16 KB (0-127), `page` = página de 8 KB (0-255, `addr` = desplazamiento 0-0x1FFF).
+- `mmu` → `mmu:[8 páginas]` (`255` = ROM) y `speed` (0..3 = 3,5/7/14/28 MHz). `nextreg` (`reg`, `len`) lee NextRegs.
+  `paging` solo da `p7ffd`. Estos tres solo existen en la Next.
+- `profile`/`framelog`: el reloj va en half cycles de 3,5 MHz aunque la CPU corra a 28 MHz.
+- Probar sin Flutter: `clang++ -std=c++17 -O2 -DNOMINMAX tools/nextpdp.cpp native/zx_pdp.cpp native/next/*.cpp -lws2_32`
+  y `python tools/pdp_next_selftest.py <nextpdp.exe>` (25 comprobaciones: break, step, next, watch, mem, page, mmu, reset).

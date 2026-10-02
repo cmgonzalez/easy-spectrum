@@ -15,6 +15,7 @@ public:
 	virtual void nextreg(uint8_t reg, uint8_t value) = 0;
 	virtual uint8_t int_vector() { return 0xFF; }	// byte que el dispositivo pone en el bus (IM 2)
 	virtual void reti_executed() {}
+	virtual uint8_t fetch_op(uint16_t addr) { return read(addr); }	// opcode/operando inmediato (no cuenta para watchpoints)
 protected:
 	~Z80Bus() = default;
 };
@@ -53,7 +54,7 @@ private:
 
 	uint8_t rd(uint16_t a) { return bus_.read(a); }
 	void wr(uint16_t a, uint8_t v) { bus_.write(a, v); }
-	uint8_t fetch() { return bus_.read(PC++); }
+	uint8_t fetch() { return bus_.fetch_op(PC++); }
 	uint16_t fetch16() { uint8_t l = fetch(); uint8_t h = fetch(); return uint16_t(h << 8 | l); }
 	uint16_t rd16(uint16_t a) { uint8_t l = rd(a); uint8_t h = rd(uint16_t(a + 1)); return uint16_t(h << 8 | l); }
 	void wr16(uint16_t a, uint16_t v) { wr(a, uint8_t(v)); wr(uint16_t(a + 1), uint8_t(v >> 8)); }

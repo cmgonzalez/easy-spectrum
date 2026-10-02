@@ -71,12 +71,29 @@ distribuirlas con emuladores. Se copian a `<appSupport>/roms` al primer arranque
 - Dart: ticks de hasta 100 ms se emulan completos (antes >100 ms se trataba como 20 ms → cámara
   lenta en teléfonos cargados); solo >0,5 s (pausa) se descarta.
 
+## Gestor de cintas (doc/TAPE_MANAGER.md)
+
+Lista de bloques, transporte (● ▶ ⏸ ■ ⏮ ⏭ ⏏), cinta nueva desde archivos y grabación de SAVE.
+- **Posición**: parches CMake `cinta-bloque*` sobre copias de `ZXSpectrumTAP.cpp`/`TZX.cpp`
+  (`*_patched.cpp` en el dir de build) avisan `zxtape::note_block(offset)` al empezar cada
+  bloque (`native/zx_tape.h`). El índice sale de `scan_tap`/`scan_tzx` (`zx_bridge.cpp`), que
+  numeran **igual que `lib/core/tape/tape_file.dart`**: si se toca uno, tocar el otro.
+- **API**: `zx_tape_insert/eject/seek/info/set_paused/record/take_recorded`. Seek = recorte a
+  `<roms>/.tape_seek{0,1}.*` + `insert_media`. Pausa también apaga el motor automático.
+- **SAVE**: parche `cinta-grabar` (5º de `ZXSpectrum.cpp`): con la grabación activa, el fetch
+  de 0x04C2 (SA-BYTES, ROM 48 BASIC) copia flag+datos+checksum y devuelve RET.
+- Dart: `TapeController` (común), `features/tape/` (panel Windows, hoja + cassette Android,
+  editor). Probar el núcleo sin Flutter: `tools/tapetest.cpp <roms> <cinta.tzx>`; compila con
+  g++ de MSYS2 (`-include cstdint` etc. y `-Wl,--allow-multiple-definition` por el TLS de Log).
+
 ## Depurador PDP (Prisma Debug Protocol)
 
 Sustituye a ZRCP de ZEsarUX para depurar juegos PRISMA: servidor TCP en el bridge (`native/zx_pdp.cpp`,
 `zx_debug.h`, parche 4 de CMake). Protocolo, arquitectura y pendientes en `doc/PDP.md`.
 Host headless `tools/pdp_host.py`, cliente `tools/pdp.py`, autotest `tools/pdp_selftest.py` (verificado
-en Windows, 48K: breakpoints, step, next, mem, poke, reset). Fase 1 = solo CLK.
+en Windows, 48K: breakpoints, step, next, mem, poke, reset). También depura la Next (`.nex`): parada entre
+instrucciones en `NextMachine::cpu_step`, comandos extra `mmu`/`nextreg`/`mem page` — ver sección en `doc/PDP.md`;
+autotest `tools/pdp_next_selftest.py` con el host `tools/nextpdp.cpp`.
 
 ## Probar el core sin Flutter
 
@@ -385,7 +402,8 @@ con `window_manager`, audio con la misma `ZxAudio` que Android.
 - `bash build-app.sh windows` → `build/windows/x64/runner/Release/EasySpectrum.exe` y
   `EasySpectrum-win-<ver>-<code>.zip` en la raíz. Primera compilación ~5 min.
 - **Actualizar la instalación local rápido** (sin instalador): tras `bash build-app.sh windows`, cerrar la app y
-  copiar `build\windowsdunner\Release\*` sobre `%LOCALAPPDATA%\Programs\Easy Spectrum`
+  copiar `build\windowsd
+unner\Release\*` sobre `%LOCALAPPDATA%\Programs\Easy Spectrum`
   (`Get-Process EasySpectrum | Stop-Process -Force; Copy-Item ... -Recurse -Force`). Solo cambian binarios:
   asociaciones y registro del instalador quedan intactos.
 - Captura de la ventana para verificar: PrintWindow desde un proceso DPI-aware

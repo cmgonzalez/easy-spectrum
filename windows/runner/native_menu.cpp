@@ -112,6 +112,9 @@ NativeMenu::NativeMenu(flutter::BinaryMessenger* messenger, HWND hwnd)
 
 NativeMenu::~NativeMenu() {
   if (bar_ && !visible_) DestroyMenu(bar_);  // si está puesta, la destruye la ventana
+  for (auto& [menu, items] : retired_) {
+    if (menu != GetMenu(hwnd_)) DestroyMenu(menu);
+  }
   if (font_) DeleteObject(font_);
 }
 
@@ -173,13 +176,39 @@ HMENU NativeMenu::Build(const EncodableList& items, bool bar, Items& store) {
   return menu;
 }
 
+// Los datos de cada opción (texto, atajo) los lee el owner-draw por puntero (dwItemData):
+// solo se liberan cuando su menú ya no está puesto en la ventana. Si se liberan antes,
+// Windows dibuja memoria ajena (textos "en chino") y al hacer clic cae en USER32.
 void NativeMenu::Apply(const EncodableList& menus) {
-  HMENU old = bar_;
+  if (applying_) {  // re-entrada desde los mensajes que procesa SetMenu: se aplica al terminar
+    pending_ = menus;
+    return;
+  }
+  applying_ = true;
   Items store;
-  bar_ = Build(menus, true, store);
+  HMENU fresh = Build(menus, true, store);
+  HMENU old = bar_;
+  Items old_items = std::move(items_);
+  bar_ = fresh;
+  items_ = std::move(store);  // antes de ponerlo: desde aquí Windows puede pedir dibujarlo
   Attach();
-  if (old) DestroyMenu(old);
-  items_ = std::move(store);  // los datos del menú viejo viven hasta destruirlo
+  if (old) retired_.emplace_back(old, std::move(old_items));
+  // Se destruye todo menú retirado que la ventana ya soltó (normalmente, el de recién).
+  const HMENU current = GetMenu(hwnd_);
+  for (auto it = retired_.begin(); it != retired_.end();) {
+    if (it->first != current) {
+      DestroyMenu(it->first);
+      it = retired_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  applying_ = false;
+  if (pending_ && !in_menu_loop_) {
+    const EncodableList next = std::move(*pending_);
+    pending_.reset();
+    Apply(next);
+  }
 }
 
 void NativeMenu::Attach() {

@@ -41,10 +41,18 @@ class ActionButtons extends StatefulWidget {
   final void Function(PadAction action) onAction;
   /// Con el teclado a la vista, el verde vuelve al mando (ícono de mando).
   final bool keyboardMode;
+  /// Ícono del verde = el modo de controles que viene (mando → teclado → cassette).
+  /// null = el de siempre según [keyboardMode].
+  final IconData? inputIcon;
   final bool soundOn;
   final bool haptics;
   const ActionButtons(
-      {super.key, required this.onAction, this.keyboardMode = false, this.soundOn = true, this.haptics = true});
+      {super.key,
+      required this.onAction,
+      this.keyboardMode = false,
+      this.inputIcon,
+      this.soundOn = true,
+      this.haptics = true});
 
   @override
   State<ActionButtons> createState() => _ActionButtonsState();
@@ -85,7 +93,7 @@ class _ActionButtonsState extends State<ActionButtons> {
         onPointerCancel: (e) => setState(() => _pointers.remove(e.pointer)),
         child: CustomPaint(
           size: Size(box.maxWidth, h),
-          painter: _ActionsPainter(rects, {..._pointers.values}, widget.keyboardMode, widget.soundOn),
+          painter: _ActionsPainter(rects, {..._pointers.values}, widget.keyboardMode, widget.soundOn, widget.inputIcon),
         ),
       );
     });
@@ -97,7 +105,8 @@ class _ActionsPainter extends CustomPainter {
   final Set<int> down;
   final bool keyboardMode;
   final bool soundOn;
-  _ActionsPainter(this.rects, this.down, this.keyboardMode, this.soundOn);
+  final IconData? inputIcon;
+  _ActionsPainter(this.rects, this.down, this.keyboardMode, this.soundOn, this.inputIcon);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -123,7 +132,9 @@ class _ActionsPainter extends CustomPainter {
             ..strokeWidth = r.height * 0.07
             ..color = padActionColours[i]);
       final action = PadAction.values[i];
-      final icon = keyboardMode && action == PadAction.keyboard
+      final icon = inputIcon != null && action == PadAction.keyboard
+          ? inputIcon!
+          : keyboardMode && action == PadAction.keyboard
           ? Icons.sports_esports_rounded
           : !soundOn && action == PadAction.sound
               ? Icons.volume_off_rounded
@@ -137,6 +148,7 @@ class _ActionsPainter extends CustomPainter {
       old.rects.length != rects.length ||
       old.rects.first != rects.first ||
       old.keyboardMode != keyboardMode ||
+      old.inputIcon != inputIcon ||
       old.soundOn != soundOn ||
       old.down.length != down.length ||
       !old.down.containsAll(down);

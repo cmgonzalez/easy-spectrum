@@ -87,6 +87,31 @@ void zx_reset(ZxHandle* h);
 void zx_set_tape_playing(ZxHandle* h, int playing);
 int  zx_get_tape_playing(ZxHandle* h);
 
+/* Gestor de cintas (doc/TAPE_MANAGER.md). Los bloques se numeran igual que el parser de Dart
+ * (lib/core/tape/tape_file.dart): en .tap cada bloque con su longitud; en .tzx cada bloque
+ * tras la cabecera de 10 bytes (incluidos texto, pausas y bloques de control). */
+#define ZX_TAPE_INSERTED  (1 << 0)	/* hay cinta (.csw incluida, sin lista de bloques) */
+#define ZX_TAPE_PLAYING   (1 << 1)	/* motor encendido y cinta sin terminar */
+#define ZX_TAPE_END       (1 << 2)	/* la cinta llegó al final */
+#define ZX_TAPE_PAUSED    (1 << 3)	/* pausa: motor apagado y sin arranque automático */
+#define ZX_TAPE_RECORDING (1 << 4)	/* capturando los SAVE del ROM */
+
+/* Inserta una cinta (.tap .tzx .csw) con la máquina en marcha. 1 = bien. */
+int  zx_tape_insert(ZxHandle* h, const char* path);
+/* Expulsa la cinta (queda una vacía). */
+void zx_tape_eject(ZxHandle* h);
+/* Mueve la cinta al inicio del bloque `block` (0 = rebobinar; total = fin). Conserva el motor. */
+int  zx_tape_seek(ZxHandle* h, int block);
+/* Estado: devuelve ZX_TAPE_*; block = bloque que suena (total = fin), total = nº de bloques. */
+int  zx_tape_info(ZxHandle* h, int* block, int* total);
+/* Pausa (1): motor apagado y sin motor automático; 0 = reanudar (enciende el motor). */
+void zx_tape_set_paused(ZxHandle* h, int paused);
+/* Grabación: con 1, cada SAVE que pase por SA-BYTES del ROM se guarda como bloque .tap. */
+void zx_tape_record(ZxHandle* h, int enabled);
+/* Bloques grabados pendientes en formato .tap (longitud + bloque). out = NULL: devuelve
+ * los bytes pendientes; si no, copia bloques enteros (hasta max bytes) y los quita. */
+int  zx_tape_take_recorded(ZxHandle* h, uint8_t* out, int max);
+
 /* Carga rápida de cinta. 1 = activada (defecto): trap de la rutina del ROM (.tap)
  * más turbo de emulación mientras gira la cinta (cargadores propios, .tzx). */
 void zx_set_quickload(ZxHandle* h, int enabled);

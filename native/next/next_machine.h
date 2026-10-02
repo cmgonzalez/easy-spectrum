@@ -66,7 +66,7 @@ public:
 	double emulated_seconds() const { return emulated_; }
 	int cpu_speed() const { return cpu_speed_; }	// 0..3 = 3,5 / 7 / 14 / 28 MHz
 	Z80N &cpu() { return cpu_; }
-	uint8_t peek(uint16_t addr) { return read(addr); }
+	uint8_t peek(uint16_t addr) { return rdp_[addr >> 13][addr & 0x1FFF]; }	// sin watchpoints
 	uint8_t next_reg(uint8_t r) const { return nr_[r]; }
 	uint64_t total_instructions() const { return instr_count_; }
 	// Depuración: color de cada capa (ULA, tilemap, Layer 2, sprite) en un píxel; -1 = transparente.
@@ -74,9 +74,25 @@ public:
 	uint16_t debug_pal(int kind, int idx) const { return pal9_[kind][idx]; }
 	bool trace_regs = false;
 
+	// Depurador PDP (zx_debug.h). attach engancha esta máquina al núcleo de depuración; la CPU se
+	// detiene siempre entre instrucciones y run() devuelve 0 sin avanzar mientras esté detenida.
+	void attach_debugger();
+	void detach_debugger();
+	uint8_t mmu_page(int slot) const { return mmu_[slot & 7]; }
+	uint8_t peek_page(int page, uint16_t off) { return page_ptr(page)[off & 0x1FFF]; }
+	void poke_page(int page, uint16_t off, uint8_t v) { page_ptr(page)[off & 0x1FFF] = v; }
+	uint8_t peek_bank16(bool rom, int bank, uint16_t off) { return (rom ? rom_ : bank16(bank))[off & 0x3FFF]; }
+	void poke_bank16(int bank, uint16_t off, uint8_t v) { bank16(bank)[off & 0x3FFF] = v; }
+
 	// Z80Bus
-	uint8_t read(uint16_t addr) override { return rdp_[addr >> 13][addr & 0x1FFF]; }
+	uint8_t read(uint16_t addr) override {
+		const uint8_t v = rdp_[addr >> 13][addr & 0x1FFF];
+		if(dbg_watch_) watch_hit(addr, v, false);
+		return v;
+	}
+	uint8_t fetch_op(uint16_t addr) override { return rdp_[addr >> 13][addr & 0x1FFF]; }
 	void write(uint16_t addr, uint8_t value) override {
+		if(dbg_watch_) watch_hit(addr, value, true);
 		uint8_t *p = wrp_[addr >> 13];
 		if(p) p[addr & 0x1FFF] = value;
 	}
@@ -99,6 +115,15 @@ private:
 	void remap();
 	uint8_t *page(int p) { return ram_.data() + size_t(p & 0xFF) * 0x2000; }
 	uint8_t *bank16(int b) { return ram_.data() + size_t(b & 0x7F) * 0x4000; }
+	uint8_t *page_ptr(int p) { return ram_.data() + size_t(p & 0xFF) * 0x2000; }
+
+	// --- depurador ---
+	bool dbg_ = false;			// enganchado al núcleo zxdbg
+	bool dbg_watch_ = false;	// hay watchpoints activos (se refresca en cada instrucción)
+	bool dbg_skip_ = false;		// se detuvo en el fetch: al reanudar no se vuelve a evaluar
+	bool line_started_ = false;	// run_line() en curso (se interrumpió a mitad de línea)
+	uint64_t dbg_ticks_ = 0;	// ticks de 28 MHz transcurridos (reloj del depurador)
+	void watch_hit(uint16_t addr, uint8_t val, bool write);
 
 	// --- esxDOS ---
 	std::string data_dir_, esx_cwd_;
@@ -231,7 +256,7 @@ private:
 	double emulated_ = 0.0;
 	int64_t budget_ = 0;	// ticks de 28 MHz disponibles
 	int ticks_per_t() const { return 8 >> cpu_speed_; }
-	void run_line();
+	bool run_line();	// false: el depurador detuvo la CPU a mitad de línea
 };
 
 }	// namespace nx

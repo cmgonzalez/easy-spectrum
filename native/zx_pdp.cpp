@@ -570,12 +570,16 @@ void handle(const Host &h, int client, const std::string &line) {
 		if(!m.num("addr", a)) { fail(client, id, "falta addr"); return; }
 		n = 16; m.num("len", n);
 		if(n < 1 || n > 4096) { fail(client, id, "len fuera de rango (1-4096)"); return; }
-		long long bank = 0;
+		long long bank = 0, pg = 0;
+		const bool paged = m.num("page", pg);	// Next: página de 8 KB (0-255), addr = desplazamiento 0-0x1FFF
+		if(paged && !g.t.peek_page) { fail(client, id, "page solo en la Next"); return; }
+		if(paged && (a < 0 || a + n > 0x2000)) { fail(client, id, "page: addr+len debe caber en 0x2000"); return; }
 		const bool banked = m.num("bank", bank), rom = m.num("rom", bank);
 		std::string hx;
 		char b[4];
 		for(long long i = 0; i < n; ++i) {
-			const uint8_t v = (banked || rom) ? g.t.peek_bank(g.t.ctx, rom ? 1 : 0, int(bank), uint16_t(a + i)) : g.t.peek(g.t.ctx, uint16_t(a + i));
+			const uint8_t v = paged ? g.t.peek_page(g.t.ctx, int(pg), uint16_t(a + i)) :
+				(banked || rom) ? g.t.peek_bank(g.t.ctx, rom ? 1 : 0, int(bank), uint16_t(a + i)) : g.t.peek(g.t.ctx, uint16_t(a + i));
 			snprintf(b, sizeof b, "%02X", v);
 			hx += b;
 		}
@@ -592,8 +596,13 @@ void handle(const Host &h, int client, const std::string &line) {
 		long long bank = 0;
 		if(m.num("rom", bank)) { fail(client, id, "la ROM no se puede escribir"); return; }
 		const bool banked = m.num("bank", bank);
+		long long pg = 0;
+		const bool paged = m.num("page", pg);
+		if(paged && !g.t.poke_page) { fail(client, id, "page solo en la Next"); return; }
+		if(paged && (a < 0 || a + (long long)bytes.size() > 0x2000)) { fail(client, id, "page: addr+len debe caber en 0x2000"); return; }
 		for(size_t i = 0; i < bytes.size(); ++i) {
-			if(banked) g.t.poke_bank(g.t.ctx, 0, int(bank), uint16_t(a + (long long)i), bytes[i]);
+			if(paged) g.t.poke_page(g.t.ctx, int(pg), uint16_t(a + (long long)i), bytes[i]);
+			else if(banked) g.t.poke_bank(g.t.ctx, 0, int(bank), uint16_t(a + (long long)i), bytes[i]);
 			else g.t.poke(g.t.ctx, uint16_t(a + (long long)i), bytes[i]);
 		}
 		reply(client, id, true, "\"written\":" + std::to_string(bytes.size()));
@@ -723,6 +732,25 @@ void handle(const Host &h, int client, const std::string &line) {
 		snprintf(b, sizeof b, "\"p7ffd\":\"0x%02X\",\"p1ffd\":\"0x%02X\",\"ram_c000\":%u,\"screen\":%u,\"rom_bit\":%u,\"locked\":%s",
 			p7, p1, p7 & 7, (p7 & 8) ? 7 : 5, (p7 >> 4) & 1, (p7 & 0x20) ? "true" : "false");
 		reply(client, id, true, b);
+	} else if(cmd == "mmu") {
+		if(!g.t.mmu) { fail(client, id, "mmu solo en la Next"); return; }
+		uint8_t pg[8];
+		g.t.mmu(g.t.ctx, pg);
+		std::string l = "[";
+		for(int i = 0; i < 8; ++i) {	// 0xFF = ROM
+			if(i) l += ",";
+			l += std::to_string(pg[i]);
+		}
+		reply(client, id, true, "\"mmu\":" + l + "],\"speed\":" + std::to_string(g.t.cpu_speed ? g.t.cpu_speed(g.t.ctx) : 0));
+	} else if(cmd == "nextreg") {
+		if(!g.t.nextreg) { fail(client, id, "nextreg solo en la Next"); return; }
+		if(!m.num("reg", a) || a < 0 || a > 255) { fail(client, id, "falta reg (0-255)"); return; }
+		n = 1; m.num("len", n);
+		if(n < 1 || a + n > 256) { fail(client, id, "len fuera de rango"); return; }
+		std::string hx;
+		char b[4];
+		for(long long i = 0; i < n; ++i) { snprintf(b, sizeof b, "%02X", g.t.nextreg(g.t.ctx, uint8_t(a + i))); hx += b; }
+		reply(client, id, true, "\"reg\":" + std::to_string(a) + ",\"len\":" + std::to_string(n) + ",\"data\":\"" + hx + "\"");
 	} else if(cmd == "profile") {
 		if(m.has("on")) {
 			g.prof_on = m.flag("on");

@@ -1,4 +1,5 @@
 #include "next_machine.h"
+#include "../zx_debug.h"
 
 #include <algorithm>
 #include <cmath>
@@ -132,13 +133,92 @@ NextMachine::~NextMachine() {
 	for(FILE *f : esx_files_) if(f) std::fclose(f);
 }
 
+// Devuelve los ticks de 28 MHz usados, o -1 si el depurador detuvo la CPU ANTES de ejecutar
+// la instrucción (punto de parada, paso, pausa…). Un watchpoint deja terminar la instrucción.
 int NextMachine::cpu_step() {
+	const bool dbg = dbg_ && zxdbg::g.armed;
+	if(dbg) {
+		zxdbg::Core &c = zxdbg::g;
+		dbg_watch_ = c.watch_any;
+		if(dbg_skip_) dbg_skip_ = false;	// primera instrucción tras reanudar una parada en el fetch
+		else {
+			uint16_t pc = cpu_.PC;
+			uint8_t op;
+			if(cpu_.halted) { pc = uint16_t(pc - 1); op = 0x76; }	// HALT ya ejecutado: PC apunta a la siguiente
+			else op = peek(pc);
+			c.prefix = 0;	// on_fetch recibe solo inicios de instrucción
+			if(zxdbg::on_fetch(pc, op)) { dbg_skip_ = true; return -1; }
+		}
+	} else dbg_watch_ = false;
+
+	int cost;
 	if(cpu_.PC == 0x0008 && mmu_[0] == 0xFF) {
 		esx_call();
-		return 10 * ticks_per_t();
+		cost = 10 * ticks_per_t();
+	} else {
+		++instr_count_;
+		cost = cpu_.step() * ticks_per_t();
 	}
-	++instr_count_;
-	return cpu_.step() * ticks_per_t();
+	if(dbg) {
+		zxdbg::Core &c = zxdbg::g;
+		dbg_ticks_ += uint64_t(cost);
+		c.clock = int64_t(dbg_ticks_ >> 2);	// half cycles de 3,5 MHz
+		if(c.stopped) {	// watchpoint: registros con la instrucción ya terminada
+			c.t.regs(c.t.ctx, &c.regs);
+			c.regs.pc = c.stop_pc;
+		}
+	}
+	return cost;
+}
+
+void NextMachine::watch_hit(uint16_t addr, uint8_t val, bool write) {
+	zxdbg::on_mem(addr, val, write);
+}
+
+void NextMachine::attach_debugger() {
+	using namespace zxdbg;
+	Target t;
+	t.ctx = this;
+	t.regs = [](void *p, Regs *r) {
+		const Z80N &z = static_cast<NextMachine *>(p)->cpu_;
+		r->pc = z.PC; r->sp = z.SP;
+		r->af = uint16_t(z.A << 8 | z.F); r->bc = z.BC(); r->de = z.DE(); r->hl = z.HL();
+		r->af2 = uint16_t(z.A2 << 8 | z.F2); r->bc2 = uint16_t(z.B2 << 8 | z.C2);
+		r->de2 = uint16_t(z.D2 << 8 | z.E2); r->hl2 = uint16_t(z.H2 << 8 | z.L2);
+		r->ix = z.IX; r->iy = z.IY; r->memptr = 0;
+		r->i = z.I; r->r = z.R; r->iff1 = z.IFF1; r->iff2 = z.IFF2; r->im = z.IM;
+	};
+	t.peek = [](void *p, uint16_t a) { return static_cast<NextMachine *>(p)->peek(a); };
+	t.poke = [](void *p, uint16_t a, uint8_t v) {
+		NextMachine *m = static_cast<NextMachine *>(p);
+		if(uint8_t *w = m->wrp_[a >> 13]) w[a & 0x1FFF] = v;
+	};
+	t.credit = [](void *, int64_t) {};	// la Next para entre instrucciones: no hay deuda de ciclos
+	t.peek_bank = [](void *p, int kind, int bank, uint16_t off) { return static_cast<NextMachine *>(p)->peek_bank16(kind == 1, bank, off); };
+	t.poke_bank = [](void *p, int kind, int bank, uint16_t off, uint8_t v) { if(kind == 0) static_cast<NextMachine *>(p)->poke_bank16(bank, off, v); };
+	t.paging = [](void *p, uint8_t *p7, uint8_t *p1) { *p7 = static_cast<NextMachine *>(p)->port_7ffd_; *p1 = 0; };
+	t.peek_page = [](void *p, int page, uint16_t off) { return static_cast<NextMachine *>(p)->peek_page(page, off); };
+	t.poke_page = [](void *p, int page, uint16_t off, uint8_t v) { static_cast<NextMachine *>(p)->poke_page(page, off, v); };
+	t.mmu = [](void *p, uint8_t out[8]) { for(int i = 0; i < 8; ++i) out[i] = static_cast<NextMachine *>(p)->mmu_[i]; };
+	t.nextreg = [](void *p, uint8_t r) { return static_cast<NextMachine *>(p)->nr_[r]; };
+	t.cpu_speed = [](void *p) { return static_cast<NextMachine *>(p)->cpu_speed_; };
+	t.frame_half_cycles = int64_t(kLinesPerFrame) * kTicksPerLine / 4;
+	Core &c = g;
+	c.t = t;
+	c.stopped = false;
+	c.event_pending = false;
+	c.debt = 0;
+	c.prefix = 0;
+	c.last_start_pc = -1;
+	c.next_frame = 0;
+	dbg_ = true;
+	dbg_skip_ = false;
+	dbg_ticks_ = 0;
+}
+
+void NextMachine::detach_debugger() {
+	dbg_ = dbg_watch_ = dbg_skip_ = false;
+	zxdbg::detach(this);
 }
 
 bool NextMachine::set_rom(const uint8_t *data, size_t size) {
@@ -226,6 +306,8 @@ void NextMachine::reset() {
 	audio_acc_ = 0;
 	pending_ = 0;
 	budget_ = 0;
+	line_started_ = false;
+	dbg_skip_ = false;
 	emulated_ = 0;
 	instr_count_ = 0;
 	completed_frames_ = 0;
@@ -791,18 +873,19 @@ int NextMachine::drain_audio(int16_t *out, int max_samples) {
 // ---------------------------------------------------------------------------
 // Bucle principal
 
-void NextMachine::run_line() {
-	// Eventos de inicio de línea.
-	if(cvc_ == kUlaIntLine && (nr_[0xC4] & 0x01)) raise_int(kIntUla);
-	{
-		const int line_val = ((nr_[0x22] & 1) << 8) | nr_[0x23];
-		if(((nr_[0x22] & 2) || (nr_[0xC4] & 2)) && cvc_ == line_val % kLinesPerFrame) raise_int(kIntLine);
+bool NextMachine::run_line() {
+	if(!line_started_) {	// si el depurador interrumpió la línea, al reanudar no se repiten sus eventos
+		// Eventos de inicio de línea.
+		if(cvc_ == kUlaIntLine && (nr_[0xC4] & 0x01)) raise_int(kIntUla);
+		{
+			const int line_val = ((nr_[0x22] & 1) << 8) | nr_[0x23];
+			if(((nr_[0x22] & 2) || (nr_[0xC4] & 2)) && cvc_ == line_val % kLinesPerFrame) raise_int(kIntLine);
+		}
+		if(cvc_ == 0 && copper_mode_ == 3) copper_pc_ = 0;
+		budget_ += kTicksPerLine;
+		line_started_ = true;
 	}
-	if(cvc_ == 0 && copper_mode_ == 3) copper_pc_ = 0;
 
-	budget_ += kTicksPerLine;
-	const int tpt = ticks_per_t();
-	(void)tpt;
 	while(budget_ > 0) {
 		int cost;
 		if(dma_.enabled) {
@@ -816,18 +899,22 @@ void NextMachine::run_line() {
 				dma_.next_ok -= cost;
 			} else {
 				cost = cpu_step();
+				if(cost < 0) return false;
 				dma_.next_ok -= cost;
 			}
 		} else {
 			cost = cpu_step();
+			if(cost < 0) return false;
 		}
 		budget_ -= cost;
 		if(int_pulse_ticks_ > 0 && !int_hw_mode_) {
 			int_pulse_ticks_ -= cost;
 			if(int_pulse_ticks_ <= 0) { int_pulse_ticks_ = 0; update_int_line(); }
 		}
+		if(dbg_ && zxdbg::g.stopped) return false;	// watchpoint
 	}
 
+	line_started_ = false;
 	render_line();
 	gen_audio(kLineSeconds);
 
@@ -837,15 +924,17 @@ void NextMachine::run_line() {
 		++completed_frames_;
 		++frame_counter_;
 	}
+	return true;
 }
 
 int NextMachine::run(double seconds) {
 	if(seconds <= 0) return 0;
+	if(dbg_ && zxdbg::g.stopped) return 0;	// detenida por el depurador: el tiempo no corre
 	pending_ += seconds * speed_multiplier_;
 	completed_frames_ = 0;
 	int guard = 0;
 	while(pending_ >= kLineSeconds && guard++ < 40000) {
-		run_line();
+		if(!run_line()) break;	// parada del depurador (la línea se retoma al reanudar)
 		pending_ -= kLineSeconds;
 		emulated_ += kLineSeconds;
 	}

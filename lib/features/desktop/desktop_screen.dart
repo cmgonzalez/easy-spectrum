@@ -18,11 +18,15 @@ import '../../core/emulator/zx_types.dart';
 import '../../core/l10n.dart';
 import '../../core/settings.dart';
 import '../../core/storage/game_library.dart';
+import '../../core/tape/tape_controller.dart';
+import '../../core/tape/tape_file.dart';
 import '../../core/theme/easy_theme.dart';
 import '../../core/video_mode.dart';
 import '../about/about_screen.dart';
 import '../game/game_display.dart';
 import '../game/zx_keyboard.dart';
+import '../tape/tape_editor.dart';
+import '../tape/tape_manager.dart';
 import 'desktop_app.dart';
 import 'mouse_capture.dart';
 import 'native_menu.dart';
@@ -58,6 +62,10 @@ class _DesktopScreenState extends State<DesktopScreen>
 
   final _zx = ZxBridge.instance;
   final _audio = ZxAudio();
+  late final _tape = TapeController(_zx);
+  bool _showTape = false; // panel del gestor de cintas
+  double _tapeExtra = 0; // ancho que creció la ventana para el panel
+  bool _audioMuted = false;
   late final _keyboard = PcKeyboard(_zx);
   late final Ticker _ticker;
   final _focus = FocusNode(debugLabel: 'spectrum');
@@ -98,7 +106,8 @@ class _DesktopScreenState extends State<DesktopScreen>
     _recent = p.getStringList(_prefRecent) ?? [];
     _mouse = MouseType.byName(p.getString(_prefMouse));
     _zx.mouseMode = _mouse.index;
-    _audio.setMuted(!_settings.soundOn);
+    _audioMuted = !_settings.soundOn;
+    _audio.setMuted(_audioMuted);
     await _audio.start();
     if (!mounted) return;
     final file = widget.initialFile;
@@ -127,6 +136,7 @@ class _DesktopScreenState extends State<DesktopScreen>
     windowManager.removeListener(this);
     _capture.stop();
     _ticker.dispose();
+    _tape.dispose();
     _audio.stop();
     _zx.dispose();
     _frame?.dispose();
@@ -207,6 +217,7 @@ class _DesktopScreenState extends State<DesktopScreen>
     }
     _zx.setSpeed(_speed);
     _zx.setGigascreen(_settings.gigascreen);
+    await _tape.attach(path);
     setState(() => _media = source ?? path);
     if (_media.isNotEmpty) await _addRecent(_media);
     await windowManager.setTitle(
@@ -226,6 +237,8 @@ class _DesktopScreenState extends State<DesktopScreen>
       delta = 0.1;
     }
     final frames = _zx.run(delta);
+    _tape.poll();
+    _applyMute();
     _audio.feed(_zx);
     final turbo = _zx.turbo;
     if (turbo != _turbo) setState(() => _turbo = turbo);
@@ -361,7 +374,21 @@ class _DesktopScreenState extends State<DesktopScreen>
 
   Future<void> _toggleMute() async {
     setState(() => _settings.soundOn = !_settings.soundOn);
-    _audio.setMuted(!_settings.soundOn);
+    _applyMute();
+    await _settings.save();
+  }
+
+  /// Sin sonido si está apagado, o mientras gira la cinta con "Silenciar la carga".
+  void _applyMute() {
+    final muted = !_settings.soundOn || (_settings.muteTape && _tape.info.isPlaying);
+    if (muted == _audioMuted) return;
+    _audioMuted = muted;
+    _audio.setMuted(muted);
+  }
+
+  Future<void> _setMuteTape(bool v) async {
+    setState(() => _settings.muteTape = v);
+    _applyMute();
     await _settings.save();
   }
 
@@ -400,10 +427,35 @@ class _DesktopScreenState extends State<DesktopScreen>
     final bar = _fullscreen ? 0.0 : DesktopToolbar.height;
     final imgW = (zxFbWidth - 2 * c) * n.toDouble(), imgH = (zxFbHeight - 2 * c) * n.toDouble();
     if (_kbFits) _kbExtra = _kbHeight(imgW);
+    final panel = _showTape ? TapeManagerPanel.width : 0.0;
+    final want = Size(imgW + panel, imgH + bar + _kbExtra);
     await windowManager.setSize(Size(
-      imgW + outer.width - content.width,
-      imgH + bar + _kbExtra + outer.height - content.height,
+      want.width + outer.width - content.width,
+      want.height + outer.height - content.height,
     ));
+    // El marco no es fijo: la barra de menús nativa pasa a dos líneas en una ventana
+    // estrecha (y vuelve a una al ensancharla). Se mide de nuevo y se corrige lo que falte.
+    for (var pass = 0; pass < 2; pass++) {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      if (!mounted) return;
+      final now = MediaQuery.sizeOf(context);
+      final dw = want.width - now.width, dh = want.height - now.height;
+      if (dw.abs() < 1 && dh.abs() < 1) break;
+      final o = await windowManager.getSize();
+      await windowManager.setSize(Size(o.width + dw, o.height + dh));
+    }
+  }
+
+  /// Zoom actual de la imagen (1 = 100 %), o null si no es uno entero (ventana a mano).
+  int? _currentZoom() {
+    if (_fullscreen) return null;
+    final content = MediaQuery.sizeOf(context);
+    final c = _settings.screenBorder.crop;
+    final w = content.width - (_showTape ? TapeManagerPanel.width : 0);
+    final h = content.height - DesktopToolbar.height - (_showKeyboard ? _kbExtra : 0);
+    final scale = math.min(w / (zxFbWidth - 2 * c), h / (zxFbHeight - 2 * c));
+    final n = scale.round();
+    return n >= 1 && (scale - n).abs() < 0.02 ? n : null;
   }
 
   // --- Teclado ---------------------------------------------------------------
@@ -423,8 +475,10 @@ class _DesktopScreenState extends State<DesktopScreen>
       final action = switch (e.logicalKey) {
         LogicalKeyboardKey.f2 => _reload,
         LogicalKeyboardKey.f3 => _pickFile,
+        LogicalKeyboardKey.f4 => () async => _tape.rewind(),
         LogicalKeyboardKey.f5 => () async => _zx.reset(),
         LogicalKeyboardKey.f6 => () async => _toggleTape(),
+        LogicalKeyboardKey.f7 => _toggleTapePanel,
         LogicalKeyboardKey.f8 || LogicalKeyboardKey.pause => () async => _setPaused(!_paused),
         LogicalKeyboardKey.f11 => () => _setFullscreen(!_fullscreen),
         LogicalKeyboardKey.f9 when _capture.active => () async => _releaseMouse(),
@@ -496,7 +550,12 @@ class _DesktopScreenState extends State<DesktopScreen>
         MenuEntry(t.quickLoad,
             checked: _settings.quickLoad, onSelected: () => _setQuickLoad(!_settings.quickLoad)),
         MenuEntry(_zx.tapePlaying ? t.stopTape : t.playTape,
-            shortcut: 'F6', onSelected: hasMedia ? _toggleTape : null),
+            shortcut: 'F6', onSelected: hasMedia || _tape.hasTape ? _toggleTape : null),
+        MenuEntry(t.tapeRewind, shortcut: 'F4', onSelected: _tape.hasList ? _tape.rewind : null),
+        MenuEntry(t.tapeInsert, onSelected: _insertTape),
+        MenuEntry(t.tapeEject, onSelected: _tape.hasTape ? _tape.eject : null),
+        MenuEntry('${t.tapeManager}…', shortcut: 'F7', checked: _showTape, onSelected: _toggleTapePanel),
+        MenuEntry('${t.tapeNew}…', onSelected: () => _openEditor(null)),
       ]),
       MenuEntry.submenu('&${t.screen}', [
         for (final m in VideoMode.values)
@@ -506,8 +565,9 @@ class _DesktopScreenState extends State<DesktopScreen>
         MenuEntry('Gigascreen',
             checked: _settings.gigascreen, onSelected: () => _setGigascreen(!_settings.gigascreen)),
         const MenuEntry.separator(),
-        MenuEntry.submenu(t.windowSize, [
-          for (final n in [1, 2, 3, 4]) MenuEntry('×$n', onSelected: () => _setScale(n)),
+        MenuEntry.submenu(t.zoom, [
+          for (final n in [1, 2, 3])
+            MenuEntry('${n * 100} %', radio: true, checked: _currentZoom() == n, onSelected: () => _setScale(n)),
         ]),
         MenuEntry(t.fullscreen, shortcut: 'F11 / Alt+Enter', checked: _fullscreen, onSelected: () => _setFullscreen(true)),
       ]),
@@ -533,7 +593,151 @@ class _DesktopScreenState extends State<DesktopScreen>
     ];
   }
 
-  void _toggleTape() => setState(() => _zx.tapePlaying = !_zx.tapePlaying);
+  void _toggleTape() {
+    if (_tape.hasTape) {
+      _tape.togglePlay();
+    } else {
+      _zx.tapePlaying = !_zx.tapePlaying;
+    }
+    setState(() {});
+  }
+
+  // --- Gestor de cintas (doc/TAPE_MANAGER.md) --------------------------------
+
+  /// Abre o cierra el panel. La ventana se ensancha lo que mide (como con el teclado), así
+  /// el juego no se reduce; maximizada o en pantalla completa, el juego cede el sitio.
+  Future<void> _toggleTapePanel() async {
+    final open = !_showTape;
+    final canResize = !_fullscreen && !await windowManager.isMaximized();
+    if (!mounted) return;
+    if (open) {
+      var grown = 0.0;
+      if (canResize) {
+        final view = View.of(context);
+        final screenW = view.display.size.width / view.devicePixelRatio;
+        final outer = await windowManager.getSize();
+        final pos = await windowManager.getPosition();
+        final newW = math.min(outer.width + TapeManagerPanel.width, screenW);
+        grown = math.max(0.0, newW - outer.width);
+        if (grown > 0) {
+          await windowManager.setSize(Size(newW, outer.height));
+          final x = math.max(0.0, math.min(pos.dx, screenW - newW));
+          if (x != pos.dx) await windowManager.setPosition(Offset(x, pos.dy));
+        }
+        if (!mounted) return;
+      }
+      setState(() {
+        _showTape = true;
+        _tapeExtra = grown;
+      });
+    } else {
+      final extra = _tapeExtra;
+      setState(() {
+        _showTape = false;
+        _tapeExtra = 0;
+      });
+      if (extra > 0 && canResize) {
+        final outer = await windowManager.getSize();
+        await windowManager.setSize(Size(math.max(320, outer.width - extra), outer.height));
+      }
+    }
+    _focus.requestFocus();
+  }
+
+  static bool _samePath(String? a, String? b) =>
+      a != null && b != null && File(a).absolute.path.toLowerCase() == File(b).absolute.path.toLowerCase();
+
+  /// Cambia de cinta sin reiniciar la máquina (multicargas, cintas de datos…).
+  Future<void> _insertTape() async {
+    final r = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['tap', 'tzx', 'csw'],
+    );
+    final path = r?.files.singleOrNull?.path;
+    if (path == null || !mounted) return;
+    if (!await _tape.insert(path) && mounted) {
+      _showError(context.l10n.loadFailed(context.l10n.errOpenFailed));
+    }
+    _focus.requestFocus();
+  }
+
+  /// ● alterna la grabación de los SAVE en un .tap aparte (no la cinta insertada: el core
+  /// la tiene abierta).
+  Future<void> _toggleRecord() async {
+    final t = context.l10n;
+    if (_tape.recording) {
+      final blocks = _tape.recordedBlocks;
+      final recorded = await _tape.stopRecording();
+      if (!mounted || recorded == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(t.tapeRecorded(blocks)),
+        action: SnackBarAction(label: t.tapeInsertRecorded, onPressed: () => _tape.insert(recorded)),
+      ));
+      _focus.requestFocus();
+      return;
+    }
+    final target = await FilePicker.platform.saveFile(
+      dialogTitle: t.tapeRecordTo,
+      fileName: 'save.tap',
+      type: FileType.custom,
+      allowedExtensions: ['tap'],
+    );
+    if (target == null || !mounted) return;
+    final out = target.toLowerCase().endsWith('.tap') ? target : '$target.tap';
+    if (_samePath(out, _tape.path)) {
+      _showError(t.tapeRecordSameFile);
+      return;
+    }
+    _tape.startRecording(out);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.tapeRecordHint)));
+    _focus.requestFocus();
+  }
+
+  Future<void> _openEditor(String? path) async {
+    _keyboard.releaseAll();
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => TapeEditorScreen(path: path, beforeOverwrite: _beforeOverwrite)),
+    );
+    await _tape.reload();
+    _focus.requestFocus();
+  }
+
+  /// El editor va a escribir [path]: si es la cinta insertada, se expulsa (Windows no deja
+  /// reemplazar un archivo abierto) y se reinserta después en el mismo bloque.
+  Future<Future<void> Function()?> _beforeOverwrite(String path) async {
+    if (!_samePath(path, _tape.path)) return null;
+    final block = _tape.info.block;
+    _tape.eject();
+    return () async {
+      if (await _tape.insert(path)) _tape.seekBlock(math.min(block, _tape.total));
+    };
+  }
+
+  /// .tzx con solo bloques estándar → .tap (junto al original).
+  Future<void> _convertToTap() async {
+    final t = context.l10n;
+    final tap = _tape.tape?.toTap();
+    if (tap == null || _tape.path == null) {
+      _showError(t.tapeNotConvertible);
+      return;
+    }
+    final src = _tape.path!;
+    final name = _baseName(src);
+    final dot = name.lastIndexOf('.');
+    final target = await FilePicker.platform.saveFile(
+      dialogTitle: t.tapeConvertTap,
+      fileName: '${dot > 0 ? name.substring(0, dot) : name}.tap',
+      initialDirectory: File(src).parent.path,
+      type: FileType.custom,
+      allowedExtensions: ['tap'],
+    );
+    if (target == null || !mounted) return;
+    final out = target.toLowerCase().endsWith('.tap') ? target : '$target.tap';
+    await writeFileAtomic(out, tap);
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.tapeSaved(_baseName(out)))));
+    _focus.requestFocus();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -552,7 +756,7 @@ class _DesktopScreenState extends State<DesktopScreen>
               ToolItem('abrir', t.openFile, onTap: _pickFile),
               ToolItem('guardar', '${t.toolbarSave} (${t.comingSoon})'),
               null,
-              ToolItem('tape', '${t.tapeBrowser} (${t.comingSoon})'),
+              ToolItem('tape', '${t.tapeManager} (F7)', active: _showTape, onTap: _toggleTapePanel),
               null,
               ToolItem('recargar', t.reset, onTap: () {
                 _zx.reset();
@@ -569,6 +773,10 @@ class _DesktopScreenState extends State<DesktopScreen>
               ToolItem('keyboard', t.showKeyboard, active: _showKeyboard, onTap: _toggleKeyboard),
             ]),
           Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+            Expanded(
             child: DropTarget(
               onDragEntered: (_) => setState(() => _dragging = true),
               onDragExited: (_) => setState(() => _dragging = false),
@@ -640,34 +848,6 @@ class _DesktopScreenState extends State<DesktopScreen>
                   ),
                 ),
                 ),
-                    // Fuera del GestureDetector: clics aquí no cuentan como doble clic.
-                    Positioned(
-                      right: 10,
-                      bottom: 10,
-                      child: Tooltip(
-                        message: t.showKeyboard,
-                        child: GestureDetector(
-                          onTap: _toggleKeyboard,
-                          child: MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: Opacity(
-                              opacity: _showKeyboard ? 0.95 : 0.55,
-                              child: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: const Color(0xFF2C2F33),
-                                  border: Border.all(
-                                      color: _showKeyboard ? ZxColors.cyan : Colors.white70, width: 2),
-                                ),
-                                child: const Icon(Icons.keyboard_rounded, size: 24, color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
                     ),
@@ -698,6 +878,24 @@ class _DesktopScreenState extends State<DesktopScreen>
                   ],
                 ),
               ),
+            ),
+            ),
+                if (_showTape)
+                  TapeManagerPanel(
+                    controller: _tape,
+                    quickLoad: _settings.quickLoad,
+                    muteTape: _settings.muteTape,
+                    onQuickLoad: _setQuickLoad,
+                    onMuteTape: _setMuteTape,
+                    onInsert: _insertTape,
+                    onRecord: _toggleRecord,
+                    onNewTape: () => _openEditor(null),
+                    onEditTape: _tape.hasList ? () => _openEditor(_tape.path) : null,
+                    onConvertToTap: _convertToTap,
+                    onClose: _toggleTapePanel,
+                    afterAction: _focus.requestFocus,
+                  ),
+              ],
             ),
           ),
         ],

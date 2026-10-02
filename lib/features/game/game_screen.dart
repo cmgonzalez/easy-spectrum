@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -18,11 +19,15 @@ import '../../core/video_mode.dart';
 import '../../core/storage/game_info.dart';
 import '../../core/storage/game_library.dart';
 import '../../core/storage/game_thumbnail.dart';
+import '../../core/tape/tape_controller.dart';
 import '../../core/theme/easy_theme.dart';
 import 'game_display.dart';
 import 'console_parts.dart';
 import 'console_view.dart';
 import '../settings/settings_screen.dart';
+import '../tape/tape_deck.dart';
+import '../tape/tape_editor.dart';
+import '../tape/tape_manager.dart';
 import 'external_input.dart';
 import 'joystick_pad.dart';
 import 'mouse_pad.dart';
@@ -58,6 +63,14 @@ class _GameScreenState extends State<GameScreen>
   bool _autoPaused = false;
   bool _exiting = false;
   bool _showKeyboard = false;
+  // Tercer modo del área de controles: la grabadora de cassette (gestor de cintas).
+  bool _showTapeDeck = false;
+  // El cassette se mostró solo al cargar una cinta: vuelve al mando al terminar la carga.
+  bool _autoDeck = false;
+  bool _deckTapeSeen = false;
+  double _deckClock = 0;
+  bool _audioMuted = false;
+  late final _tape = TapeController(_zx);
   bool _turbo = false;
   String? _error;
 
@@ -130,7 +143,13 @@ class _GameScreenState extends State<GameScreen>
       _wantCapture = await GameThumbnail.needsCapture(widget.mediaPath);
     }
     _zx.setGigascreen(_settings.gigascreen);
-    _audio.setMuted(!_settings.soundOn);
+    await _tape.attach(widget.mediaPath);
+    if (_tape.hasTape && !_showKeyboard && _pad.mouse == MouseType.none) {
+      _showTapeDeck = true;
+      _autoDeck = true;
+    }
+    _audioMuted = !_settings.soundOn;
+    _audio.setMuted(_audioMuted);
     await _audio.start();
     if (!mounted) return;
     setState(() => _started = true);
@@ -163,10 +182,13 @@ class _GameScreenState extends State<GameScreen>
     }
 
     final frames = _zx.run(delta);
+    _tape.poll();
+    _applyMute();
     _audio.feed(_zx);
     final turbo = _zx.turbo;
     if (turbo != _turbo) setState(() => _turbo = turbo);
     if (_wantCapture) _checkCapture(delta);
+    if (_autoDeck) _checkDeckReturn(delta);
     if (frames == 0 || _frameBusy) return;
 
     _frameBusy = true;
@@ -221,9 +243,46 @@ class _GameScreenState extends State<GameScreen>
     });
   }
 
+  /// Fin de la carga (mismo criterio que la miniatura): el cassette que se abrió solo
+  /// vuelve al mando.
+  void _checkDeckReturn(double delta) {
+    if (!_showTapeDeck) {
+      _autoDeck = false;
+      return;
+    }
+    if (_tape.info.isPlaying) {
+      _deckTapeSeen = true;
+      _deckClock = 0;
+      return;
+    }
+    _deckClock += delta;
+    if (_deckClock < (_deckTapeSeen ? _afterTape : _noTape)) return;
+    _autoDeck = false;
+    setState(() => _showTapeDeck = false);
+  }
+
+  /// Sin sonido si está apagado, o mientras gira la cinta con "Silenciar la carga".
+  void _applyMute() {
+    final muted = !_settings.soundOn || (_settings.muteTape && _tape.info.isPlaying);
+    if (muted == _audioMuted) return;
+    _audioMuted = muted;
+    _audio.setMuted(muted);
+  }
+
   /// Letrero del LCD del mando: juego · año y editor · control · ENTER | ESPACIO.
+  /// Con el cassette: bloque, nombre del bloque y estado.
   String _lcdText() {
     final t = context.l10n;
+    if (_showTapeDeck) {
+      final c = _tape;
+      final block = c.hasList && c.info.block < c.total ? c.tape!.blocks[c.info.block].description : null;
+      return [
+        tapeStatusLine(t, c),
+        if (block != null) block,
+        if (c.recording) t.tapeRecorded(c.recordedBlocks),
+        '<< ENTER | ${t.space} >>',
+      ].join('  ·  ').toUpperCase();
+    }
     final info = widget.mediaPath.isEmpty ? null : GameInfoService.cached(widget.mediaPath);
     final control = _pad.type == JoyMapping.keyboard
         ? '${t.joyKeyboard} ${_pad.keys.map(zxKeyLabel).join(' ')}'
@@ -279,9 +338,79 @@ class _GameScreenState extends State<GameScreen>
     _onJoystick(0);
   }
 
+  /// Verde: mando → teclado → cassette → mando (en horizontal, sin cassette).
   void _toggleInput() => setState(() {
         _releaseInputs();
-        _showKeyboard = !_showKeyboard;
+        _autoDeck = false;
+        final landscape = MediaQuery.orientationOf(context) == Orientation.landscape;
+        if (_showTapeDeck) {
+          _showTapeDeck = false;
+        } else if (_showKeyboard) {
+          _showKeyboard = false;
+          _showTapeDeck = !landscape;
+        } else {
+          _showKeyboard = true;
+        }
+      });
+
+  /// Ícono del verde: el modo que viene.
+  IconData get _nextInputIcon => _showTapeDeck
+      ? Icons.sports_esports_rounded
+      : _showKeyboard
+          ? Icons.album_rounded
+          : Icons.keyboard_rounded;
+
+  // --- Cintas (doc/TAPE_MANAGER.md) ------------------------------------------
+
+  void _openTapeSheet() {
+    _releaseInputs();
+    showTapeSheet(
+      context,
+      controller: _tape,
+      onInsert: _insertTape,
+      onRecord: _toggleRecord,
+      onNewTape: () => _openTapeEditor(null),
+      onEditTape: _tape.hasList ? () => _openTapeEditor(_tape.path) : null,
+    );
+  }
+
+  /// Otra cinta sin reiniciar: se copia a Mis juegos (como al importar) y se inserta.
+  Future<void> _insertTape() async {
+    final t = context.l10n;
+    final r = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
+    final f = r?.files.singleOrNull;
+    if (f == null || f.bytes == null) return;
+    try {
+      final path = await GameLibrary.import(f.name, f.bytes!);
+      if (!await _tape.insert(path) && mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(t.loadFailed(t.errUnsupportedFormat))));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.tapeBadFile('$e'))));
+    }
+  }
+
+  /// ● REC: los SAVE del ROM se graban en una cinta nueva de Mis juegos.
+  Future<void> _toggleRecord() async {
+    final t = context.l10n;
+    if (_tape.recording) {
+      final blocks = _tape.recordedBlocks;
+      final recorded = await _tape.stopRecording();
+      if (!mounted || recorded == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(t.tapeRecorded(blocks)),
+        action: SnackBarAction(label: t.tapeInsertRecorded, onPressed: () => _tape.insert(recorded)),
+      ));
+      return;
+    }
+    _tape.startRecording(await GameLibrary.freePath('save.tap'));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.tapeRecordHint)));
+  }
+
+  Future<void> _openTapeEditor(String? path) => _whilePaused(() async {
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => TapeEditorScreen(path: path)));
+        await _tape.reload();
       });
 
   /// Botones de colores del mando.
@@ -309,7 +438,7 @@ class _GameScreenState extends State<GameScreen>
 
   void _toggleSound() {
     setState(() => _settings.soundOn = !_settings.soundOn);
-    _audio.setMuted(!_settings.soundOn);
+    _applyMute();
     _settings.save();
   }
 
@@ -333,7 +462,8 @@ class _GameScreenState extends State<GameScreen>
     s.keepScreenOn ? WakelockPlus.enable() : WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _zx.setGigascreen(s.gigascreen);
-    _audio.setMuted(!s.soundOn);
+    _audioMuted = !s.soundOn;
+    _audio.setMuted(_audioMuted);
     _zx.mouseMode = pad.mouse.index;
     setState(() {
       _settings = s;
@@ -389,6 +519,7 @@ class _GameScreenState extends State<GameScreen>
     WakelockPlus.disable();
     _focus.dispose();
     _ticker.dispose();
+    _tape.dispose();
     _audio.stop();
     _zx.dispose();
     _frame?.dispose();
@@ -427,6 +558,7 @@ class _GameScreenState extends State<GameScreen>
                 label: tape ? t.stopTape : t.playTape,
                 value: 'tape',
               ),
+            _MenuTile(icon: Icons.album_rounded, label: t.tapeManager, value: 'tapes'),
             _MenuTile(icon: Icons.exit_to_app_rounded, label: t.exitGame, value: 'exit'),
           ],
         ),
@@ -443,7 +575,13 @@ class _GameScreenState extends State<GameScreen>
       case 'reset':
         _zx.reset();
       case 'tape':
-        _zx.tapePlaying = !tape;
+        if (_tape.hasTape) {
+          _tape.togglePlay();
+        } else {
+          _zx.tapePlaying = !tape;
+        }
+      case 'tapes':
+        _openTapeSheet();
       case 'exit':
         _exit();
     }
@@ -518,7 +656,7 @@ class _GameScreenState extends State<GameScreen>
                 alignment: Alignment.bottomRight,
                 child: Opacity(
                   opacity: fade,
-                  child: SizedBox(width: math.min(w * 0.45, 420), height: math.min(h * 0.4, 170), child: _mousePad()),
+                  child: SizedBox.square(dimension: math.min(h * 0.62, w * 0.28), child: _mousePad()),
                 ),
               )
             else
@@ -636,10 +774,10 @@ class _GameScreenState extends State<GameScreen>
                 child: _error != null
                     ? _ErrorView(message: zxErrorText(context.l10n, _error!), onBack: () => Navigator.pop(context))
                     : ConsoleView(
-                        rainbow: !_showKeyboard,
+                        rainbow: !_showKeyboard || _showTapeDeck,
                         fitWidth: _settings.fitWidth,
                         // Teclado: un poco más alto que su proporción (teclas más cómodas).
-                        controlsAspect: _showKeyboard ? zxKeyboardCompactAspect / 1.2 : null,
+                        controlsAspect: _showKeyboard && !_showTapeDeck ? zxKeyboardCompactAspect / 1.2 : null,
                         screenAspect: GameDisplay.aspectFor(_settings.screenBorder),
                         screen: Stack(
                           fit: StackFit.expand,
@@ -670,10 +808,20 @@ class _GameScreenState extends State<GameScreen>
                         actions: ActionButtons(
                           onAction: _onPadAction,
                           keyboardMode: _showKeyboard,
+                          inputIcon: _nextInputIcon,
                           soundOn: _settings.soundOn,
                           haptics: _settings.vibration,
                         ),
-                        controls: _showKeyboard
+                        controls: _showTapeDeck
+                            ? TapeDeck(
+                                controller: _tape,
+                                onRecord: _toggleRecord,
+                                onShowList: _openTapeSheet,
+                                haptics: _settings.vibration,
+                                title: _title,
+                                machine: _modelLabel(),
+                              )
+                            : _showKeyboard
                             ? ZxKeyboard(onKey: _onKey, haptics: _settings.vibration, compact: true, stretch: true)
                             : _pad.mouse != MouseType.none
                                 ? _mousePad()

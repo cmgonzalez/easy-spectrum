@@ -43,7 +43,9 @@
     }
   },
   "setDefaultApp": "Establecer como predeterminado",
-  "@setDefaultApp": {"description": "Menú Archivo (Windows): abre Aplicaciones predeterminadas en Configuración"},
+  "@setDefaultApp": {
+    "description": "Menú Archivo (Windows): abre Aplicaciones predeterminadas en Configuración"
+  },
   "exit": "Salir",
   "showJoystick": "Mostrar mando",
   "showKeyboard": "Mostrar teclado",
@@ -177,5 +179,103 @@
   "comingSoon": "Próximamente",
   "tapeBrowser": "Explorador de cinta",
   "fullScreen": "Pantalla completa",
-  "fullScreenSubtitle": "Sin barra de título: el juego usa toda la pantalla (vertical)"
+  "fullScreenSubtitle": "Sin barra de título: el juego usa toda la pantalla (vertical)",
+  "tapeManager": "Gestor de cintas",
+  "tapeRecord": "Grabar",
+  "tapePlay": "Reproducir",
+  "tapePause": "Pausa",
+  "tapeStop": "Detener",
+  "tapeRewind": "Rebobinar",
+  "tapePrevBlock": "Bloque anterior",
+  "tapeNextBlock": "Bloque siguiente",
+  "tapeEject": "Expulsar",
+  "tapeInsert": "Insertar cinta…",
+  "tapeStatusEmpty": "Sin cinta",
+  "tapeStatusStopped": "Detenida",
+  "tapeStatusPlaying": "Reproduciendo",
+  "tapeStatusPaused": "En pausa",
+  "tapeStatusEnd": "Fin de la cinta",
+  "tapeStatusRecording": "Grabando",
+  "tapeBlockOf": "Bloque {block} de {total}",
+  "@tapeBlockOf": {
+    "placeholders": {
+      "block": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "tapeNoList": "Cinta de audio: sin lista de bloques",
+  "tapePairBlocks": "Juntar cabecera y datos",
+  "tapeMuteSound": "Silenciar la carga",
+  "tapeRecordTo": "Grabar los SAVE en…",
+  "tapeRecordHint": "Grabando: haz SAVE en el Spectrum. Solo se capturan los SAVE del ROM.",
+  "tapeRecorded": "{count} bloques grabados",
+  "@tapeRecorded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tapeInsertRecorded": "Insertar la cinta grabada",
+  "tapeRecordSameFile": "No se puede grabar en la cinta insertada: elige otro archivo.",
+  "tapeChecksumBad": "Checksum incorrecto",
+  "tapeNew": "Crear cinta",
+  "tapeEdit": "Editar cinta",
+  "tapeEditor": "Editor de cintas",
+  "tapeAddBlock": "Añadir bloque",
+  "tapeAddCode": "Código (archivo binario)",
+  "tapeAddScreen": "Pantalla (.scr)",
+  "tapeAddBasic": "Programa BASIC",
+  "tapeAddData": "Bloque de datos crudo",
+  "tapeAddLoader": "Cargador (BASIC + CODE)",
+  "tapeAddFromTape": "Bloques de otra cinta",
+  "tapeBlockName": "Nombre (máx. 10)",
+  "tapeLoadAddress": "Dirección de carga",
+  "tapeRunAddress": "Dirección de arranque (USR)",
+  "tapeAutostart": "Línea de arranque (vacío = ninguna)",
+  "tapeBasicText": "Programa (una línea por renglón: 10 PRINT \"HOLA\")",
+  "tapeFlag": "Flag (0-255)",
+  "tapeWithScreen": "Con pantalla de carga (.scr)…",
+  "tapeChooseFile": "Elegir archivo…",
+  "tapeRename": "Renombrar",
+  "tapeDuplicate": "Duplicar",
+  "tapeMoveUp": "Subir",
+  "tapeMoveDown": "Bajar",
+  "tapeSave": "Guardar cinta",
+  "tapeSaved": "Cinta guardada: {name}",
+  "@tapeSaved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "tapeEmpty": "La cinta está vacía",
+  "tapeNeedsTzx": "Tiene bloques no estándar: se guardará como .tzx",
+  "tapeConvertTap": "Convertir a .tap",
+  "tapeNotConvertible": "Esta cinta tiene bloques turbo o de control y no se puede pasar a .tap.",
+  "tapeAddToLibrary": "Añadir a Mis juegos",
+  "tapeAdded": "Añadida a Mis juegos",
+  "tapeInvalidAddress": "Dirección no válida (0-65535)",
+  "tapeBadFile": "No se pudo usar el archivo: {error}",
+  "@tapeBadFile": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tapeUnsaved": "Hay cambios sin guardar. ¿Salir igualmente?",
+  "tapeDiscard": "Descartar",
+  "tapeAdd": "Añadir",
+  "tapeOpenInEditor": "Abrir en el editor",
+  "tapeDropHint": "Suelta archivos para añadirlos como bloques",
+  "tapeDeck": "Cassette",
+  "showTapeDeck": "Mostrar cassette",
+  "tapeBlockList": "Lista de bloques",
+  "zoom": "Zoom"
 }

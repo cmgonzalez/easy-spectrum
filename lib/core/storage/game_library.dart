@@ -22,6 +22,20 @@ class GameLibrary {
     return d;
   }
 
+  /// Ruta libre en la biblioteca para un archivo nuevo (p. ej. la cinta donde se graban
+  /// los SAVE): si [fileName] ya existe se le añade un número.
+  static Future<String> freePath(String fileName) async {
+    final dir = (await _dir()).path;
+    final dot = fileName.lastIndexOf('.');
+    final stem = dot > 0 ? fileName.substring(0, dot) : fileName;
+    final ext = dot > 0 ? fileName.substring(dot) : '';
+    var path = '$dir/$fileName';
+    for (var n = 2; await File(path).exists(); n++) {
+      path = '$dir/$stem $n$ext';
+    }
+    return path;
+  }
+
   static String extensionOf(String name) {
     final dot = name.lastIndexOf('.');
     return dot < 0 ? '' : name.substring(dot + 1).toLowerCase();

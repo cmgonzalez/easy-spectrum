@@ -34,6 +34,12 @@ struct Target {
 	void (*poke_bank)(void *, int kind, int bank, uint16_t off, uint8_t v) = nullptr;
 	void (*paging)(void *, uint8_t *p7ffd, uint8_t *p1ffd) = nullptr;
 	int64_t frame_half_cycles = 0;	// duración de un frame (half cycles)
+	// Solo la Next (null en las máquinas de CLK): páginas de 8 KB (0-255), slots del MMU y NextRegs.
+	uint8_t (*peek_page)(void *, int page, uint16_t off) = nullptr;
+	void (*poke_page)(void *, int page, uint16_t off, uint8_t v) = nullptr;
+	void (*mmu)(void *, uint8_t out[8]) = nullptr;
+	uint8_t (*nextreg)(void *, uint8_t reg) = nullptr;
+	int (*cpu_speed)(void *) = nullptr;	// 0..3 = 3,5 / 7 / 14 / 28 MHz
 };
 
 enum class Reason : uint8_t { None, Pause, Breakpoint, Step, Until, Watch, Crash, Frames };

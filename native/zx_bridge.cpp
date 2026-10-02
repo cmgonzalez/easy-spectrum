@@ -14,6 +14,7 @@
 #include "zx_mouse.h"
 #include "zx_debug.h"
 #include "zx_pdp.h"
+#include "zx_tape.h"
 
 #include "Machines/Sinclair/ZXSpectrum/ZXSpectrum.hpp"
 #include "Machines/Sinclair/Keyboard/Keyboard.hpp"
@@ -426,7 +427,113 @@ std::unique_ptr<Analyser::Static::Target> load_sna128(const std::string &path) {
 	return result;
 }
 
+// ---------------------------------------------------------------------------
+// Gestor de cintas (zx_tape.h, doc/TAPE_MANAGER.md)
+// ---------------------------------------------------------------------------
+
+/// Offsets de los bloques de un .tap (cada uno: longitud de 2 bytes + bloque).
+std::vector<long> scan_tap(const std::vector<uint8_t> &d) {
+	std::vector<long> out;
+	size_t p = 0;
+	while(p + 2 <= d.size()) {
+		const size_t len = size_t(d[p] | (d[p + 1] << 8));
+		if(p + 2 + len > d.size()) break;
+		out.push_back(long(p));
+		p += 2 + len;
+	}
+	return out;
+}
+
+/// Offsets de los bloques de un .tzx (después de la cabecera de 10 bytes). Se detiene en un
+/// ID desconocido, igual que CLK (en TZX cada bloque declara su longitud a su manera).
+std::vector<long> scan_tzx(const std::vector<uint8_t> &d) {
+	std::vector<long> out;
+	if(d.size() < 10 || std::memcmp(d.data(), "ZXTape!\x1a", 8) != 0) return out;
+	const auto le = [&d](size_t at, int n) -> size_t {
+		size_t v = 0;
+		for(int i = 0; i < n; i++) v |= at + i < d.size() ? size_t(d[at + i]) << (8 * i) : 0;
+		return v;
+	};
+	size_t p = 10;
+	while(p < d.size()) {
+		const uint8_t id = d[p];
+		const size_t b = p + 1;	// cuerpo del bloque
+		size_t len;
+		switch(id) {
+			case 0x10: len = 4 + le(b + 2, 2); break;
+			case 0x11: len = 18 + le(b + 15, 3); break;
+			case 0x12: len = 4; break;
+			case 0x13: len = 1 + le(b, 1) * 2; break;
+			case 0x14: len = 10 + le(b + 7, 3); break;
+			case 0x15: len = 8 + le(b + 5, 3); break;
+			case 0x18: case 0x19: case 0x2b: case 0x4b: len = 4 + le(b, 4); break;
+			case 0x20: case 0x23: case 0x24: len = 2; break;
+			case 0x21: case 0x30: len = 1 + le(b, 1); break;
+			case 0x22: case 0x25: case 0x27: len = 0; break;
+			case 0x26: len = 2 + le(b, 2) * 2; break;
+			case 0x28: case 0x32: len = 2 + le(b, 2); break;
+			case 0x2a: len = 4; break;
+			case 0x31: len = 2 + le(b + 1, 1); break;
+			case 0x33: len = 1 + le(b, 1) * 3; break;
+			case 0x35: len = 20 + le(b + 16, 4); break;
+			case 0x5a: len = 9; break;
+			default: return out;
+		}
+		if(b + len > d.size()) break;
+		out.push_back(long(p));
+		p = b + len;
+	}
+	return out;
+}
+
+/// Cinta insertada. La máquina es única, así que el estado es global (lo actualizan los
+/// ganchos de las copias parcheadas de CLK).
+struct TapeState {
+	bool loaded = false;	// hay cinta con lista de bloques (.tap/.tzx)
+	bool any = false;	// hay cinta (incluye .csw, sin lista)
+	bool tzx = false;
+	std::vector<uint8_t> data;	// contenido del archivo insertado
+	std::vector<long> offsets;	// offset de cada bloque en `data`
+	// Archivo que suena: el original o un recorte desde el bloque `base` (seek).
+	int base = 0;
+	long header = 0;	// bytes de cabecera del recorte (10 en .tzx, 0 en .tap y en el original)
+	long base_offset = 0;	// offset en `data` del primer bloque del recorte
+	long last = -1;	// último offset avisado por CLK (en el archivo que suena); -1 = aún nada
+	bool recording = false;
+	std::vector<uint8_t> rec;	// bloques grabados, en formato .tap (longitud + bloque)
+
+	void clear_media() {
+		loaded = any = tzx = false;
+		data.clear();
+		offsets.clear();
+		base = 0;
+		header = base_offset = 0;
+		last = -1;
+	}
+
+	/// Índice del bloque que suena (offsets.size() = fin de cinta).
+	int current() const {
+		if(!loaded || offsets.empty()) return 0;
+		if(last < 0) return base;
+		const long o = last - header + base_offset;
+		if(o >= long(data.size())) return int(offsets.size());
+		const auto it = std::upper_bound(offsets.begin(), offsets.end(), o);
+		return it == offsets.begin() ? 0 : int(it - offsets.begin()) - 1;
+	}
+} g_tape;
+
 }	// namespace
+
+namespace zxtape {
+void note_block(long offset) { g_tape.last = offset; }
+bool recording() { return g_tape.recording; }
+void record_block(const uint8_t *data, size_t length) {
+	if(length > 0xffff) return;
+	g_tape.rec.push_back(uint8_t(length & 0xff));
+	g_tape.rec.push_back(uint8_t(length >> 8));
+	g_tape.rec.insert(g_tape.rec.end(), data, data + length);
+}
+}	// namespace zxtape
 
 // ---------------------------------------------------------------------------
 
@@ -457,6 +564,11 @@ struct ZxHandle {
 	bool turbo_suppressed = false;
 	double emulated = 0.0;	// segundos emulados desde zx_create
 	bool pdp = false;	// este handle es el dueno del servidor de depuracion (PDP)
+	std::string rom_dir;	// carpeta de las ROMs (con permiso de escritura: recortes de cinta)
+	// Cinta en pausa (gestor de cintas): sin motor automático, para que el cargador que
+	// sigue leyendo el puerto FE no la vuelva a arrancar.
+	bool tape_paused = false;
+	bool tape_seek_flip = false;
 
 	// Secuencia de teclas con tiempos propios (el Typer de CLK va demasiado rápido
 	// para el debounce del ROM 48K: dos comillas seguidas se leen como una).
@@ -473,6 +585,48 @@ struct ZxHandle {
 	}
 };
 
+/// Lee la cinta para el gestor (lista de bloques). Se llama antes de que CLK la abra.
+static void tape_load_state(const std::string &path) {
+	g_tape.clear_media();
+	g_tape.any = true;
+	const std::string ext = lower_ext(path);
+	if(ext != "tap" && ext != "tzx") return;
+	if(!read_file(path, g_tape.data)) return;
+	g_tape.tzx = ext == "tzx";
+	g_tape.offsets = g_tape.tzx ? scan_tzx(g_tape.data) : scan_tap(g_tape.data);
+	g_tape.loaded = true;
+}
+
+/// Pone `path` en el reproductor de la máquina en marcha (conserva el estado del motor).
+static bool tape_insert_file(ZxHandle *h, const std::string &path) {
+	auto *const target = dynamic_cast<MachineTypes::MediaTarget *>(h->machine.get());
+	if(!target) return false;
+	const std::string ext = lower_ext(path);
+	Analyser::Static::Media media;
+	try {
+		if(ext == "tap") media.tapes.push_back(std::make_shared<Storage::Tape::ZXSpectrumTAP>(path));
+		else if(ext == "tzx") media.tapes.push_back(std::make_shared<Storage::Tape::TZX>(path));
+		else if(ext == "csw") media.tapes.push_back(std::make_shared<Storage::Tape::CSW>(path));
+		else return false;
+	} catch(...) {
+		return false;
+	}
+	g_tape.last = -1;
+	return target->insert_media(media);
+}
+
+/// Aplica las opciones del core: carga rápida y motor automático (apagado en pausa).
+static void apply_tape_options(ZxHandle *h) {
+	if(!h->configurable) return;
+	auto options = h->configurable->get_options();
+	if(auto *const zx = dynamic_cast<Sinclair::ZXSpectrum::Machine::Options *>(options.get())) {
+		zx->quick_load = h->turbo_load;
+		zx->automatic_tape_motor_control = !h->tape_paused;
+		zx->output = Configurable::Display::RGB;
+		h->configurable->set_options(options);
+	}
+}
+
 extern "C" {
 
 const char *zx_last_error(void) {
@@ -484,6 +638,9 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 	g_last_error.clear();
 	g_zx_mouse = ZxMouse();
 	zx_ulaplus_active = 0;
+	g_tape.clear_media();
+	g_tape.recording = false;
+	g_tape.rec.clear();
 
 	try {
 		const std::string dir = rom_dir ? rom_dir : "";
@@ -580,6 +737,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 
 		auto h = std::make_unique<ZxHandle>();
 		h->model = int(target->model);
+		h->rom_dir = dir;
 		h->machine = Sinclair::ZXSpectrum::Machine::create(*target, fetcher);
 		if(!h->machine) { g_last_error = "machine_failed"; return nullptr; }
 
@@ -616,6 +774,8 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 			h->add_press(t, {KeyEnter});
 		}
 
+		if(ext == "tap" || ext == "tzx" || ext == "csw") tape_load_state(path);
+
 		LOGI("máquina creada: modelo %d, media '%s'", int(target->model), path.c_str());
 		return h.release();
 	} catch(ROMMachine::Error) {
@@ -632,7 +792,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 void zx_destroy(ZxHandle *h) {
 	if(!h) return;
 	if(h->pdp) pdp::stop();	// antes de destruir la maquina: reanuda la CPU si estaba detenida
-	if(h->next) { delete h; return; }
+	if(h->next) { h->next->detach_debugger(); delete h; return; }
 	if(h->speaker) h->speaker->set_delegate(nullptr);
 	h->machine.reset();
 	delete h;
@@ -642,7 +802,7 @@ static int run_machine(ZxHandle *h, double seconds);
 
 static pdp::Host pdp_host(ZxHandle *h) {
 	pdp::Host host;
-	host.supported = h->next == nullptr;
+	host.supported = true;	// CLK (hook en el bus) y la Next (parada entre instrucciones)
 	host.machine = h->next ? "next" : "zx";
 	host.reset = [h] { zx_reset(h); };
 	host.emulated_seconds = [h] { return zx_get_emulated_time(h); };
@@ -657,7 +817,7 @@ int zx_run(ZxHandle *h, double seconds) {
 	if(!h || seconds <= 0.0) return 0;
 	if(h->pdp) pdp::pump(pdp_host(h));
 	// Detenida por el depurador: no se debe llamar a run_for() (ver zx_debug.h).
-	const int frames = (!h->next && zxdbg::g.stopped) ? 0 : run_machine(h, seconds);
+	const int frames = zxdbg::g.stopped ? 0 : run_machine(h, seconds);
 	if(h->pdp) pdp::pump(pdp_host(h));
 	return frames;
 }
@@ -797,7 +957,7 @@ int zx_get_audio(ZxHandle *h, int16_t *out, int max_samples) {
 }
 
 void zx_reset(ZxHandle *h) {
-	if(h && !h->next) { zxdbg::drain(); zxdbg::g.last_start_pc = -1; zxdbg::g.prefix = 0; }
+	if(h) { zxdbg::drain(); zxdbg::g.last_start_pc = -1; zxdbg::g.prefix = 0; }
 	if(h && h->next) {
 		std::string err;
 		h->next->load_nex(h->next_file.data(), h->next_file.size(), err);
@@ -817,14 +977,102 @@ int zx_get_tape_playing(ZxHandle *h) {
 void zx_set_quickload(ZxHandle *h, int enabled) {
 	if(!h || h->next) return;
 	h->turbo_load = enabled != 0;
-	if(!h->configurable) return;
-	auto options = h->configurable->get_options();
-	if(auto *const zx = dynamic_cast<Sinclair::ZXSpectrum::Machine::Options *>(options.get())) {
-		zx->quick_load = enabled != 0;
-		zx->automatic_tape_motor_control = true;
-		zx->output = Configurable::Display::RGB;
-		h->configurable->set_options(options);
+	apply_tape_options(h);
+}
+
+// --- Gestor de cintas (doc/TAPE_MANAGER.md) ---
+
+int zx_tape_insert(ZxHandle *h, const char *path) {
+	if(!h || h->next || !path) return 0;
+	const std::string p = path;
+	const std::string ext = lower_ext(p);
+	if(ext != "tap" && ext != "tzx" && ext != "csw") return 0;
+	if(!tape_insert_file(h, p)) return 0;
+	tape_load_state(p);
+	return 1;
+}
+
+void zx_tape_eject(ZxHandle *h) {
+	if(!h || h->next) return;
+	// CLK no deja quitar la cinta: se pone una vacía (.tap de 0 bytes = fin de cinta).
+	const std::string empty = h->rom_dir + "/.tape_empty.tap";
+	{ std::ofstream f(empty, std::ios::binary | std::ios::trunc); }
+	h->machine->set_tape_is_playing(false);
+	tape_insert_file(h, empty);
+	g_tape.clear_media();
+}
+
+int zx_tape_seek(ZxHandle *h, int block) {
+	if(!h || h->next || !g_tape.loaded) return 0;
+	const int total = int(g_tape.offsets.size());
+	if(block < 0 || block > total) return 0;
+	const bool playing = h->machine->get_tape_is_playing();
+	const long start = block == total ? long(g_tape.data.size()) : g_tape.offsets[size_t(block)];
+	// CLK abre las cintas por ruta: el recorte (bloques block..fin) va a un archivo temporal.
+	// Bloque 0 de un .tzx = el archivo entero; en un .tap el recorte desde 0 es idéntico.
+	const long header = g_tape.tzx ? 10 : 0;
+	// Dos nombres alternados: CLK todavía tiene abierto el recorte anterior al crear el nuevo.
+	h->tape_seek_flip = !h->tape_seek_flip;
+	const std::string out = h->rom_dir + (h->tape_seek_flip ? "/.tape_seek1" : "/.tape_seek0") +
+		(g_tape.tzx ? ".tzx" : ".tap");
+	{
+		std::ofstream f(out, std::ios::binary | std::ios::trunc);
+		if(!f) return 0;
+		if(header) f.write(reinterpret_cast<const char *>(g_tape.data.data()), header);
+		f.write(reinterpret_cast<const char *>(g_tape.data.data()) + start, std::streamsize(g_tape.data.size() - size_t(start)));
+		if(!f) return 0;
 	}
+	if(!tape_insert_file(h, out)) return 0;
+	g_tape.base = block;
+	g_tape.header = header;
+	g_tape.base_offset = start;
+	h->machine->set_tape_is_playing(playing && !h->tape_paused);
+	return 1;
+}
+
+int zx_tape_info(ZxHandle *h, int *block, int *total) {
+	if(block) *block = 0;
+	if(total) *total = 0;
+	if(!h || h->next) return 0;
+	int flags = 0;
+	if(g_tape.any) flags |= ZX_TAPE_INSERTED;
+	if(g_tape.loaded) {
+		if(block) *block = g_tape.current();
+		if(total) *total = int(g_tape.offsets.size());
+		if(g_tape.current() >= int(g_tape.offsets.size())) flags |= ZX_TAPE_END;
+	}
+	if(h->machine->get_tape_is_playing()) flags |= ZX_TAPE_PLAYING;
+	if(h->tape_paused) flags |= ZX_TAPE_PAUSED;
+	if(g_tape.recording) flags |= ZX_TAPE_RECORDING;
+	return flags;
+}
+
+void zx_tape_set_paused(ZxHandle *h, int paused) {
+	if(!h || h->next) return;
+	h->tape_paused = paused != 0;
+	apply_tape_options(h);
+	h->machine->set_tape_is_playing(!h->tape_paused);
+}
+
+void zx_tape_record(ZxHandle *h, int enabled) {
+	if(!h || h->next) return;
+	g_tape.recording = enabled != 0;
+}
+
+int zx_tape_take_recorded(ZxHandle *h, uint8_t *out, int max) {
+	if(!h || h->next) return 0;
+	if(!out) return int(g_tape.rec.size());
+	const int n = std::min(max, int(g_tape.rec.size()));
+	// Solo bloques enteros: el lector de Dart añade al archivo lo que recibe.
+	int whole = 0;
+	while(whole + 2 <= n) {
+		const int len = g_tape.rec[size_t(whole)] | (g_tape.rec[size_t(whole) + 1] << 8);
+		if(whole + 2 + len > n) break;
+		whole += 2 + len;
+	}
+	std::memcpy(out, g_tape.rec.data(), size_t(whole));
+	g_tape.rec.erase(g_tape.rec.begin(), g_tape.rec.begin() + whole);
+	return whole;
 }
 
 void zx_set_gigascreen(ZxHandle *h, int enabled) {
@@ -833,6 +1081,7 @@ void zx_set_gigascreen(ZxHandle *h, int enabled) {
 
 int zx_pdp_start(ZxHandle *h, int port) {
 	if(!h) return -1;
+	if(h->next) h->next->attach_debugger();	// la máquina de CLK se engancha sola al primer run_for
 	const int p = pdp::start(port);
 	if(p > 0) h->pdp = true;
 	return p;

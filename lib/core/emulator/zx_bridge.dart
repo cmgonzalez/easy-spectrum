@@ -40,6 +40,37 @@ typedef _PdpStartN = Int32 Function(Pointer<Void> h, Int32 port);
 typedef _PdpStart = int Function(Pointer<Void> h, int port);
 typedef _SpeedN = Void Function(Pointer<Void> h, Double m);
 typedef _Speed = void Function(Pointer<Void> h, double m);
+typedef _PathN = Int32 Function(Pointer<Void> h, Pointer<Utf8> path);
+typedef _Path = int Function(Pointer<Void> h, Pointer<Utf8> path);
+typedef _IntIntN = Int32 Function(Pointer<Void> h, Int32 v);
+typedef _IntInt = int Function(Pointer<Void> h, int v);
+typedef _TapeInfoN = Int32 Function(Pointer<Void> h, Pointer<Int32> block, Pointer<Int32> total);
+typedef _TapeInfo = int Function(Pointer<Void> h, Pointer<Int32> block, Pointer<Int32> total);
+typedef _TakeN = Int32 Function(Pointer<Void> h, Pointer<Uint8> out, Int32 max);
+typedef _Take = int Function(Pointer<Void> h, Pointer<Uint8> out, int max);
+
+/// Estado de la cinta insertada (`zx_tape_info`, gestor de cintas).
+class ZxTapeInfo {
+  static const inserted = 1 << 0, playing = 1 << 1, end = 1 << 2, paused = 1 << 3, recording = 1 << 4;
+  final int flags;
+  /// Bloque que suena (== [total] al terminar la cinta).
+  final int block;
+  final int total;
+  const ZxTapeInfo(this.flags, this.block, this.total);
+  static const none = ZxTapeInfo(0, 0, 0);
+
+  bool get hasTape => flags & inserted != 0;
+  bool get isPlaying => flags & playing != 0;
+  bool get atEnd => flags & end != 0;
+  bool get isPaused => flags & paused != 0;
+  bool get isRecording => flags & recording != 0;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ZxTapeInfo && other.flags == flags && other.block == block && other.total == total;
+  @override
+  int get hashCode => Object.hash(flags, block, total);
+}
 
 /// Puente dart:ffi → libzx_bridge.so / zx_bridge.dll (core Clock Signal).
 class ZxBridge {
@@ -72,6 +103,13 @@ class ZxBridge {
     _isUla = lib.lookupFunction<_IntRetN, _IntRet>('zx_is_ulaplus');
     _setGiga = lib.lookupFunction<_IntArgN, _IntArg>('zx_set_gigascreen');
     _pdpStart = lib.lookupFunction<_PdpStartN, _PdpStart>('zx_pdp_start');
+    _tapeInsert = lib.lookupFunction<_PathN, _Path>('zx_tape_insert');
+    _tapeEject = lib.lookupFunction<_VoidHN, _VoidH>('zx_tape_eject');
+    _tapeSeek = lib.lookupFunction<_IntIntN, _IntInt>('zx_tape_seek');
+    _tapeInfo = lib.lookupFunction<_TapeInfoN, _TapeInfo>('zx_tape_info');
+    _tapePause = lib.lookupFunction<_IntArgN, _IntArg>('zx_tape_set_paused');
+    _tapeRecord = lib.lookupFunction<_IntArgN, _IntArg>('zx_tape_record');
+    _tapeTake = lib.lookupFunction<_TakeN, _Take>('zx_tape_take_recorded');
   }
 
   static final ZxBridge instance = ZxBridge._();
@@ -100,6 +138,14 @@ class ZxBridge {
   late final _IntRet _isUla;
   late final _IntArg _setGiga;
   late final _PdpStart _pdpStart;
+  late final _Path _tapeInsert;
+  late final _VoidH _tapeEject;
+  late final _IntInt _tapeSeek;
+  late final _TapeInfo _tapeInfo;
+  late final _IntArg _tapePause;
+  late final _IntArg _tapeRecord;
+  late final _Take _tapeTake;
+  Pointer<Int32>? _infoBuf;
 
   Pointer<Void> _h = nullptr;
   Pointer<Int16>? _audioBuf;
@@ -274,6 +320,57 @@ class ZxBridge {
 
   void setSpeed(double multiplier) {
     if (isRunning) _setSpeed(_h, multiplier);
+  }
+
+  // --- Gestor de cintas (doc/TAPE_MANAGER.md) ---
+
+  /// Inserta una cinta (.tap .tzx .csw) con la máquina en marcha.
+  bool tapeInsert(String path) {
+    if (!isRunning) return false;
+    final p = path.toNativeUtf8();
+    try {
+      return _tapeInsert(_h, p) != 0;
+    } finally {
+      calloc.free(p);
+    }
+  }
+
+  void tapeEject() {
+    if (isRunning) _tapeEject(_h);
+  }
+
+  /// Mueve la cinta al inicio del bloque [block] (0 = rebobinar).
+  bool tapeSeek(int block) => isRunning && _tapeSeek(_h, block) != 0;
+
+  ZxTapeInfo tapeInfo() {
+    if (!isRunning) return ZxTapeInfo.none;
+    final buf = _infoBuf ??= calloc<Int32>(2);
+    final flags = _tapeInfo(_h, buf, buf + 1);
+    return ZxTapeInfo(flags, buf[0], buf[1]);
+  }
+
+  /// Pausa: motor apagado y sin arranque automático (el cargador no la vuelve a arrancar).
+  void tapePause(bool paused) {
+    if (isRunning) _tapePause(_h, paused ? 1 : 0);
+  }
+
+  /// Grabación de los SAVE del ROM.
+  void tapeRecord(bool enabled) {
+    if (isRunning) _tapeRecord(_h, enabled ? 1 : 0);
+  }
+
+  /// Bloques grabados desde la última llamada, en formato .tap (vacío si no hay).
+  Uint8List takeRecorded() {
+    if (!isRunning) return Uint8List(0);
+    final n = _tapeTake(_h, nullptr, 0);
+    if (n <= 0) return Uint8List(0);
+    final buf = calloc<Uint8>(n);
+    try {
+      final got = _tapeTake(_h, buf, n);
+      return Uint8List.fromList(buf.asTypedList(got));
+    } finally {
+      calloc.free(buf);
+    }
   }
 
   void dispose() {

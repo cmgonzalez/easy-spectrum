@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Barra de menús nativa de Windows (HMENU) descrita desde Dart por el canal
@@ -53,6 +54,12 @@ class NativeMenu {
   bool in_menu_loop_ = false;
   std::optional<flutter::EncodableList> pending_;
   Items items_;
+  // Apply en curso: SetMenu redimensiona el marco y puede procesar mensajes, y un setMenu
+  // que llegue entonces no debe entrar (liberaría los textos del menú que está a la vista).
+  bool applying_ = false;
+  // Menús que Windows aún tenía puestos al reemplazarlos: sus datos (los textos que dibuja
+  // el owner-draw) viven hasta que la ventana los suelte de verdad.
+  std::vector<std::pair<HMENU, Items>> retired_;
   HFONT font_ = nullptr;
   UINT font_dpi_ = 0;
 };
