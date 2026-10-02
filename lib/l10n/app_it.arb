@@ -53,6 +53,8 @@
   "startWithKeyboard": "Inizia con la tastiera",
   "startWithKeyboardSubtitle": "Altrimenti viene mostrato il joypad",
   "vibration": "Vibra alla pressione",
+  "buttonLight": "Luci sui pulsanti",
+  "buttonLightSubtitle": "Effetto luce con i colori dello Spectrum",
   "screen": "Schermo",
   "keepScreenOn": "Mantieni lo schermo acceso",
   "library": "Libreria",

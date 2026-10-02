@@ -53,6 +53,15 @@ const _zxKeyLabels = <String>[
   'CAPS', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', 'SYM', 'SPACE',
 ];
 
+/// Nombre abreviado para el LCD: SP, EN, CS (caps shift), SS (symbol shift).
+String zxKeyShort(int key) => switch (key) {
+      ZxKey.space => 'SP',
+      ZxKey.enter => 'EN',
+      ZxKey.caps => 'CS',
+      ZxKey.sym => 'SS',
+      _ => zxKeyLabel(key),
+    };
+
 /// Nombre corto de una tecla ('Q', 'ENTER', 'CAPS', 'SYM', 'SPACE').
 String zxKeyLabel(int key) {
   var i = 0;

@@ -98,6 +98,8 @@
   "startWithKeyboard": "Empezar con el teclado",
   "startWithKeyboardSubtitle": "Si no, se muestra el mando",
   "vibration": "Vibrar al pulsar",
+  "buttonLight": "Luz en los botones",
+  "buttonLightSubtitle": "Efecto de luz con los colores del Spectrum",
   "screen": "Pantalla",
   "keepScreenOn": "Mantener pantalla encendida",
   "library": "Biblioteca",

@@ -53,6 +53,8 @@
   "startWithKeyboard": "Começar com o teclado",
   "startWithKeyboardSubtitle": "Caso contrário, mostra o controle",
   "vibration": "Vibrar ao tocar",
+  "buttonLight": "Luz nos botões",
+  "buttonLightSubtitle": "Efeito de luz com as cores do Spectrum",
   "screen": "Tela",
   "keepScreenOn": "Manter a tela ligada",
   "library": "Biblioteca",

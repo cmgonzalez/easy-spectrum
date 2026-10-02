@@ -167,6 +167,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (!inGame) ...[
                 _Header(t.controls),
                 SwitchListTile(
+                  secondary: const Icon(Icons.auto_awesome_rounded, size: 32),
+                  title: Text(t.buttonLight),
+                  subtitle: Text(t.buttonLightSubtitle),
+                  value: s.buttonLight,
+                  onChanged: (v) => _update((s) => s.buttonLight = v),
+                ),
+                SwitchListTile(
                   secondary: const Icon(Icons.keyboard_rounded, size: 32),
                   title: Text(t.startWithKeyboard),
                   subtitle: Text(t.startWithKeyboardSubtitle),

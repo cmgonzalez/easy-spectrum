@@ -280,24 +280,35 @@ class _GameScreenState extends State<GameScreen>
         tapeStatusLine(t, c),
         if (block != null) block,
         if (c.recording) t.tapeRecorded(c.recordedBlocks),
-        '<< ENTER | ${t.space} >>',
       ].join('  ·  ').toUpperCase();
     }
     final info = widget.mediaPath.isEmpty ? null : GameInfoService.cached(widget.mediaPath);
-    final control = _pad.type == JoyMapping.keyboard
-        ? '${t.joyKeyboard} ${_pad.keys.map(zxKeyLabel).join(' ')}'
-        : _pad.type.label;
     final extras = _pad.extraKeys;
     return [
       _title,
       if (info != null && info.subtitle.isNotEmpty) info.subtitle,
       if (info?.genre != null) info!.genre!,
-      if (_pad.mouse != MouseType.none) '${t.mouse} ${_pad.mouse.label}' else control,
       if (extras.isNotEmpty) '${t.extraButtons} ${extras.map(zxKeyLabel).join(' ')}',
       if (_pad.jumpButton != null) '${t.jumpButton} ${_pad.jumpButton! + 1}',
       if (_pad.selectKeys.isNotEmpty) 'SELECT/START ${_pad.selectKeys.map(zxKeyLabel).join(' ')}',
-      '<< ENTER | ${t.space} >>',
     ].join('  ·  ').toUpperCase();
+  }
+
+  /// Control activo para la franja del LCD: SINCLAIR1, KEMPSTON, CURSOR, MOUSE o las teclas propias.
+  String _controlLabel() {
+    if (_pad.mouse != MouseType.none) return 'MOUSE';
+    return switch (_pad.type) {
+      JoyMapping.keyboard => _pad.keys.map(zxKeyShort).join(' '),
+      JoyMapping.sinclair1 => 'SINCLAIR1',
+      JoyMapping.sinclair2 => 'SINCLAIR2',
+      JoyMapping.kempston => 'KEMPSTON',
+      JoyMapping.cursor => 'CURSOR',
+    };
+  }
+
+  String _lcdModel() {
+    final m = _modelLabel();
+    return m.isEmpty ? _controlLabel() : '$m  ${_controlLabel()}';
   }
 
   // --- Entrada ---------------------------------------------------------------
@@ -353,12 +364,15 @@ class _GameScreenState extends State<GameScreen>
         }
       });
 
-  /// Ícono del verde: el modo que viene.
-  IconData get _nextInputIcon => _showTapeDeck
-      ? Icons.sports_esports_rounded
-      : _showKeyboard
-          ? Icons.album_rounded
-          : Icons.keyboard_rounded;
+  /// Ícono del verde: el modo que viene. Volver al mando muestra un ratón si el control del
+  /// juego es el ratón.
+  IconData get _nextInputIcon {
+    final landscape = MediaQuery.orientationOf(context) == Orientation.landscape;
+    final pad = _pad.mouse != MouseType.none ? Icons.mouse_rounded : Icons.sports_esports_rounded;
+    if (_showTapeDeck) return pad;
+    if (_showKeyboard) return landscape ? pad : Icons.album_rounded;
+    return Icons.keyboard_rounded;
+  }
 
   // --- Cintas (doc/TAPE_MANAGER.md) ------------------------------------------
 
@@ -416,6 +430,8 @@ class _GameScreenState extends State<GameScreen>
   /// Botones de colores del mando.
   void _onPadAction(PadAction action) {
     switch (action) {
+      case PadAction.pause:
+        _setPaused(!_paused);
       case PadAction.config:
         _whilePaused(_openSettings);
       case PadAction.sound:
@@ -701,7 +717,7 @@ class _GameScreenState extends State<GameScreen>
                       color: const Color(0xFF2C2F33),
                       border: Border.all(color: _showKeyboard ? ZxColors.cyan : Colors.white70, width: 3),
                     ),
-                    child: const Icon(Icons.keyboard_rounded, size: 34, color: Colors.white),
+                    child: Icon(_nextInputIcon, size: 34, color: Colors.white),
                   ),
                 ),
               ),
@@ -762,9 +778,9 @@ class _GameScreenState extends State<GameScreen>
               _TopBar(
                 title: _title,
                 paused: _paused,
-                keyboard: _showKeyboard,
                 onBack: _exit,
                 onPause: () => _setPaused(!_paused),
+                inputIcon: _nextInputIcon,
                 onToggleInput: _toggleInput,
                 onMenu: _showMenu,
               ),
@@ -801,7 +817,7 @@ class _GameScreenState extends State<GameScreen>
                           spaceLabel: context.l10n.space,
                           onKey: _onKey,
                           haptics: _settings.vibration,
-                          modelLabel: _modelLabel(),
+                          modelLabel: _lcdModel(),
                           next: _zx.modelIndex == 6,
                           ulaplus: () => _zx.ulaplus,
                         ),
@@ -810,7 +826,9 @@ class _GameScreenState extends State<GameScreen>
                           keyboardMode: _showKeyboard,
                           inputIcon: _nextInputIcon,
                           soundOn: _settings.soundOn,
+                          paused: _paused,
                           haptics: _settings.vibration,
+                          light: _settings.buttonLight,
                         ),
                         controls: _showTapeDeck
                             ? TapeDeck(
@@ -876,7 +894,7 @@ class _GameScreenState extends State<GameScreen>
 class _TopBar extends StatelessWidget {
   final String title;
   final bool paused;
-  final bool keyboard;
+  final IconData inputIcon;
   final VoidCallback onBack;
   final VoidCallback onPause;
   final VoidCallback onToggleInput;
@@ -885,7 +903,7 @@ class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.title,
     required this.paused,
-    required this.keyboard,
+    required this.inputIcon,
     required this.onBack,
     required this.onPause,
     required this.onToggleInput,
@@ -912,9 +930,7 @@ class _TopBar extends StatelessWidget {
                 overflow: TextOverflow.ellipsis),
           ),
           IconButton(
-            icon: Icon(keyboard ? Icons.sports_esports_rounded : Icons.keyboard_rounded,
-                size: iconSize),
-            tooltip: keyboard ? t.showJoystick : t.showKeyboard,
+            icon: Icon(inputIcon, size: iconSize),
             onPressed: onToggleInput,
           ),
           IconButton(

@@ -3,12 +3,14 @@ import 'package:flutter/scheduler.dart';
 
 import '../../core/emulator/zx_types.dart';
 import '../../core/haptics.dart';
+import '../../core/theme/easy_theme.dart';
 
-/// Acciones de los botones de colores, en orden: rojo, amarillo, verde, azul.
+/// Acciones de los botones de la fila bajo el LCD, de izquierda a derecha.
 enum PadAction {
-  config(Icons.tune_rounded), // configuración (juego + general)
+  keyboard(Icons.keyboard_rounded), // cambiar mando ↔ teclado ↔ ratón
+  pause(Icons.pause_rounded), // pausa / continuar el Spectrum
   sound(Icons.volume_up_rounded), // sonido sí/no
-  keyboard(Icons.keyboard_rounded), // cambiar mando ↔ teclado
+  config(Icons.tune_rounded), // configuración (juego + general)
   exit(Icons.format_list_bulleted_rounded); // volver a la lista
 
   const PadAction(this.icon);
@@ -45,32 +47,66 @@ class ActionButtons extends StatefulWidget {
   /// null = el de siempre según [keyboardMode].
   final IconData? inputIcon;
   final bool soundOn;
+  final bool paused;
   final bool haptics;
+  /// Luz gamer en los bordes; apagada = borde negro simple.
+  final bool light;
   const ActionButtons(
       {super.key,
+      this.light = true,
       required this.onAction,
       this.keyboardMode = false,
       this.inputIcon,
       this.soundOn = true,
+      this.paused = false,
       this.haptics = true});
 
   @override
   State<ActionButtons> createState() => _ActionButtonsState();
 }
 
-class _ActionButtonsState extends State<ActionButtons> {
+class _ActionButtonsState extends State<ActionButtons> with SingleTickerProviderStateMixin {
   final Map<int, int> _pointers = {}; // puntero → botón
+  // Luz "gamer": los 4 colores del Spectrum giran por el borde de cada botón. Un Ticker
+  // propio que solo repinta los botones (segundos transcurridos).
+  final _time = ValueNotifier<double>(0);
+  late final Ticker _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker((d) => _time.value = d.inMicroseconds / 1e6);
+    if (widget.light) _ticker.start();
+  }
+
+  @override
+  void didUpdateWidget(ActionButtons old) {
+    super.didUpdateWidget(old);
+    if (widget.light && !_ticker.isActive) {
+      _ticker.start();
+    } else if (!widget.light && _ticker.isActive) {
+      _ticker.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    _time.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, box) {
       final h = box.maxHeight;
+      final n = PadAction.values.length;
       final w = h * 1.6, gap = h * 0.22;
       final rects = [
-        for (var i = 0; i < 4; i++) Rect.fromLTWH(box.maxWidth - (4 - i) * w - (3 - i) * gap, 0, w, h),
+        for (var i = 0; i < n; i++) Rect.fromLTWH(box.maxWidth - (n - i) * w - (n - 1 - i) * gap, 0, w, h),
       ];
       int? hit(Offset p) {
-        for (var i = 0; i < 4; i++) {
+        for (var i = 0; i < n; i++) {
           if (rects[i].inflate(gap / 2).contains(p)) return i;
         }
         return null;
@@ -93,7 +129,7 @@ class _ActionButtonsState extends State<ActionButtons> {
         onPointerCancel: (e) => setState(() => _pointers.remove(e.pointer)),
         child: CustomPaint(
           size: Size(box.maxWidth, h),
-          painter: _ActionsPainter(rects, {..._pointers.values}, widget.keyboardMode, widget.soundOn, widget.inputIcon),
+          painter: _ActionsPainter(rects, {..._pointers.values}, widget.keyboardMode, widget.soundOn, widget.paused, widget.inputIcon, _time, widget.light),
         ),
       );
     });
@@ -105,15 +141,42 @@ class _ActionsPainter extends CustomPainter {
   final Set<int> down;
   final bool keyboardMode;
   final bool soundOn;
+  final bool paused;
   final IconData? inputIcon;
-  _ActionsPainter(this.rects, this.down, this.keyboardMode, this.soundOn, this.inputIcon);
+  final ValueNotifier<double> time;
+  final bool light;
+  _ActionsPainter(this.rects, this.down, this.keyboardMode, this.soundOn, this.paused, this.inputIcon, this.time, this.light)
+      : super(repaint: time);
+
+  /// Una banda continua que recorre los 4 botones: negro, los 4 colores del Spectrum y negro
+  /// otra vez (los tramos negros son los huecos entre una pasada y la siguiente).
+  static final _band = [
+    const Color(0xFF000000),
+    const Color(0xFF000000),
+    ...ZxColors.rainbow,
+    const Color(0xFF000000),
+    const Color(0xFF000000),
+  ];
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Un solo degradado lineal sobre toda la fila, desplazado con el tiempo: la luz pasa de un
+    // botón al siguiente en vez de girar dentro de cada uno.
+    final row = Rect.fromLTRB(rects.first.left, rects.first.top, rects.last.right, rects.last.bottom);
+    final period = row.width * 1.2;
+    final shift = (time.value / 4 % 1) * period;
+    final sweep = LinearGradient(colors: _band, tileMode: TileMode.repeated)
+        .createShader(Rect.fromLTWH(row.left + shift - period, row.top, period, row.height));
     for (var i = 0; i < rects.length; i++) {
       final r = rects[i];
       final rr = RRect.fromRectAndRadius(r, Radius.circular(r.height * 0.22));
-      canvas.drawRRect(rr.shift(Offset(0, r.height * 0.05)), Paint()..color = Colors.black.withValues(alpha: 0.6));
+      canvas.drawRRect(
+          rr.inflate(r.height * 0.03).shift(Offset(0, r.height * 0.05)),
+          light
+              ? (Paint()
+                ..shader = sweep
+                ..color = Colors.white.withValues(alpha: 0.85))
+              : (Paint()..color = Colors.black.withValues(alpha: 0.6)));
       canvas.drawRRect(
         rr,
         Paint()
@@ -125,14 +188,37 @@ class _ActionsPainter extends CustomPainter {
                 : const [Color(0xFF45484D), Color(0xFF26282B)],
           ).createShader(r),
       );
-      canvas.drawRRect(
-          rr.deflate(r.height * 0.03),
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = r.height * 0.07
-            ..color = padActionColours[i]);
+      final border = rr.deflate(r.height * 0.03);
+      if (light) {
+        // Luz gamer: halo difuso + borde con la banda que recorre los 4 botones.
+        // Pulsado, el halo brilla más.
+        final pressed = down.contains(i);
+        canvas.drawRRect(
+            border,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = r.height * (pressed ? 0.30 : 0.20)
+              ..maskFilter = MaskFilter.blur(BlurStyle.normal, r.height * 0.14)
+              ..shader = sweep
+              ..color = Colors.white.withValues(alpha: pressed ? 0.95 : 0.55));
+        canvas.drawRRect(
+            border,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = r.height * 0.07
+              ..shader = sweep);
+      } else {
+        canvas.drawRRect(
+            border,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = r.height * 0.07
+              ..color = Colors.black);
+      }
       final action = PadAction.values[i];
-      final icon = inputIcon != null && action == PadAction.keyboard
+      final icon = action == PadAction.pause
+          ? (paused ? Icons.play_arrow_rounded : Icons.pause_rounded)
+          : inputIcon != null && action == PadAction.keyboard
           ? inputIcon!
           : keyboardMode && action == PadAction.keyboard
           ? Icons.sports_esports_rounded
@@ -150,6 +236,8 @@ class _ActionsPainter extends CustomPainter {
       old.keyboardMode != keyboardMode ||
       old.inputIcon != inputIcon ||
       old.soundOn != soundOn ||
+      old.light != light ||
+      old.paused != paused ||
       old.down.length != down.length ||
       !old.down.containsAll(down);
 }

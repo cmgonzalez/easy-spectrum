@@ -53,6 +53,8 @@
   "startWithKeyboard": "Start with the keyboard",
   "startWithKeyboardSubtitle": "Otherwise the gamepad is shown",
   "vibration": "Vibrate on press",
+  "buttonLight": "Button lights",
+  "buttonLightSubtitle": "Light effect using the Spectrum colours",
   "screen": "Display",
   "keepScreenOn": "Keep screen on",
   "library": "Library",

@@ -53,6 +53,8 @@
   "startWithKeyboard": "Начинать с клавиатуры",
   "startWithKeyboardSubtitle": "Иначе показывается джойстик",
   "vibration": "Вибрация при нажатии",
+  "buttonLight": "Подсветка кнопок",
+  "buttonLightSubtitle": "Световой эффект в цветах Spectrum",
   "screen": "Экран",
   "keepScreenOn": "Не выключать экран",
   "library": "Библиотека",

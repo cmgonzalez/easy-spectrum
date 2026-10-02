@@ -13,6 +13,7 @@ class AppSettings {
   bool quickLoad = true;
   bool muteTape = false; // gestor de cintas: sin sonido mientras gira la cinta (global)
   bool vibration = true;
+  bool buttonLight = true; // luz gamer de los botones de colores (global)
   bool soundOn = true;
   bool keepScreenOn = true;
   bool startWithKeyboard = false;
@@ -62,6 +63,7 @@ class AppSettings {
     s.quickLoad = p.getBool('quick_load') ?? true;
     s.muteTape = p.getBool('mute_tape') ?? false;
     s.vibration = p.getBool('vibration') ?? true;
+    s.buttonLight = p.getBool('button_light') ?? true;
     s.soundOn = p.getBool('sound_on') ?? true;
     s.keepScreenOn = p.getBool('keep_screen_on') ?? true;
     s.startWithKeyboard = p.getBool('start_keyboard') ?? false;
@@ -111,6 +113,7 @@ class AppSettings {
     await p.setBool('quick_load', quickLoad);
     await p.setBool('mute_tape', muteTape);
     await p.setBool('vibration', vibration);
+    await p.setBool('button_light', buttonLight);
     await p.setBool('sound_on', soundOn);
     await p.setBool('keep_screen_on', keepScreenOn);
     await p.setBool('start_keyboard', startWithKeyboard);
