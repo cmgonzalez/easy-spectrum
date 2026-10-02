@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/ads/ad_manager.dart';
 import '../../core/emulator/zx_types.dart';
 import '../../core/l10n.dart';
 import '../../core/settings.dart';
@@ -27,12 +28,16 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   AppSettings? _s;
+  bool _privacy = false;
   PadConfig? _defaultPad; // control por defecto de los juegos sin configuración propia
 
   @override
   void initState() {
     super.initState();
     _load();
+    AdManager.instance.privacyOptionsRequired().then((v) {
+      if (mounted && v) setState(() => _privacy = true);
+    });
   }
 
   Future<void> _load() async {
@@ -195,6 +200,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (v) => _update((s) => s.onlineInfo = v),
                 ),
                 const Divider(height: 32),
+                if (_privacy)
+                  ListTile(
+                    leading: const Icon(Icons.privacy_tip_outlined, size: 32),
+                    title: Text(t.privacyOptions),
+                    onTap: AdManager.instance.showPrivacyOptions,
+                  ),
                 ListTile(
                   leading: const Icon(Icons.info_outline_rounded, size: 32),
                   title: Text(t.about),

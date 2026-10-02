@@ -105,6 +105,7 @@
   "library": "Biblioteca",
   "onlineInfo": "Buscar datos de los juegos en internet",
   "onlineInfoSubtitle": "Nombre, año, editor y pantalla de carga desde ZXDB (Spectrum Computing)",
+  "privacyOptions": "Privacidad y anuncios",
   "about": "Acerca de",
   "aboutDescription": "Emulador de ZX Spectrum simple y accesible.",
   "developedBy": "Desarrollado por EasySoft SPA",

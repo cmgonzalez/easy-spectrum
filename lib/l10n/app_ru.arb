@@ -60,6 +60,7 @@
   "library": "Библиотека",
   "onlineInfo": "Искать сведения об играх в интернете",
   "onlineInfoSubtitle": "Название, год, издатель и загрузочный экран из ZXDB (Spectrum Computing)",
+  "privacyOptions": "Конфиденциальность и реклама",
   "about": "О приложении",
   "aboutDescription": "Простой и удобный эмулятор ZX Spectrum.",
   "developedBy": "Разработано EasySoft SPA",

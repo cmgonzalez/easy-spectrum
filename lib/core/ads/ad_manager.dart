@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -10,22 +11,52 @@ class AdManager {
   AdManager._();
   static final AdManager instance = AdManager._();
 
-  // TODO: reemplazar con IDs reales antes de publicar
-  static String get _bannerId => Platform.isAndroid
-      ? 'ca-app-pub-3940256099942544/6300978111'
-      : 'ca-app-pub-3940256099942544/2934735716';
+  // En debug siempre IDs de prueba (clics propios = tráfico inválido en AdMob).
+  static String get _bannerId => kDebugMode || !Platform.isAndroid
+      ? (Platform.isAndroid
+          ? 'ca-app-pub-3940256099942544/6300978111'
+          : 'ca-app-pub-3940256099942544/2934735716')
+      : 'ca-app-pub-4383534162647782/2568261422';
 
-  static String get _interstitialId => Platform.isAndroid
-      ? 'ca-app-pub-3940256099942544/1033173712'
-      : 'ca-app-pub-3940256099942544/4411468910';
+  static String get _interstitialId => kDebugMode || !Platform.isAndroid
+      ? (Platform.isAndroid
+          ? 'ca-app-pub-3940256099942544/1033173712'
+          : 'ca-app-pub-3940256099942544/4411468910')
+      : 'ca-app-pub-4383534162647782/5449400629';
 
   BannerAd? _banner;
   InterstitialAd? _interstitial;
 
   Future<void> initialize() async {
     if (!Edition.showAds) return;
-    await MobileAds.instance.initialize();
+    await _gatherConsent();
+    if (await ConsentInformation.instance.canRequestAds()) {
+      await MobileAds.instance.initialize();
+    }
   }
+
+  /// Consentimiento UMP (EEE/Reino Unido/Suiza): formulario solo si hace falta.
+  Future<void> _gatherConsent() async {
+    final done = Completer<void>();
+    ConsentInformation.instance.requestConsentInfoUpdate(
+      ConsentRequestParameters(),
+      () async {
+        await ConsentForm.loadAndShowConsentFormIfRequired((_) {});
+        done.complete();
+      },
+      (_) => done.complete(),
+    );
+    await done.future;
+  }
+
+  /// ¿Hay que ofrecer "Privacidad y anuncios" en Ajustes?
+  Future<bool> privacyOptionsRequired() async {
+    if (!Edition.showAds) return false;
+    return await ConsentInformation.instance.getPrivacyOptionsRequirementStatus() ==
+        PrivacyOptionsRequirementStatus.required;
+  }
+
+  Future<void> showPrivacyOptions() => ConsentForm.showPrivacyOptionsForm((_) {});
 
   /// null en la Pro.
   BannerAd? createBanner({VoidCallback? onLoaded}) {

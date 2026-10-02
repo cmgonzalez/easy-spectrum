@@ -32,7 +32,7 @@ android {
         applicationId = "cl.easysoft.easyspectrum"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = 1
+        versionCode = 2
         versionName = "1.0.0"
 
         externalNativeBuild {
