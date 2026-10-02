@@ -10,8 +10,8 @@ enum PadAction {
   keyboard(Icons.keyboard_rounded), // cambiar mando ↔ teclado ↔ ratón
   pause(Icons.pause_rounded), // pausa / continuar el Spectrum
   sound(Icons.volume_up_rounded), // sonido sí/no
-  config(Icons.tune_rounded), // configuración (juego + general)
-  exit(Icons.format_list_bulleted_rounded); // volver a la lista
+  config(Icons.settings_rounded), // configuración (juego + general)
+  exit(Icons.grid_view_rounded); // volver a la biblioteca
 
   const PadAction(this.icon);
   final IconData icon;

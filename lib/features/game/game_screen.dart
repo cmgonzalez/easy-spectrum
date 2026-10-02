@@ -560,7 +560,7 @@ class _GameScreenState extends State<GameScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             if (landscape) ...[
-              _MenuTile(icon: Icons.tune_rounded, label: t.settings, value: 'config'),
+              _MenuTile(icon: Icons.settings_rounded, label: t.settings, value: 'config'),
               _MenuTile(
                   icon: _settings.soundOn ? Icons.volume_up_rounded : Icons.volume_off_rounded,
                   label: t.sound,
