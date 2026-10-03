@@ -144,10 +144,8 @@ class _GameScreenState extends State<GameScreen>
     }
     _zx.setGigascreen(_settings.gigascreen);
     await _tape.attach(widget.mediaPath);
-    if (_tape.hasTape && !_showKeyboard && _pad.mouse == MouseType.none) {
-      _showTapeDeck = true;
-      _autoDeck = true;
-    }
+    // El cassette ya no se abre solo al cargar una cinta: el juego arranca en el mando
+    // (el cassette sigue disponible con el botón de modo).
     _audioMuted = !_settings.soundOn;
     _audio.setMuted(_audioMuted);
     await _audio.start();
