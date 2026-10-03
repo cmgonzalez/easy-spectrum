@@ -250,13 +250,16 @@ class _GameScreenState extends State<GameScreen>
       _autoDeck = false;
       return;
     }
-    if (_tape.info.isPlaying) {
+    // La carga "avanzó" si la cinta giró, pasó de bloque o llegó al final: un .tap con carga
+    // rápida entra por el trap sin girar y no debe esperar el tiempo largo de "sin cinta".
+    final progressed = _deckTapeSeen || _tape.info.block > 0 || _tape.info.atEnd;
+    if (_tape.info.isPlaying && !_tape.info.atEnd) {
       _deckTapeSeen = true;
       _deckClock = 0;
       return;
     }
     _deckClock += delta;
-    if (_deckClock < (_deckTapeSeen ? _afterTape : _noTape)) return;
+    if (_deckClock < (progressed ? _afterTape : _noTape)) return;
     _autoDeck = false;
     setState(() => _showTapeDeck = false);
   }
