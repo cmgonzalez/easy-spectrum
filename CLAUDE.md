@@ -51,6 +51,14 @@ distribuirlas con emuladores. Se copian a `<appSupport>/roms` al primer arranque
 - **SNA 128K**: CLK solo carga SNA de 48K (49179 bytes). `load_sna128()` en el bridge lee los de
   131103/147487 bytes (arma `Sinclair::ZXSpectrum::State` con los 8 bancos en orden y `last_7ffd`).
   Los `.sna` que empiezan con `MV - SNA` son de Amstrad CPC → error `cpc_snapshot`.
+- **Floating bus exacto** (parches `floating-oob` / `floating-valor` sobre `Video.hpp`, 2026-10-03): el
+  `get_floating_value()` de CLK devuelve `last_fetches_`, que solo se rellena al completar una columna del
+  raster (y solo con buffer de píxeles): iba una columna atrasado y la última pareja de cada línea aparecía al
+  principio de la siguiente. Los juegos que sincronizan por floating bus (aline, `C:\dev\super_gandalf`)
+  enganchaban a veces una scanline tarde (multicolor parpadeando). Ahora se lee directo de la memoria de vídeo
+  según `time_into_frame_`, con `zx_fb_lag` (half cycles, 0) en `zx_bridge.cpp`. Medido con PDP: los saltos de
+  ±196 T desaparecen; queda una variación de 3-5 T en la salida de aline (sin causa confirmada) que no se ve.
+  Sin probar en 48K/+2A/+3 ni con otros juegos de floating bus.
 - **Parche a CLK sin tocar el submódulo**: `ZXSpectrum.cpp` se compila desde una copia que genera
   CMake (`ZXSpectrum_patched.cpp` en el dir de build). Bug upstream: al instalar un estado 128K no
   llama a `set_video_address()` → se ignoraba la pantalla sombra (banco 7) en .sna/.z80/.szx 128K.
@@ -130,6 +138,7 @@ repos/mamedev/mame/contents/src/mame/sinclair/next/<archivo> -H "Accept: applica
   mayúsculas). El bridge usa `<juego>.files/` si existe, si no la carpeta del `.nex`. Al importar un `.zip`
   con un `.nex` (móvil: `GameLibrary.import`; escritorio: `_openPath`) se extraen los demás archivos a
   `<juego>.files/` (`GameLibrary.extractAssets`). Verificado con Fred In Space (assets/ en el zip).
+- **Sprite tie (NR `$09` bit 4)**: puerto `$303B`/`$57` y NR `$34`/`$75-$79` comparten el número de sprite, y NR `$34` también fija el índice de patrón (bit 7 = mitad de 128 B). `sprite_tie_sync()`. Sin esto Aliens Neoplasma subía los patrones desalineados (cabezas dobles, sprites fantasma): usa NR `$34`+DMA a `$5B`. Teclas de ese juego: A/S/D/W mover, M/N/B/P fuego; en el menú, M para elegir.
 - Mezcla de capas `$15`=110/111 (suma / resta 5/8 de Layer 2 sobre ULA+tilemap, sprites encima) hecha.
 - **Pendiente**: teclas extendidas de la Next; ratón Kempston; CTC/UART/divMMC;
   ULA+ (puertos BF3B/FF3B); 60 Hz; miniatura sacada del `.nex`.

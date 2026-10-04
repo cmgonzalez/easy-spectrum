@@ -422,8 +422,8 @@ class _LcdPainter extends CustomPainter {
       _lastLeft = x;
     }
     if (modelLabel.isNotEmpty) stripText(modelLabel, 0.9);
-    stripText('NEXT', next ? 0.9 : 0.14, right: true);
-    stripText('ULA+', ulaplus() ? 0.9 : 0.14, right: true, edge: _lastLeft - sf * 1.0);
+    stripText('NEXT', next ? 0.9 : 0.35, right: true);
+    stripText('ULA+', ulaplus() ? 0.9 : 0.35, right: true, edge: _lastLeft - sf * 1.0);
     final halves = [
       (enter, Rect.fromLTRB(screen.left, screen.top, screen.center.dx, screen.bottom), 'ENTER'),
       (space, Rect.fromLTRB(screen.center.dx, screen.top, screen.right, screen.bottom), spaceLabel),

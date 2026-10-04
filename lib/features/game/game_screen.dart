@@ -284,14 +284,10 @@ class _GameScreenState extends State<GameScreen>
       ].join('  ·  ').toUpperCase();
     }
     final info = widget.mediaPath.isEmpty ? null : GameInfoService.cached(widget.mediaPath);
-    final extras = _pad.extraKeys;
     return [
       _title,
       if (info != null && info.subtitle.isNotEmpty) info.subtitle,
       if (info?.genre != null) info!.genre!,
-      if (extras.isNotEmpty) '${t.extraButtons} ${extras.map(zxKeyLabel).join(' ')}',
-      if (_pad.jumpButton != null) '${t.jumpButton} ${_pad.jumpButton! + 1}',
-      if (_pad.selectKeys.isNotEmpty) 'SELECT/START ${_pad.selectKeys.map(zxKeyLabel).join(' ')}',
     ].join('  ·  ').toUpperCase();
   }
 
@@ -299,7 +295,7 @@ class _GameScreenState extends State<GameScreen>
   String _controlLabel() {
     if (_pad.mouse != MouseType.none) return 'MOUSE';
     return switch (_pad.type) {
-      JoyMapping.keyboard => _pad.keys.map(zxKeyShort).join(' '),
+      JoyMapping.keyboard => _pad.keys.map(zxKeyShort).join(),
       JoyMapping.sinclair1 => 'SINCLAIR1',
       JoyMapping.sinclair2 => 'SINCLAIR2',
       JoyMapping.kempston => 'KEMPSTON',

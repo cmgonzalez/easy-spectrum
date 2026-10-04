@@ -444,6 +444,7 @@ void NextMachine::out(uint16_t port, uint8_t v) {
 		case 0x303B:
 			spr_pat_idx_ = ((v & 0x3F) << 8) | (v & 0x80);
 			spr_attr_idx_ = (v & 0x7F) << 3;
+			sprite_tie_sync(true);
 			return;
 		default: break;
 	}
@@ -454,8 +455,10 @@ void NextMachine::out(uint16_t port, uint8_t v) {
 			spr_attr_[spr_attr_idx_ >> 3][spr_attr_idx_ & 7] = v;
 			sprites_dirty_ = true;
 			const bool next_sprite = (spr_attr_idx_ & 4) || ((spr_attr_idx_ & 7) == 3 && !(v & 0x40));
-			if(next_sprite) spr_attr_idx_ = (((spr_attr_idx_ >> 3) + 1) & 0x7F) << 3;
-			else spr_attr_idx_ = (spr_attr_idx_ + 1) & 0x3FF;
+			if(next_sprite) {
+				spr_attr_idx_ = (((spr_attr_idx_ >> 3) + 1) & 0x7F) << 3;
+				sprite_tie_sync(true);
+			} else spr_attr_idx_ = (spr_attr_idx_ + 1) & 0x3FF;
 			return;
 		}
 		case 0x5B:
@@ -535,12 +538,17 @@ void NextMachine::nr_write(uint8_t reg, uint8_t v) {
 		case 0x2E: dac_[2] = v; break;
 		case 0x34:
 			mirror_sprite_ = v & 0x7F;
+			sprite_tie_sync(false);
+			if(nr_[0x09] & 0x10) spr_pat_idx_ = (spr_pat_idx_ & ~0x80) | (v & 0x80);	// bit 7 = mitad de 128 bytes (patrones de 4 bits)
 			break;
 		case 0x35: case 0x36: case 0x37: case 0x38: case 0x39:
 		case 0x75: case 0x76: case 0x77: case 0x78: case 0x79: {
 			spr_attr_[mirror_sprite_][(reg & 0x3F) - 0x35] = v;
 			sprites_dirty_ = true;
-			if(reg >= 0x75) mirror_sprite_ = (mirror_sprite_ + 1) & 0x7F;
+			if(reg >= 0x75) {
+				mirror_sprite_ = (mirror_sprite_ + 1) & 0x7F;
+				sprite_tie_sync(false);
+			}
 			break;
 		}
 		case 0x40:
@@ -794,6 +802,19 @@ void NextMachine::reti_executed() {
 
 // ---------------------------------------------------------------------------
 // Teclado y mando
+
+// NR $09 bit 4 ("sprite tie"): el puerto $303B/$57 y NextReg $34/$75-$79 comparten el número de sprite.
+// Algunos juegos (Aliens Neoplasma) escriben sprites por NextReg y luego "apagan" los siguientes por el
+// puerto $57 contando con ese índice común.
+void NextMachine::sprite_tie_sync(bool from_port) {
+	if(!(nr_[0x09] & 0x10)) return;
+	if(from_port) {
+		mirror_sprite_ = (spr_attr_idx_ >> 3) & 0x7F;
+	} else {
+		spr_attr_idx_ = mirror_sprite_ << 3;
+		spr_pat_idx_ = ((mirror_sprite_ & 0x3F) << 8) | (spr_pat_idx_ & 0x80);
+	}
+}
 
 void NextMachine::set_key(int key, bool pressed) {
 	const int row = (key >> 8) & 7;

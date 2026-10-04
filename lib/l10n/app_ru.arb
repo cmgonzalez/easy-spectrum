@@ -198,5 +198,22 @@
   "tapeDeck": "Кассета",
   "showTapeDeck": "Показать кассету",
   "tapeBlockList": "Список блоков",
-  "zoom": "Масштаб"
+  "zoom": "Масштаб",
+  "menuFavorites": "Избранное",
+  "favAddCurrent": "Добавить текущую игру",
+  "favAddGames": "Добавить игры…",
+  "favRemove": "Удалить из избранного",
+  "favNone": "(нет)",
+  "copyScreen": "Копировать экран в буфер обмена",
+  "screenCopied": "Экран скопирован в буфер обмена",
+  "screenCopyFailed": "Не удалось скопировать экран",
+  "favAdded": "Добавлено в избранное: {count}",
+  "@favAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nothingToCopy": "Пока нечего копировать"
 }

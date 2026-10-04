@@ -237,8 +237,23 @@ clk_patch(VIDEO_TEXT tipo-colores "const uint8_t colours[2] = {" "const uint32_t
 clk_patch(VIDEO_TEXT papel "palette[(last_fetches_[n+1] & 0x78) >> 3]," "paper_colour(last_fetches_[n+1]),")
 clk_patch(VIDEO_TEXT tinta "palette[((last_fetches_[n+1] & 0x40) >> 3) | (last_fetches_[n+1] & 0x07)],"
     "ink_colour(last_fetches_[n+1]),")
+# Floating bus exacto (aline, multicolor por floating bus): el original devuelve
+# last_fetches_, que solo se rellena al COMPLETAR una columna del raster (y solo si hay
+# buffer de pixeles): va una columna por detras, la pareja 15 de una linea aparece al
+# principio de la siguiente y la primera nunca en su sitio. Se lee directo de la memoria
+# de video segun el tiempo, con el desfase zx_fb_lag (half cycles).
+clk_patch(VIDEO_TEXT floating-oob "if(time_into_line >= 256 || (time_into_line&8)) {"
+    "const int fb_t = time_into_line - zx_fb_lag;
+		if(fb_t < 0 || fb_t >= 256 || (fb_t&8)) {")
+clk_patch(VIDEO_TEXT floating-valor "const uint8_t value = last_fetches_[(time_into_line >> 1) & 3];"
+    "const int fb_slot = (fb_t >> 1) & 3;
+		const int fb_base = (fb_slot & 1) ?
+			(((line >> 3) << 5) + 6144) :
+			(((line & 0x07) << 8) | ((line & 0x38) << 2) | ((line & 0xc0) << 5));
+		const uint8_t value = memory_[fb_base + ((fb_t >> 4) << 1) + (fb_slot >> 1)];")
 clk_patch(VIDEO_TEXT decl-ulaplus "namespace Sinclair::ZXSpectrum::Video {"
     "extern volatile int zx_ulaplus_active;
+extern volatile int zx_fb_lag;
 
 namespace Sinclair::ZXSpectrum::Video {")
 clk_patch(VIDEO_TEXT api-ulaplus "\t/// Sets the scan target.\n" "${ULAPLUS_PUBLIC}\t/// Sets the scan target.\n")

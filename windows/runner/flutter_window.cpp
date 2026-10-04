@@ -27,6 +27,49 @@ void OpenDefaultAppsSettings() {
   ShellExecuteW(nullptr, L"open", uri, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
+// Copia una imagen RGBA (de arriba abajo) al portapapeles como CF_DIB de 32 bpp.
+bool CopyImageToClipboard(HWND hwnd, int w, int h, const uint8_t* rgba) {
+  const size_t stride = static_cast<size_t>(w) * 4;
+  const size_t size = sizeof(BITMAPINFOHEADER) + stride * h;
+  HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, size);
+  if (!mem) return false;
+  auto* base = static_cast<uint8_t*>(GlobalLock(mem));
+  if (!base) {
+    GlobalFree(mem);
+    return false;
+  }
+  auto* bi = reinterpret_cast<BITMAPINFOHEADER*>(base);
+  *bi = BITMAPINFOHEADER{};
+  bi->biSize = sizeof(BITMAPINFOHEADER);
+  bi->biWidth = w;
+  bi->biHeight = h;  // positivo = filas de abajo arriba
+  bi->biPlanes = 1;
+  bi->biBitCount = 32;
+  bi->biCompression = BI_RGB;
+  bi->biSizeImage = static_cast<DWORD>(stride * h);
+  uint8_t* dst = base + sizeof(BITMAPINFOHEADER);
+  for (int y = 0; y < h; ++y) {
+    const uint8_t* s = rgba + stride * (h - 1 - y);
+    uint8_t* d = dst + stride * y;
+    for (int x = 0; x < w; ++x, s += 4, d += 4) {
+      d[0] = s[2];
+      d[1] = s[1];
+      d[2] = s[0];
+      d[3] = 0xFF;
+    }
+  }
+  GlobalUnlock(mem);
+  if (!OpenClipboard(hwnd)) {
+    GlobalFree(mem);
+    return false;
+  }
+  EmptyClipboard();
+  const bool ok = SetClipboardData(CF_DIB, mem) != nullptr;
+  if (!ok) GlobalFree(mem);
+  CloseClipboard();
+  return ok;
+}
+
 }  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -55,10 +98,25 @@ bool FlutterWindow::OnCreate() {
   open_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
       flutter_controller_->engine()->messenger(), "cl.easysoft.easyspectrum/open_args",
       &flutter::StandardMethodCodec::GetInstance());
-  open_channel_->SetMethodCallHandler([](const auto& call, auto result) {
+  open_channel_->SetMethodCallHandler([this](const auto& call, auto result) {
     if (call.method_name() == "openDefaultApps") {
       OpenDefaultAppsSettings();
       result->Success();
+    } else if (call.method_name() == "copyImage") {
+      bool ok = false;
+      if (const auto* m = std::get_if<flutter::EncodableMap>(call.arguments())) {
+        auto w = m->find(flutter::EncodableValue("width"));
+        auto h = m->find(flutter::EncodableValue("height"));
+        auto d = m->find(flutter::EncodableValue("data"));
+        if (w != m->end() && h != m->end() && d != m->end()) {
+          const auto* bytes = std::get_if<std::vector<uint8_t>>(&d->second);
+          const int wi = std::get<int32_t>(w->second), hi = std::get<int32_t>(h->second);
+          if (bytes && wi > 0 && hi > 0 && bytes->size() >= static_cast<size_t>(wi) * hi * 4) {
+            ok = CopyImageToClipboard(GetHandle(), wi, hi, bytes->data());
+          }
+        }
+      }
+      result->Success(flutter::EncodableValue(ok));
     } else {
       result->NotImplemented();
     }

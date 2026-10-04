@@ -16,7 +16,9 @@ import '../../core/emulator/zx_audio.dart';
 import '../../core/emulator/zx_bridge.dart';
 import '../../core/emulator/zx_types.dart';
 import '../../core/l10n.dart';
+import '../../core/screen_clipboard.dart';
 import '../../core/settings.dart';
+import '../../core/storage/favorites.dart';
 import '../../core/storage/game_library.dart';
 import '../../core/tape/tape_controller.dart';
 import '../../core/tape/tape_file.dart';
@@ -75,6 +77,7 @@ class _DesktopScreenState extends State<DesktopScreen>
 
   AppSettings _settings = AppSettings();
   List<String> _recent = [];
+  List<String> _favorites = [];
   String _media = ''; // archivo cargado (el .zip si vino en uno); vacío = BASIC
   ui.Image? _frame;
   bool _frameBusy = false;
@@ -104,6 +107,7 @@ class _DesktopScreenState extends State<DesktopScreen>
     final joy = p.getString(_prefJoystick);
     _keyboard.joystick = joy == 'none' ? null : JoyMapping.byName(joy) ?? JoyMapping.kempston;
     _recent = p.getStringList(_prefRecent) ?? [];
+    _favorites = await Favorites.load();
     _mouse = MouseType.byName(p.getString(_prefMouse));
     _zx.mouseMode = _mouse.index;
     _audioMuted = !_settings.soundOn;
@@ -322,6 +326,66 @@ class _DesktopScreenState extends State<DesktopScreen>
     await _start(media, source: path);
   }
 
+  // --- Favoritos y portapapeles ----------------------------------------------
+
+  void _snack(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  /// Elige juegos del disco y los deja en favoritos (sin abrirlos).
+  Future<void> _addFavoriteGames() async {
+    final r = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: [...zxMediaExtensions, 'zip'],
+      allowMultiple: true,
+    );
+    if (r == null) return;
+    var added = 0;
+    for (final f in r.files) {
+      final path = f.path;
+      if (path == null) continue;
+      _favorites = await Favorites.add(path);
+      added++;
+    }
+    if (!mounted) return;
+    setState(() {});
+    if (added > 0) _snack(context.l10n.favAdded(added));
+    _focus.requestFocus();
+  }
+
+  Future<void> _toggleFavoriteCurrent() async {
+    if (_media.isEmpty) return;
+    _favorites = _favorites.contains(_media) ? await Favorites.remove(_media) : await Favorites.add(_media);
+    if (mounted) setState(() {});
+    _focus.requestFocus();
+  }
+
+  Future<void> _removeFavorite(String path) async {
+    _favorites = await Favorites.remove(path);
+    if (mounted) setState(() {});
+  }
+
+  /// Copia la pantalla (sin el borde recortado) al portapapeles de Windows como imagen.
+  Future<void> _copyScreen() async {
+    final t = context.l10n;
+    final frame = _frame?.clone();
+    if (frame == null) {
+      _snack(t.nothingToCopy);
+      return;
+    }
+    final b = _settings.screenBorder;
+    final src = Rect.fromLTWH(b.crop.toDouble(), b.crop.toDouble(),
+        (zxFbWidth - 2 * b.crop).toDouble(), (zxFbHeight - 2 * b.crop).toDouble());
+    var ok = false;
+    try {
+      ok = await copyFrameToClipboard(_openArgs, frame, src, GameDisplay.aspectFor(b));
+    } catch (_) {}
+    frame.dispose();
+    _snack(ok ? t.screenCopied : t.screenCopyFailed);
+    _focus.requestFocus();
+  }
+
   Future<void> _reload() async {
     if (_media.isEmpty) {
       _zx.reset();
@@ -481,6 +545,7 @@ class _DesktopScreenState extends State<DesktopScreen>
         LogicalKeyboardKey.f7 => _toggleTapePanel,
         LogicalKeyboardKey.f8 || LogicalKeyboardKey.pause => () async => _setPaused(!_paused),
         LogicalKeyboardKey.f11 => () => _setFullscreen(!_fullscreen),
+        LogicalKeyboardKey.f12 => _copyScreen,
         LogicalKeyboardKey.f9 when _capture.active => () async => _releaseMouse(),
         LogicalKeyboardKey.escape when _fullscreen => () => _setFullscreen(false),
         _ => null,
@@ -532,6 +597,19 @@ class _DesktopScreenState extends State<DesktopScreen>
         MenuEntry('${t.setDefaultApp}…', onSelected: () => _openArgs.invokeMethod('openDefaultApps')),
         MenuEntry(t.exit, shortcut: 'Alt+F4', onSelected: windowManager.close),
       ]),
+      MenuEntry.submenu('&${t.menuFavorites}', [
+        MenuEntry(t.favAddCurrent,
+            checked: _favorites.contains(_media), onSelected: hasMedia ? _toggleFavoriteCurrent : null),
+        MenuEntry(t.favAddGames, onSelected: _addFavoriteGames),
+        const MenuEntry.separator(),
+        for (final path in _favorites) MenuEntry(esc(_baseName(path)), onSelected: () => _openPath(path)),
+        if (_favorites.isEmpty) MenuEntry(t.favNone),
+        const MenuEntry.separator(),
+        MenuEntry.submenu(t.favRemove, [
+          for (final path in _favorites) MenuEntry(esc(_baseName(path)), onSelected: () => _removeFavorite(path)),
+          if (_favorites.isEmpty) MenuEntry(t.favNone),
+        ]),
+      ]),
       MenuEntry.submenu('&${t.machine}', [
         MenuEntry.submenu(t.model, [
           for (final m in ZxModel.values)
@@ -564,6 +642,8 @@ class _DesktopScreenState extends State<DesktopScreen>
         const MenuEntry.separator(),
         MenuEntry('Gigascreen',
             checked: _settings.gigascreen, onSelected: () => _setGigascreen(!_settings.gigascreen)),
+        const MenuEntry.separator(),
+        MenuEntry(t.copyScreen, shortcut: 'F12', onSelected: _copyScreen),
         const MenuEntry.separator(),
         MenuEntry.submenu(t.zoom, [
           for (final n in [1, 2, 3])
@@ -771,6 +851,10 @@ class _DesktopScreenState extends State<DesktopScreen>
                 _focus.requestFocus();
               }),
               ToolItem('keyboard', t.showKeyboard, active: _showKeyboard, onTap: _toggleKeyboard),
+              null,
+              ToolItem('estrella', _favorites.contains(_media) ? t.favRemove : t.favAddCurrent,
+                  active: _favorites.contains(_media), onTap: _media.isEmpty ? null : _toggleFavoriteCurrent),
+              ToolItem('camara', '${t.copyScreen} (F12)', onTap: _copyScreen),
             ]),
           Expanded(
             child: Row(

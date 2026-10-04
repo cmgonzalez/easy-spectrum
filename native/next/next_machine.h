@@ -168,6 +168,7 @@ private:
 	int spr_attr_idx_ = 0;	// (sprite << 3) | byte
 	int spr_pat_idx_ = 0;
 	int mirror_sprite_ = 0;
+	void sprite_tie_sync(bool from_port);
 	struct Spr {
 		int x, y;
 		bool rotate, xmirror, ymirror, h4;

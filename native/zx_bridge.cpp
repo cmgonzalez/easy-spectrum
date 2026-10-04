@@ -539,6 +539,7 @@ void record_block(const uint8_t *data, size_t length) {
 
 /* Estado de ULAplus: lo escribe el parche de Video.hpp (native/clk_patches). */
 volatile int zx_ulaplus_active = 0;
+volatile int zx_fb_lag = 0;	// desfase del floating bus (half cycles); ver CMakeLists "floating-*"
 
 struct ZxHandle {
 	int model = ZX_MODEL_48K;	// modelo real (ver zx_get_model)

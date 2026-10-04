@@ -22,21 +22,21 @@ FORMATS
 
 LOADING AND TAPES
 • Auto-load: pick a game and it starts by itself
-• Fast tape loading, even with turbo loaders
-• Tape manager: block list, forward, rewind, pause
-• Record your own programs with SAVE to a new tape
+• Fast tape loading up to 50× speed, even with custom loaders (a 3½-minute tape loads in about 40 seconds)
+• Tape manager: block list, play, pause, stop, previous/next block, eject
+• Record your own BASIC programs with SAVE to a new tape
 
 CONTROLS
 • Multi-touch on-screen ZX keyboard with CAPS SHIFT and SYMBOL SHIFT
-• Gamepad with D-pad and up to 4 fire buttons
+• Gamepad with 8-way D-pad and 1 to 4 buttons (fire plus keys of your choice), optional Select/Start
 • Kempston, Sinclair 1 and 2, Cursor or custom keys
 • Gamepad settings saved per game
 • Kempston mouse and haptic feedback
 
 PICTURE AND SOUND
-• Video modes: sharp, smooth, rounded corners, monitor and CRT TV
+• Video modes: sharp, smooth, rounded corners, monitor and CRT TV with scanlines and curvature
 • Gigascreen and ULAplus
-• Beeper and AY chip sound
+• Beeper and AY chip sound in stereo
 
 YOUR LIBRARY
 • Import games from your files or open them from other apps (email, WhatsApp, Telegram, browser)
@@ -55,10 +55,11 @@ Easy Spectrum does not include games: load the files you own. The Spectrum ROMs 
 
 **Name (≤30):** Easy Spectrum Pro: ZX Emulator
 
-**Short description (≤80):** Ad-free ZX Spectrum emulator: 48K, 128K, +3, tapes and fast loading.
+**Short description (≤80):** ZX Spectrum 48K, 128K and +3 emulator with keyboard, gamepad and fast load.
+(Same as Free: Google warns against words like "ad-free"/"no ads" in the short description, since they count as promotional.)
 
 **Full description:** same as Free, with these changes:
-- First paragraph: "Easy Spectrum Pro is the ad-free edition of Easy Spectrum, a simple, accessible emulator…"
+- First paragraph: "…Easy Spectrum Pro is the edition of Easy Spectrum with no ads, a simple, accessible emulator…"
 - Replace "Prefer no ads? Try Easy Spectrum Pro." with "No ads. Thank you for supporting Easy Spectrum."
 
 ---

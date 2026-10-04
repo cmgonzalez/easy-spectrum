@@ -198,5 +198,22 @@
   "tapeDeck": "Cassete",
   "showTapeDeck": "Mostrar cassete",
   "tapeBlockList": "Lista de blocos",
-  "zoom": "Zoom"
+  "zoom": "Zoom",
+  "menuFavorites": "Favoritos",
+  "favAddCurrent": "Adicionar jogo atual",
+  "favAddGames": "Adicionar jogos…",
+  "favRemove": "Remover dos Favoritos",
+  "favNone": "(nenhum)",
+  "copyScreen": "Copiar tela para a área de transferência",
+  "screenCopied": "Tela copiada para a área de transferência",
+  "screenCopyFailed": "Não foi possível copiar a tela",
+  "favAdded": "{count} adicionado(s) aos Favoritos",
+  "@favAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nothingToCopy": "Ainda não há imagem para copiar"
 }
