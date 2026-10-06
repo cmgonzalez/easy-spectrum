@@ -8,7 +8,7 @@ Corre el emulador a tiempo real (ticks de 20 ms como el Ticker) y deja el protoc
 """
 import argparse, ctypes, os, sys, time
 
-MODELS = {"16k": 0, "48k": 1, "128k": 2, "+2": 3, "+2a": 4, "+3": 5}
+MODELS = {"16k": 0, "48k": 1, "128k": 2, "+2": 3, "+2a": 4, "+3": 5, "tc2048": 7, "ts2068": 8}
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DLLS = [os.path.join(ROOT, "build/windows/x64/zx_bridge/Release/zx_bridge.dll"),
         os.path.join(ROOT, "build/windows/x64/runner/Release/zx_bridge.dll")]

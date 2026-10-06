@@ -143,6 +143,8 @@ class _GameScreenState extends State<GameScreen>
       _wantCapture = await GameThumbnail.needsCapture(widget.mediaPath);
     }
     _zx.setGigascreen(_settings.gigascreen);
+    _zx.ulaplusMode = _settings.ulaplus;
+    _zx.setInterlace(_settings.interlace);
     await _tape.attach(widget.mediaPath);
     // El cassette ya no se abre solo al cargar una cinta: el juego arranca en el mando
     // (el cassette sigue disponible con el botón de modo).
@@ -475,6 +477,8 @@ class _GameScreenState extends State<GameScreen>
     s.keepScreenOn ? WakelockPlus.enable() : WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _zx.setGigascreen(s.gigascreen);
+    _zx.ulaplusMode = s.ulaplus;
+    _zx.setInterlace(s.interlace);
     _audioMuted = !s.soundOn;
     _audio.setMuted(_audioMuted);
     _zx.mouseMode = pad.mouse.index;

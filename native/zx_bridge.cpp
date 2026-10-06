@@ -75,6 +75,7 @@ public:
 	SoftScanTarget() {
 		work_.fill(0xff000000u);
 		front_.fill(0xff000000u);
+		front_hr_.fill(0xff000000u);
 	}
 
 	void set_modals(Modals modals) override {
@@ -111,16 +112,54 @@ public:
 	void set_gigascreen(bool enabled) {
 		gigascreen_ = enabled;
 		prev_valid_ = false;
-		if(enabled && !gamma_ready_) {
-			for(int i = 0; i < 256; i++) {
-				to_linear_[i] = uint16_t(std::lround(std::pow(i / 255.0, 2.2) * 4095.0));
-			}
-			for(int i = 0; i < 4096; i++) {
-				to_srgb_[i] = uint8_t(std::lround(std::pow(i / 4095.0, 1 / 2.2) * 255.0));
-			}
-			gamma_ready_ = true;
+		if(enabled) interlace_ = false;	// excluyentes: ambos recomponen el frame publicado
+		if(enabled) ensure_gamma();
+	}
+
+	void ensure_gamma() {
+		if(gamma_ready_) return;
+		for(int i = 0; i < 256; i++) {
+			to_linear_[i] = uint16_t(std::lround(std::pow(i / 255.0, 2.2) * 4095.0));
+		}
+		for(int i = 0; i < 4096; i++) {
+			to_srgb_[i] = uint8_t(std::lround(std::pow(i / 4095.0, 1 / 2.2) * 255.0));
+		}
+		gamma_ready_ = true;
+	}
+
+	/// Interlace hi-res (modo LCD de Velesoft): en vez de mezclar las dos pantallas
+	/// alternadas, se intercalan como campos par/impar en un framebuffer de doble alto
+	/// (320×512). El televisor LCD/scandoubler hace lo mismo con la señal real.
+	void set_interlace(bool enabled) {
+		interlace_ = enabled;
+		if(enabled) {
+			gigascreen_ = false;	// excluyentes
+			ensure_gamma();
+			std::lock_guard lock(fb_mutex_);
+			front_hr_.fill(0xff000000u);
+			field_ = 0;
+			pending_ = false;
 		}
 	}
+
+	/// Copia un frame (320×256) a las filas de un campo del framebuffer de doble alto.
+	void put_field(const std::array<uint32_t, FbW * FbH> &src, int field) {
+		for(int r = 0; r < FbH; ++r) {
+			std::memcpy(&front_hr_[size_t(2 * r + field) * FbW], &src[size_t(r) * FbW], FbW * 4);
+		}
+	}
+
+	/// Filas de un frame que difieren de lo que muestra ahora ese campo.
+	int changed_rows(const std::array<uint32_t, FbW * FbH> &src, int field) const {
+		int n = 0;
+		for(int r = 0; r < FbH; ++r) {
+			n += std::memcmp(&front_hr_[size_t(2 * r + field) * FbW], &src[size_t(r) * FbW], FbW * 4) != 0;
+		}
+		return n;
+	}
+
+	/// Alto del framebuffer a publicar (320×512 con interlace hi-res, 320×256 si no).
+	int display_height() const { return interlace_ ? FbH * 2 : FbH; }
 
 	void end_scan() override {
 		if(!drawing_ || !data_ptr_ || !data_length_) return;
@@ -168,6 +207,16 @@ public:
 		switch(event) {
 			case Event::EndHorizontalRetrace:
 				++line_;
+				// Interlace hi-res: a mitad de frame se anota qué pantalla se está mostrando
+				// (bit 3 de $7FFD). En el retrazo sería una carrera con el OUT de la interrupción.
+				if(interlace_ && line_ == 150) {
+					const auto &t = zxdbg::g.t;
+					if(t.ctx && t.paging) {
+						uint8_t p7ffd = 0, p1ffd = 0;
+						t.paging(t.ctx, &p7ffd, &p1ffd);
+						shown_screen_ = (p7ffd >> 3) & 1;
+					}
+				}
 			break;
 			case Event::BeginVerticalRetrace: {
 				// Solo frames dibujados de principio a fin: uno parcial (tras salir del
@@ -175,7 +224,33 @@ public:
 				if(!frame_clean_) break;
 				{
 					std::lock_guard lock(fb_mutex_);
-					if(gigascreen_ && prev_valid_) {
+					if(interlace_) {
+						// Campos par/impar: el frame va a las filas 2r+field; el otro campo
+						// queda del frame anterior. front_ guarda el campo suelto (capturas).
+						// La paridad sale de la pantalla mostrada (normal = filas pares, sombra =
+						// impares): si dependiera del frame en que se activa el modo, la mitad de
+						// las veces los campos saldrían cruzados (bordes dentados). Si el programa
+						// no alterna pantallas, se alterna sola (cada línea queda duplicada).
+						if(shown_screen_ != last_screen_) field_ = shown_screen_;
+						last_screen_ = shown_screen_;
+						// Sincronía de campos: si este campo cambió mucho respecto de lo que se
+						// muestra (scroll, cambio de imagen), se retiene un frame y se publica junto
+						// con su pareja. Así nunca se ve un campo nuevo tejido con el otro viejo
+						// (un frame de imagen doble en cada paso de un scroll entrelazado).
+						if(pending_) {
+							put_field(pending_buf_, pending_field_);
+							pending_ = false;
+							put_field(work_, field_);
+						} else if(changed_rows(work_, field_) >= SyncRows) {
+							pending_buf_ = work_;
+							pending_field_ = field_;
+							pending_ = true;
+						} else {
+							put_field(work_, field_);
+						}
+						front_ = work_;
+						field_ ^= 1;
+					} else if(gigascreen_ && prev_valid_) {
 						blend_into_front();
 					} else {
 						front_ = work_;
@@ -213,6 +288,37 @@ public:
 		std::lock_guard lock(fb_mutex_);
 		std::memcpy(snapshot_.data(), front_.data(), front_.size() * 4);
 		return reinterpret_cast<const uint8_t *>(snapshot_.data());
+	}
+
+	/// Framebuffer de doble alto (320×512) con los dos campos intercalados (interlace hi-res).
+	const uint8_t *front_hr() {
+		// Como en un LCD, cada línea se funde con sus vecinas (que son del otro campo):
+		// filtro vertical 1-2-1 en luz lineal. Dos colores alternados línea a línea dan su
+		// mezcla (los colores extra del modo LCD / gigascreen) y los bordes conservan la
+		// posición de 384 líneas. Sin esto se veían rayas de los dos colores sin mezclar.
+		std::lock_guard lock(fb_mutex_);
+		constexpr int H = FbH * 2;
+		for(int y = 0; y < H; y++) {
+			const uint32_t *const cur = &front_hr_[size_t(y) * FbW];
+			const uint32_t *const up = &front_hr_[size_t(y > 0 ? y - 1 : y + 1) * FbW];
+			const uint32_t *const down = &front_hr_[size_t(y < H - 1 ? y + 1 : y - 1) * FbW];
+			uint32_t *const dst = &snapshot_hr_[size_t(y) * FbW];
+			for(int x = 0; x < FbW; x++) {
+				const uint32_t a = cur[x], b = up[x], c = down[x];
+				if(a == b && a == c) {
+					dst[x] = a;
+					continue;
+				}
+				uint32_t out = 0xff000000u;
+				for(int shift = 0; shift < 24; shift += 8) {
+					const int mix = 2 * to_linear_[(a >> shift) & 0xff]
+						+ to_linear_[(b >> shift) & 0xff] + to_linear_[(c >> shift) & 0xff];
+					out |= uint32_t(to_srgb_[mix >> 2]) << shift;
+				}
+				dst[x] = out;
+			}
+		}
+		return reinterpret_cast<const uint8_t *>(snapshot_hr_.data());
 	}
 
 private:
@@ -273,6 +379,16 @@ private:
 
 	std::array<uint32_t, FbW * FbH> work_{}, front_{}, snapshot_{}, prev_{};
 	std::mutex fb_mutex_;
+
+	// Interlace hi-res: buffers de doble alto y campo actual (0 = par, 1 = impar).
+	std::array<uint32_t, FbW * FbH * 2> front_hr_{}, snapshot_hr_{};
+	bool interlace_ = false;
+	int field_ = 0;
+	int shown_screen_ = 0, last_screen_ = 0;	// bit 3 de $7FFD de este frame y del anterior
+	static constexpr int SyncRows = 64;		// filas cambiadas a partir de las que se espera a la pareja (un sprite no llega)
+	bool pending_ = false;				// hay un campo retenido esperando a su pareja
+	int pending_field_ = 0;
+	std::array<uint32_t, FbW * FbH> pending_buf_{};
 
 	bool gigascreen_ = false, prev_valid_ = false, gamma_ready_ = false;
 	std::array<uint16_t, 256> to_linear_{};
@@ -539,6 +655,9 @@ void record_block(const uint8_t *data, size_t length) {
 
 /* Estado de ULAplus: lo escribe el parche de Video.hpp (native/clk_patches). */
 volatile int zx_ulaplus_active = 0;
+// Ajuste ULAplus (zx_set_ulaplus): 0 apagado, 1 paleta, 2 paleta + modos Timex por el
+// registro de modo (extendido). Global como el resto del estado de ULAplus: una máquina a la vez.
+volatile int zx_ulaplus_mode = 2;
 volatile int zx_fb_lag = 0;	// desfase del floating bus (half cycles); ver CMakeLists "floating-*"
 
 struct ZxHandle {
@@ -628,6 +747,219 @@ static void apply_tape_options(ZxHandle *h) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Guardar snapshots (.z80 / .sna). CLK solo los carga: el estado se lee por el núcleo de
+// depuración (zxdbg::Target), deteniendo la CPU al inicio de una instrucción.
+
+/// 128K, +2, +2A, +3 (bancos de 16K y $7FFD); no la Next ni los Timex.
+static bool is_128_family(int model) {
+	return model >= ZX_MODEL_128K && model <= ZX_MODEL_PLUS3;
+}
+
+using ClkModel = Analyser::Static::ZXSpectrum::Target::Model;
+
+/// ZX_MODEL_* ↔ modelo de CLK: 0-5 coinciden; los Timex van al final del enum de CLK
+/// (6 y 7, ver "modelos-timex" en CMakeLists) y en el bridge son 7 y 8 (el 6 es la Next).
+static ClkModel clk_model(int model) {
+	if(model == ZX_MODEL_TC2048) return ClkModel::TC2048;
+	if(model == ZX_MODEL_TS2068) return ClkModel::TS2068;
+	return ClkModel(std::clamp(model, 0, 5));
+}
+
+static int zx_model_of(ClkModel model) {
+	if(model == ClkModel::TC2048) return ZX_MODEL_TC2048;
+	if(model == ClkModel::TS2068) return ZX_MODEL_TS2068;
+	return int(model);
+}
+
+struct SnapState {
+	zxdbg::Regs r;
+	int model = ZX_MODEL_48K;
+	uint8_t p7ffd = 0, p1ffd = 0, border = 0, ay_sel = 0;
+	uint8_t timex_ff = 0, timex_f4 = 0;	// TC2048 / TS2068
+	uint8_t ay[16]{};
+	int hc_since_int = 0;
+	std::vector<uint8_t> ram;	// 16K/48K: lineal desde $4000; 128K: bancos 0-7
+	const uint8_t *bank(int b) const { return &ram[size_t(b) * 0x4000]; }
+};
+
+// Detiene la CPU entre instrucciones (como la pausa del PDP) y copia el estado. Si el
+// depurador ya la tenía detenida, se usa esa parada tal cual.
+bool capture_state(ZxHandle *h, SnapState &s) {
+	auto &g = zxdbg::g;
+	if(!g.t.ctx) h->timed->run_for(Time::Seconds(50e-6));	// se engancha al primer run_for
+	if(!g.t.ctx || !g.t.machine_state) return false;
+
+	const bool was_stopped = g.stopped, was_armed = g.armed, had_event = g.event_pending;
+	bool own_stop = false;
+	if(!was_stopped) {
+		g.armed = true;
+		// Un tramo corto antes de pedir la parada: el seguimiento de prefijos (CB/ED/DD/FD)
+		// de on_fetch se pone al día y la parada cae en el primer byte de una instrucción.
+		h->timed->run_for(Time::Seconds(50e-6));
+		if(!g.stopped) {
+			g.pause_req = true;
+			for(int i = 0; i < 200 && !g.stopped; i++) h->timed->run_for(Time::Seconds(20e-6));
+			g.pause_req = false;
+		}
+		own_stop = g.stopped && g.reason == zxdbg::Reason::Pause;
+		if(!g.stopped) { g.armed = was_armed; return false; }
+	}
+
+	s.r = g.regs;
+	g.t.paging(g.t.ctx, &s.p7ffd, &s.p1ffd);
+	g.t.machine_state(g.t.ctx, &s.border, s.ay, &s.ay_sel, &s.hc_since_int);
+	if(g.t.timex) g.t.timex(g.t.ctx, &s.timex_ff, &s.timex_f4);
+	s.model = h->model;
+	if(is_128_family(s.model)) {
+		s.ram.resize(8 * 0x4000);
+		for(int b = 0; b < 8; b++)
+			for(int o = 0; o < 0x4000; o++) s.ram[size_t(b) * 0x4000 + o] = g.t.peek_bank(g.t.ctx, 0, b, uint16_t(o));
+	} else {
+		s.ram.resize(s.model == ZX_MODEL_16K ? 0x4000 : 0xC000);
+		for(size_t a = 0; a < s.ram.size(); a++) s.ram[a] = g.t.peek(g.t.ctx, uint16_t(0x4000 + a));
+	}
+
+	if(own_stop) {
+		// Parada propia: sin evento para el cliente PDP, y la CPU sigue donde estaba.
+		g.event_pending = had_event;
+		zxdbg::resume();
+		g.armed = was_armed;
+	}
+	return true;
+}
+
+// Bloque de memoria .z80: ED ED n b para tramos de 5+ bytes iguales (2+ si son ED); el byte
+// que sigue a un ED suelto va siempre literal.
+void z80_compress(const uint8_t *d, size_t n, std::vector<uint8_t> &out) {
+	size_t i = 0;
+	while(i < n) {
+		const uint8_t b = d[i];
+		size_t run = 1;
+		while(i + run < n && d[i + run] == b && run < 255) ++run;
+		if(run >= 5 || (b == 0xed && run >= 2)) {
+			out.insert(out.end(), {0xed, 0xed, uint8_t(run), b});
+			i += run;
+		} else {
+			out.push_back(b);
+			++i;
+			if(b == 0xed && i < n) out.push_back(d[i++]);
+		}
+	}
+}
+
+void z80_page(std::vector<uint8_t> &f, int page, const uint8_t *d) {
+	std::vector<uint8_t> c;
+	z80_compress(d, 0x4000, c);
+	const bool raw = c.size() >= 0x4000;
+	const uint16_t len = raw ? 0xffff : uint16_t(c.size());
+	f.push_back(uint8_t(len)); f.push_back(uint8_t(len >> 8)); f.push_back(uint8_t(page));
+	if(raw) f.insert(f.end(), d, d + 0x4000);
+	else f.insert(f.end(), c.begin(), c.end());
+}
+
+std::vector<uint8_t> make_z80(const SnapState &s) {
+	const auto &r = s.r;
+	std::vector<uint8_t> f(30, 0);
+	const auto w16 = [&](size_t o, uint16_t v) { f[o] = uint8_t(v); f[o + 1] = uint8_t(v >> 8); };
+	f[0] = uint8_t(r.af >> 8); f[1] = uint8_t(r.af);
+	w16(2, r.bc); w16(4, r.hl); w16(6, 0);	// PC = 0: hay cabecera adicional
+	w16(8, r.sp);
+	f[10] = r.i; f[11] = r.r & 0x7f;
+	f[12] = uint8_t(((r.r >> 7) & 1) | ((s.border & 7) << 1));
+	w16(13, r.de); w16(15, r.bc2); w16(17, r.de2); w16(19, r.hl2);
+	f[21] = uint8_t(r.af2 >> 8); f[22] = uint8_t(r.af2);
+	w16(23, r.iy); w16(25, r.ix);
+	f[27] = r.iff1 ? 1 : 0; f[28] = r.iff2 ? 1 : 0; f[29] = r.im & 3;
+
+	// 128K con la cabecera v2 (23 bytes): el modo 3 es 128K en la v2 pero 48K + M.G.T. en la
+	// v3. Los demás modelos van en v3 (55 bytes, con contador de T-states y $1FFD).
+	const bool v2 = s.model == ZX_MODEL_128K;
+	uint8_t mode = 0, flags = 0x03;	// emulación de R y LDIR, como Z80/Fuse
+	switch(s.model) {
+		case ZX_MODEL_16K:		mode = 0; flags |= 0x80; break;	// "modificar hardware": 48K → 16K
+		case ZX_MODEL_48K:		mode = 0; break;
+		case ZX_MODEL_128K:		mode = 3; break;
+		case ZX_MODEL_PLUS2:	mode = 12; break;
+		case ZX_MODEL_PLUS2A:	mode = 13; break;
+		case ZX_MODEL_PLUS3:	mode = 7; break;
+		case ZX_MODEL_TC2048:	mode = 14; break;
+		case ZX_MODEL_TS2068:	mode = 128; break;
+	}
+	const bool timex = s.model == ZX_MODEL_TC2048 || s.model == ZX_MODEL_TS2068;
+	const bool has_ay = is_128_family(s.model) || s.model == ZX_MODEL_TS2068;
+	if(has_ay) flags |= 0x04;
+	const uint16_t extra = v2 ? 23 : 55;
+	std::vector<uint8_t> x(2 + extra, 0);
+	x[0] = uint8_t(extra); x[1] = 0;
+	x[2] = uint8_t(r.pc); x[3] = uint8_t(r.pc >> 8);
+	x[4] = mode;
+	x[5] = timex ? s.timex_f4 : is_128_family(s.model) ? s.p7ffd : 0;	// Timex: último OUT a $F4
+	x[6] = timex ? s.timex_ff : 0;	// Timex: último OUT a $FF; si no, Interface 1 sin paginar
+	x[7] = flags;
+	x[8] = s.ay_sel;
+	std::copy_n(s.ay, 16, &x[9]);
+	if(!v2) {
+		// T-states (como los lee CLK): cuarto de frame actual y lo que falta para terminarlo.
+		const int quarter = is_128_family(s.model) ? 17727 : 17472;
+		const int t = std::max(0, s.hc_since_int / 2);
+		const int low = quarter - 1 - (t % quarter);
+		x[25] = uint8_t(low); x[26] = uint8_t(low >> 8);
+		x[27] = uint8_t((t / quarter) & 3);
+		x[31] = 0xff; x[32] = 0xff;	// $0000-$3FFF es ROM
+		x[56] = timex ? 0 : s.p1ffd;
+	}
+	f.insert(f.end(), x.begin(), x.end());
+
+	if(is_128_family(s.model)) {
+		for(int b = 0; b < 8; b++) z80_page(f, 3 + b, s.bank(b));
+	} else {
+		z80_page(f, 8, &s.ram[0]);	// $4000
+		if(s.model != ZX_MODEL_16K) {
+			z80_page(f, 4, &s.ram[0x4000]);	// $8000
+			z80_page(f, 5, &s.ram[0x8000]);	// $C000
+		}
+	}
+	return f;
+}
+
+std::vector<uint8_t> make_sna(SnapState s) {
+	auto &r = s.r;
+	const bool m128 = is_128_family(s.model);
+	if(!m128) {
+		// 48K: el PC va en la pila (el cargador hace RETN). 16K: se completa a 48K.
+		s.ram.resize(0xC000, 0);
+		r.sp = uint16_t(r.sp - 2);
+		if(r.sp >= 0x4000) s.ram[r.sp - 0x4000] = uint8_t(r.pc);
+		if(uint16_t(r.sp + 1) >= 0x4000) s.ram[uint16_t(r.sp + 1) - 0x4000] = uint8_t(r.pc >> 8);
+	}
+	std::vector<uint8_t> f(27, 0);
+	const auto w16 = [&](size_t o, uint16_t v) { f[o] = uint8_t(v); f[o + 1] = uint8_t(v >> 8); };
+	f[0] = r.i;
+	w16(1, r.hl2); w16(3, r.de2); w16(5, r.bc2); w16(7, r.af2);
+	w16(9, r.hl); w16(11, r.de); w16(13, r.bc); w16(15, r.iy); w16(17, r.ix);
+	f[19] = r.iff2 ? 0x04 : 0;
+	f[20] = r.r;
+	w16(21, r.af);
+	w16(23, r.sp);
+	f[25] = r.im & 3;
+	f[26] = s.border & 7;
+	if(!m128) {
+		f.insert(f.end(), s.ram.begin(), s.ram.end());
+		return f;
+	}
+	const int paged = s.p7ffd & 7;
+	for(int b : {5, 2, paged}) f.insert(f.end(), s.bank(b), s.bank(b) + 0x4000);
+	f.push_back(uint8_t(r.pc)); f.push_back(uint8_t(r.pc >> 8));
+	f.push_back(s.p7ffd);
+	f.push_back(0);	// TR-DOS sin paginar
+	for(int b = 0; b < 8; b++) {
+		if(b == 5 || b == 2 || b == paged) continue;
+		f.insert(f.end(), s.bank(b), s.bank(b) + 0x4000);
+	}
+	return f;
+}
+
 extern "C" {
 
 const char *zx_last_error(void) {
@@ -695,7 +1027,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 			target.reset(static_cast<Target *>(t.release()));
 		} else {
 			target = std::make_unique<Target>();
-			target->model = Target::Model(std::clamp(model, 0, 5));
+			target->model = clk_model(model);
 
 			if(ext == "tap") {
 				target->media.tapes.push_back(std::make_shared<Storage::Tape::ZXSpectrumTAP>(path));
@@ -715,18 +1047,23 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 			if(!target->media.empty()) {
 				// 128K/+2/+3: Enter en el menú elige "Tape Loader"/"Loader".
 				// 16K/48K: hay que teclear LOAD "".
-				if(target->model <= Target::Model::FortyEightK) type_load = true;
+				if(target->model <= Target::Model::FortyEightK || target->model == Target::Model::TC2048 ||
+					target->model == Target::Model::TS2068) type_load = true;
 				else target->should_hold_enter = true;
 			}
 		}
 
-		const ROMMachine::ROMFetcher fetcher = [&dir](const ROM::Request &request) -> ROM::Map {
+		// Timex: el TC2048 pide la ROM "48K" y el TS2068 la "+3" (24K: casa + EXROM), ver
+		// "timex-rom" en CMakeLists; aquí se les da la suya.
+		const Target::Model clk = target->model;
+		const ROMMachine::ROMFetcher fetcher = [&dir, clk](const ROM::Request &request) -> ROM::Map {
 			ROM::Map map;
-			static const std::pair<ROM::Name, const char *> files[] = {
-				{ROM::Name::Spectrum48k, "48.rom"},
+			const bool tc2048 = clk == Target::Model::TC2048, ts2068 = clk == Target::Model::TS2068;
+			const std::pair<ROM::Name, const char *> files[] = {
+				{ROM::Name::Spectrum48k, tc2048 ? "tc2048.rom" : "48.rom"},
 				{ROM::Name::Spectrum128k, "128.rom"},
 				{ROM::Name::SpectrumPlus2, "plus2.rom"},
-				{ROM::Name::SpectrumPlus3, "plus3.rom"},
+				{ROM::Name::SpectrumPlus3, ts2068 ? "ts2068.rom" : "plus3.rom"},
 			};
 			for(const auto &[name, file] : files) {
 				std::vector<uint8_t> data;
@@ -737,7 +1074,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 		};
 
 		auto h = std::make_unique<ZxHandle>();
-		h->model = int(target->model);
+		h->model = zx_model_of(target->model);
 		h->rom_dir = dir;
 		h->machine = Sinclair::ZXSpectrum::Machine::create(*target, fetcher);
 		if(!h->machine) { g_last_error = "machine_failed"; return nullptr; }
@@ -768,7 +1105,7 @@ ZxHandle *zx_create(const char *rom_dir, int model, const char *media_path, int 
 		if(type_load && h->keyboard) {
 			// LOAD "" en 48K: en modo K la J produce LOAD; Symbol Shift+P, la comilla.
 			using namespace Sinclair::ZX::Keyboard;
-			double t = 2.5;	// esperar a que el ROM termine de arrancar
+			double t = target->model == Target::Model::TS2068 ? 3.5 : 2.5;	// esperar a que el ROM termine de arrancar
 			h->add_press(t, {KeyJ});
 			h->add_press(t, {KeySymbolShift, KeyP});
 			h->add_press(t, {KeySymbolShift, KeyP});
@@ -805,6 +1142,17 @@ static pdp::Host pdp_host(ZxHandle *h) {
 	pdp::Host host;
 	host.supported = true;	// CLK (hook en el bus) y la Next (parada entre instrucciones)
 	host.machine = h->next ? "next" : "zx";
+	switch(h->model) {
+		case ZX_MODEL_16K:		host.model = "16k";		break;
+		case ZX_MODEL_48K:		host.model = "48k";		break;
+		case ZX_MODEL_128K:		host.model = "128k";	break;
+		case ZX_MODEL_PLUS2:	host.model = "+2";		break;
+		case ZX_MODEL_PLUS2A:	host.model = "+2a";		break;
+		case ZX_MODEL_PLUS3:	host.model = "+3";		break;
+		case ZX_MODEL_NEXT:		host.model = "next";	break;
+		case ZX_MODEL_TC2048:	host.model = "tc2048";	break;
+		case ZX_MODEL_TS2068:	host.model = "ts2068";	break;
+	}
 	host.reset = [h] { zx_reset(h); };
 	host.emulated_seconds = [h] { return zx_get_emulated_time(h); };
 	host.set_key = [h](int key, bool down) { zx_set_key(h, key, down ? 1 : 0); };
@@ -882,6 +1230,11 @@ int zx_get_model(ZxHandle *h) {
 	return h ? h->model : ZX_MODEL_48K;
 }
 
+void zx_set_ulaplus(ZxHandle *h, int mode) {
+	(void)h;
+	zx_ulaplus_mode = std::clamp(mode, 0, 2);
+}
+
 int zx_is_ulaplus(ZxHandle *h) {
 	return (h && !h->next && zx_ulaplus_active) ? 1 : 0;
 }
@@ -894,6 +1247,16 @@ int zx_is_turbo(ZxHandle *h) {
 const uint8_t *zx_get_framebuffer(ZxHandle *h) {
 	if(h && h->next) return h->next->frame();
 	return h ? h->scan_target.front() : nullptr;
+}
+
+const uint8_t *zx_get_framebuffer_hr(ZxHandle *h) {
+	if(!h || h->next) return nullptr;	// la Next no usa interlace hi-res
+	return h->scan_target.front_hr();
+}
+
+int zx_fb_height(ZxHandle *h) {
+	if(!h || h->next) return ZX_FB_HEIGHT;
+	return h->scan_target.display_height();
 }
 
 void zx_set_key(ZxHandle *h, int key, int pressed) {
@@ -1080,6 +1443,10 @@ void zx_set_gigascreen(ZxHandle *h, int enabled) {
 	if(h && !h->next) h->scan_target.set_gigascreen(enabled != 0);
 }
 
+void zx_set_interlace(ZxHandle *h, int enabled) {
+	if(h && !h->next) h->scan_target.set_interlace(enabled != 0);
+}
+
 int zx_pdp_start(ZxHandle *h, int port) {
 	if(!h) return -1;
 	if(h->next) h->next->attach_debugger();	// la máquina de CLK se engancha sola al primer run_for
@@ -1090,6 +1457,17 @@ int zx_pdp_start(ZxHandle *h, int port) {
 
 void zx_pdp_stop(ZxHandle *h) {
 	if(h && h->pdp) { pdp::stop(); h->pdp = false; }
+}
+
+int zx_save_snapshot(ZxHandle *h, const char *path, int format) {
+	if(!h || h->next) { g_last_error = "snapshot_unsupported"; return -1; }
+	SnapState s;
+	if(!capture_state(h, s)) { g_last_error = "snapshot_failed"; return -1; }
+	const std::vector<uint8_t> data = format == 1 ? make_sna(std::move(s)) : make_z80(s);
+	std::ofstream out(std::filesystem::u8path(path), std::ios::binary | std::ios::trunc);
+	out.write(reinterpret_cast<const char *>(data.data()), std::streamsize(data.size()));
+	if(!out) { g_last_error = "write_failed"; return -1; }
+	return 0;
 }
 
 void zx_set_speed(ZxHandle *h, double multiplier) {

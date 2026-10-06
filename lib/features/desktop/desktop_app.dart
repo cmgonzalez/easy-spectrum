@@ -50,6 +50,11 @@ class DesktopApp extends StatelessWidget {
     return (file, model);
   }
 
+  /// `--interlace`: arranca en modo Interlace HR solo en esta sesion (sin tocar
+  /// los ajustes guardados). Lo pasa PRISMA al lanzar un juego con el motor
+  /// entrelazado (GFX_INFERNO_INTERLACE).
+  static bool wantsInterlace(List<String> args) => args.contains('--interlace');
+
   @override
   Widget build(BuildContext context) {
     final (file, model) = parseArgs(args);
@@ -59,7 +64,8 @@ class DesktopApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: DesktopScreen(initialFile: file, initialModel: model),
+      home: DesktopScreen(
+          initialFile: file, initialModel: model, initialInterlace: wantsInterlace(args)),
     );
   }
 }

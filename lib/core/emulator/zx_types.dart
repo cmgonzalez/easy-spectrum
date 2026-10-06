@@ -3,18 +3,45 @@ library;
 
 const int zxFbWidth = 320; // ZX_FB_WIDTH: 256 px de pantalla + 32 de borde por lado
 const int zxFbHeight = 256; // ZX_FB_HEIGHT: 192 + 32 + 32
+const int zxFbHeightHr = 512; // ZX_FB_HEIGHT_HR: interlace hi-res (256×384 + 64+64 de borde)
 
-/// Modelos — mismo orden que ZX_MODEL_* / Target::Model de CLK.
+/// Modelos. El índice del enum es lo que se guarda en los ajustes; [id] es el ZX_MODEL_* del bridge
+/// (iguales hasta el +3; el 6 es la Next, que no se elige).
 enum ZxModel {
-  k16('16K'),
-  k48('48K'),
-  k128('128K'),
-  plus2('+2'),
-  plus2a('+2A'),
-  plus3('+3');
+  k16('16K', 0),
+  k48('48K', 1),
+  k128('128K', 2),
+  plus2('+2', 3),
+  plus2a('+2A', 4),
+  plus3('+3', 5),
+  tc2048('TC2048', 7),
+  ts2068('TS2068', 8);
 
-  const ZxModel(this.label);
+  const ZxModel(this.label, this.id);
   final String label;
+  final int id;
+
+  /// Modelo con ese ZX_MODEL_* (null para la Next o un valor desconocido).
+  static ZxModel? byId(int id) {
+    for (final m in values) {
+      if (m.id == id) return m;
+    }
+    return null;
+  }
+}
+
+/// ZX_MODEL_NEXT: solo archivos .nex.
+const zxModelNext = 6;
+
+/// Ajuste ULAplus (zx_set_ulaplus: el índice es el valor nativo). [extended]: el registro de
+/// modo de ULAplus también elige los modos de vídeo Timex (hi-color 8x1, 512×192…).
+enum UlaplusMode {
+  off,
+  palette,
+  extended;
+
+  static UlaplusMode byName(String? name) =>
+      values.firstWhere((m) => m.name == name, orElse: () => extended);
 }
 
 /// Bits de zx_set_joystick.

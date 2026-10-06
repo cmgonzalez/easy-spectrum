@@ -37,11 +37,13 @@ import 'toolbar.dart';
 
 /// Ventana del emulador en escritorio: salida del Spectrum a toda la ventana, barra de
 /// menús y teclado físico. Los archivos se abren en su sitio (sin biblioteca): así una
-/// herramienta externa puede recompilar el .tap y basta con "Recargar" (F2).
+/// herramienta externa puede recompilar el .tap y basta con "Recargar" (F4).
 class DesktopScreen extends StatefulWidget {
   final String? initialFile;
   final ZxModel? initialModel;
-  const DesktopScreen({super.key, this.initialFile, this.initialModel});
+  final bool initialInterlace;
+  const DesktopScreen(
+      {super.key, this.initialFile, this.initialModel, this.initialInterlace = false});
 
   @override
   State<DesktopScreen> createState() => _DesktopScreenState();
@@ -103,6 +105,7 @@ class _DesktopScreenState extends State<DesktopScreen>
   Future<void> _boot() async {
     _settings = await AppSettings.load();
     if (widget.initialModel != null) _settings.model = widget.initialModel!;
+    _forceInterlace = widget.initialInterlace;
     final p = await SharedPreferences.getInstance();
     final joy = p.getString(_prefJoystick);
     _keyboard.joystick = joy == 'none' ? null : JoyMapping.byName(joy) ?? JoyMapping.kempston;
@@ -125,8 +128,11 @@ class _DesktopScreenState extends State<DesktopScreen>
 
   Future<void> _onOpenArgs(MethodCall call) async {
     if (call.method != 'open' || !_zx.isRunning) return;
-    final (file, model) = DesktopApp.parseArgs((call.arguments as List).cast<String>());
+    final args = (call.arguments as List).cast<String>();
+    final (file, model) = DesktopApp.parseArgs(args);
     if (model != null) _settings.model = model;
+    // Cada juego abierto desde fuera trae (o no) su propio --interlace.
+    if (file != null) setState(() => _forceInterlace = DesktopApp.wantsInterlace(args));
     if (file != null) {
       await _openPath(file);
     } else if (model != null) {
@@ -220,7 +226,9 @@ class _DesktopScreenState extends State<DesktopScreen>
       return;
     }
     _zx.setSpeed(_speed);
-    _zx.setGigascreen(_settings.gigascreen);
+    _zx.setGigascreen(_settings.gigascreen && !_forceInterlace);
+    _zx.ulaplusMode = _settings.ulaplus;
+    _zx.setInterlace(_interlaceOn);
     await _tape.attach(path);
     setState(() => _media = source ?? path);
     if (_media.isNotEmpty) await _addRecent(_media);
@@ -375,14 +383,53 @@ class _DesktopScreenState extends State<DesktopScreen>
       return;
     }
     final b = _settings.screenBorder;
-    final src = Rect.fromLTWH(b.crop.toDouble(), b.crop.toDouble(),
-        (zxFbWidth - 2 * b.crop).toDouble(), (zxFbHeight - 2 * b.crop).toDouble());
+    final scaleY = frame.height ~/ zxFbHeight; // 2 en interlace hi-res
+    final src = Rect.fromLTWH(b.crop.toDouble(), (b.crop * scaleY).toDouble(),
+        (zxFbWidth - 2 * b.crop).toDouble(), (frame.height - 2 * b.crop * scaleY).toDouble());
     var ok = false;
     try {
       ok = await copyFrameToClipboard(_openArgs, frame, src, GameDisplay.aspectFor(b));
     } catch (_) {}
     frame.dispose();
     _snack(ok ? t.screenCopied : t.screenCopyFailed);
+    _focus.requestFocus();
+  }
+
+  /// Guarda el estado de la máquina como .z80 o .sna (según la extensión elegida). La
+  /// emulación queda en pausa mientras el diálogo está abierto: se guarda el instante en
+  /// que se pidió.
+  Future<void> _saveSnapshot() async {
+    final t = context.l10n;
+    if (!_zx.isRunning) return;
+    if (_zx.modelIndex == 6) {
+      _showError(t.errSnapshotUnsupported);
+      return;
+    }
+    final wasPaused = _paused;
+    if (!wasPaused) _setPaused(true);
+    final src = _media.isEmpty ? '' : _baseName(_media);
+    final dot = src.lastIndexOf('.');
+    final base = src.isEmpty ? 'snapshot' : (dot > 0 ? src.substring(0, dot) : src);
+    final dir = _media.isEmpty ? null : File(_media).parent.path;
+    final target = await FilePicker.platform.saveFile(
+      dialogTitle: t.saveSnapshot,
+      fileName: '$base.z80',
+      initialDirectory: dir,
+      type: FileType.custom,
+      allowedExtensions: ['z80', 'sna'],
+    );
+    if (mounted && target != null) {
+      final lower = target.toLowerCase();
+      final out = lower.endsWith('.z80') || lower.endsWith('.sna') ? target : '$target.z80';
+      final err = _zx.saveSnapshot(out);
+      if (err == null) {
+        _snack(t.snapshotSaved(_baseName(out)));
+        await _addRecent(out);
+      } else {
+        _showError(t.snapshotSaveFailed(zxErrorText(t, err)));
+      }
+    }
+    if (mounted && !wasPaused) _setPaused(false);
     _focus.requestFocus();
   }
 
@@ -425,14 +472,41 @@ class _DesktopScreenState extends State<DesktopScreen>
     await _reload();
   }
 
+  Future<void> _setUlaplus(UlaplusMode m) async {
+    setState(() => _settings.ulaplus = m);
+    _zx.ulaplusMode = m;
+    await _settings.save();
+  }
+
   Future<void> _setVideo(VideoMode m) async {
     setState(() => _settings.videoMode = m);
     await _settings.save();
   }
 
+  /// Interlace HR pedido por linea de comandos (`--interlace`): vale para esta
+  /// sesion y se suelta al tocar Gigascreen / Interlace HR desde el menu.
+  bool _forceInterlace = false;
+  bool get _interlaceOn => _settings.interlace || _forceInterlace;
+
   Future<void> _setGigascreen(bool v) async {
-    setState(() => _settings.gigascreen = v);
+    setState(() {
+      _forceInterlace = false;
+      _settings.gigascreen = v;
+      if (v) _settings.interlace = false; // excluyentes
+    });
     _zx.setGigascreen(v);
+    if (v) _zx.setInterlace(false);
+    await _settings.save();
+  }
+
+  Future<void> _setInterlace(bool v) async {
+    setState(() {
+      _forceInterlace = false;
+      _settings.interlace = v;
+      if (v) _settings.gigascreen = false; // excluyentes
+    });
+    _zx.setInterlace(v);
+    if (v) _zx.setGigascreen(false);
     await _settings.save();
   }
 
@@ -537,13 +611,17 @@ class _DesktopScreenState extends State<DesktopScreen>
     }
     if (e is KeyDownEvent) {
       final action = switch (e.logicalKey) {
-        LogicalKeyboardKey.f2 => _reload,
+        // Distribución de Fuse: F2 guardar, F3 abrir, F5 reset, F7 cinta, F8 reproducir…
+        LogicalKeyboardKey.f1 => () async => _showKeyMap(),
+        LogicalKeyboardKey.f2 => _saveSnapshot,
         LogicalKeyboardKey.f3 => _pickFile,
-        LogicalKeyboardKey.f4 => () async => _tape.rewind(),
+        LogicalKeyboardKey.f4 => _reload,
         LogicalKeyboardKey.f5 => () async => _zx.reset(),
-        LogicalKeyboardKey.f6 => () async => _toggleTape(),
-        LogicalKeyboardKey.f7 => _toggleTapePanel,
-        LogicalKeyboardKey.f8 || LogicalKeyboardKey.pause => () async => _setPaused(!_paused),
+        LogicalKeyboardKey.f6 => _toggleTapePanel,
+        LogicalKeyboardKey.f7 => _insertTape,
+        LogicalKeyboardKey.f8 when HardwareKeyboard.instance.isShiftPressed => () async => _tape.rewind(),
+        LogicalKeyboardKey.f8 => () async => _toggleTape(),
+        LogicalKeyboardKey.pause => () async => _setPaused(!_paused),
         LogicalKeyboardKey.f11 => () => _setFullscreen(!_fullscreen),
         LogicalKeyboardKey.f12 => _copyScreen,
         LogicalKeyboardKey.f9 when _capture.active => () async => _releaseMouse(),
@@ -586,7 +664,8 @@ class _DesktopScreenState extends State<DesktopScreen>
     return [
       MenuEntry.submenu('&${t.menuFile}', [
         MenuEntry(t.openFile, shortcut: 'F3', onSelected: _pickFile),
-        MenuEntry(t.reloadFile, shortcut: 'F2', onSelected: hasMedia ? _reload : null),
+        MenuEntry('${t.saveSnapshot}…', shortcut: 'F2', onSelected: _saveSnapshot),
+        MenuEntry(t.reloadFile, shortcut: 'F4', onSelected: hasMedia ? _reload : null),
         MenuEntry.submenu(t.recentFiles, [
           for (final path in _recent) MenuEntry(esc(_baseName(path)), onSelected: () => _openPath(path)),
           if (_recent.isEmpty) MenuEntry(t.noRecentFiles),
@@ -616,8 +695,13 @@ class _DesktopScreenState extends State<DesktopScreen>
             MenuEntry(m.label,
                 radio: true, checked: m == _settings.model, onSelected: () => _setModel(m)),
         ]),
+        MenuEntry.submenu(t.ulaplus, [
+          for (final m in UlaplusMode.values)
+            MenuEntry(ulaplusModeLabel(t, m),
+                radio: true, checked: m == _settings.ulaplus, onSelected: () => _setUlaplus(m)),
+        ]),
         MenuEntry(t.reset, shortcut: 'F5', onSelected: _zx.reset),
-        MenuEntry(t.pause, shortcut: 'F8', checked: _paused, onSelected: () => _setPaused(!_paused)),
+        MenuEntry(t.pause, shortcut: 'Pause', checked: _paused, onSelected: () => _setPaused(!_paused)),
         MenuEntry(t.sound, checked: _settings.soundOn, onSelected: _toggleMute),
         MenuEntry.submenu(t.speed, [
           for (final s in _speeds)
@@ -628,11 +712,11 @@ class _DesktopScreenState extends State<DesktopScreen>
         MenuEntry(t.quickLoad,
             checked: _settings.quickLoad, onSelected: () => _setQuickLoad(!_settings.quickLoad)),
         MenuEntry(_zx.tapePlaying ? t.stopTape : t.playTape,
-            shortcut: 'F6', onSelected: hasMedia || _tape.hasTape ? _toggleTape : null),
-        MenuEntry(t.tapeRewind, shortcut: 'F4', onSelected: _tape.hasList ? _tape.rewind : null),
-        MenuEntry(t.tapeInsert, onSelected: _insertTape),
+            shortcut: 'F8', onSelected: hasMedia || _tape.hasTape ? _toggleTape : null),
+        MenuEntry(t.tapeRewind, shortcut: 'Shift+F8', onSelected: _tape.hasList ? _tape.rewind : null),
+        MenuEntry(t.tapeInsert, shortcut: 'F7', onSelected: _insertTape),
         MenuEntry(t.tapeEject, onSelected: _tape.hasTape ? _tape.eject : null),
-        MenuEntry('${t.tapeManager}…', shortcut: 'F7', checked: _showTape, onSelected: _toggleTapePanel),
+        MenuEntry('${t.tapeManager}…', shortcut: 'F6', checked: _showTape, onSelected: _toggleTapePanel),
         MenuEntry('${t.tapeNew}…', onSelected: () => _openEditor(null)),
       ]),
       MenuEntry.submenu('&${t.screen}', [
@@ -642,6 +726,8 @@ class _DesktopScreenState extends State<DesktopScreen>
         const MenuEntry.separator(),
         MenuEntry('Gigascreen',
             checked: _settings.gigascreen, onSelected: () => _setGigascreen(!_settings.gigascreen)),
+        MenuEntry('Interlace HR',
+            checked: _interlaceOn, onSelected: () => _setInterlace(!_interlaceOn)),
         const MenuEntry.separator(),
         MenuEntry(t.copyScreen, shortcut: 'F12', onSelected: _copyScreen),
         const MenuEntry.separator(),
@@ -667,7 +753,7 @@ class _DesktopScreenState extends State<DesktopScreen>
         MenuEntry('${t.keyMap}…', onSelected: _showKeyMap),
       ]),
       MenuEntry.submenu('&${t.menuHelp}', [
-        MenuEntry('${t.keyMap}…', onSelected: _showKeyMap),
+        MenuEntry('${t.keyMap}…', shortcut: 'F1', onSelected: _showKeyMap),
         MenuEntry(t.about, onSelected: _showAbout),
       ]),
     ];
@@ -834,9 +920,9 @@ class _DesktopScreenState extends State<DesktopScreen>
             DesktopToolbar(items: [
               ToolItem('nuevo', t.powerOnBasic, onTap: () => _start('')),
               ToolItem('abrir', t.openFile, onTap: _pickFile),
-              ToolItem('guardar', '${t.toolbarSave} (${t.comingSoon})'),
+              ToolItem('guardar', '${t.saveSnapshot} (F2)', onTap: _saveSnapshot),
               null,
-              ToolItem('tape', '${t.tapeManager} (F7)', active: _showTape, onTap: _toggleTapePanel),
+              ToolItem('tape', '${t.tapeManager} (F6)', active: _showTape, onTap: _toggleTapePanel),
               null,
               ToolItem('recargar', t.reset, onTap: () {
                 _zx.reset();

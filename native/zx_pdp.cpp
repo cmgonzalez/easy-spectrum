@@ -521,6 +521,7 @@ void handle(const Host &h, int client, const std::string &line) {
 
 	if(cmd == "hello") {
 		reply(client, id, true, "\"protocol\":\"pdp/1\",\"machine\":" + quote(h.machine) +
+			(h.model.empty() ? std::string() : ",\"model\":" + quote(h.model)) +
 			",\"debug\":" + (h.supported && zxdbg::attached() ? "true" : "false") + "," + state_fields());
 		return;
 	}
@@ -731,7 +732,14 @@ void handle(const Host &h, int client, const std::string &line) {
 		char b[192];
 		snprintf(b, sizeof b, "\"p7ffd\":\"0x%02X\",\"p1ffd\":\"0x%02X\",\"ram_c000\":%u,\"screen\":%u,\"rom_bit\":%u,\"locked\":%s",
 			p7, p1, p7 & 7, (p7 & 8) ? 7 : 5, (p7 >> 4) & 1, (p7 & 0x20) ? "true" : "false");
-		reply(client, id, true, b);
+		std::string out = b;
+		if(g.t.timex) {	// TC2048 / TS2068
+			uint8_t ff = 0, f4 = 0;
+			g.t.timex(g.t.ctx, &ff, &f4);
+			snprintf(b, sizeof b, ",\"timex_ff\":\"0x%02X\",\"timex_f4\":\"0x%02X\",\"screen_mode\":%u", ff, f4, ff & 7);
+			out += b;
+		}
+		reply(client, id, true, out);
 	} else if(cmd == "mmu") {
 		if(!g.t.mmu) { fail(client, id, "mmu solo en la Next"); return; }
 		uint8_t pg[8];

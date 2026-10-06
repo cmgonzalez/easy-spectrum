@@ -33,7 +33,12 @@ struct Target {
 	uint8_t (*peek_bank)(void *, int kind, int bank, uint16_t off) = nullptr;
 	void (*poke_bank)(void *, int kind, int bank, uint16_t off, uint8_t v) = nullptr;
 	void (*paging)(void *, uint8_t *p7ffd, uint8_t *p1ffd) = nullptr;
+	// Solo TC2048/TS2068 (null en el resto): último OUT a $FF y a $F4 (MMU del TS2068).
+	void (*timex)(void *, uint8_t *ff, uint8_t *f4) = nullptr;
 	int64_t frame_half_cycles = 0;	// duración de un frame (half cycles)
+	// Resto del estado para guardar snapshots: borde (0-7), registros del AY, half cycles
+	// desde la interrupción.
+	void (*machine_state)(void *, uint8_t *border, uint8_t ay[16], uint8_t *ay_sel, int *hc_since_int) = nullptr;
 	// Solo la Next (null en las máquinas de CLK): páginas de 8 KB (0-255), slots del MMU y NextRegs.
 	uint8_t (*peek_page)(void *, int page, uint16_t off) = nullptr;
 	void (*poke_page)(void *, int page, uint16_t off, uint8_t v) = nullptr;

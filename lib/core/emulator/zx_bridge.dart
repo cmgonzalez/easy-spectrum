@@ -46,6 +46,8 @@ typedef _IntIntN = Int32 Function(Pointer<Void> h, Int32 v);
 typedef _IntInt = int Function(Pointer<Void> h, int v);
 typedef _TapeInfoN = Int32 Function(Pointer<Void> h, Pointer<Int32> block, Pointer<Int32> total);
 typedef _TapeInfo = int Function(Pointer<Void> h, Pointer<Int32> block, Pointer<Int32> total);
+typedef _SaveN = Int32 Function(Pointer<Void> h, Pointer<Utf8> path, Int32 format);
+typedef _Save = int Function(Pointer<Void> h, Pointer<Utf8> path, int format);
 typedef _TakeN = Int32 Function(Pointer<Void> h, Pointer<Uint8> out, Int32 max);
 typedef _Take = int Function(Pointer<Void> h, Pointer<Uint8> out, int max);
 
@@ -101,7 +103,11 @@ class ZxBridge {
     _isTurbo = lib.lookupFunction<_IntRetN, _IntRet>('zx_is_turbo');
     _getModel = lib.lookupFunction<_IntRetN, _IntRet>('zx_get_model');
     _isUla = lib.lookupFunction<_IntRetN, _IntRet>('zx_is_ulaplus');
+    _setUla = lib.lookupFunction<_IntArgN, _IntArg>('zx_set_ulaplus');
     _setGiga = lib.lookupFunction<_IntArgN, _IntArg>('zx_set_gigascreen');
+    _setInterlace = lib.lookupFunction<_IntArgN, _IntArg>('zx_set_interlace');
+    _fbHr = lib.lookupFunction<_FbN, _FbN>('zx_get_framebuffer_hr');
+    _fbHeight = lib.lookupFunction<_IntRetN, _IntRet>('zx_fb_height');
     _pdpStart = lib.lookupFunction<_PdpStartN, _PdpStart>('zx_pdp_start');
     _tapeInsert = lib.lookupFunction<_PathN, _Path>('zx_tape_insert');
     _tapeEject = lib.lookupFunction<_VoidHN, _VoidH>('zx_tape_eject');
@@ -110,12 +116,14 @@ class ZxBridge {
     _tapePause = lib.lookupFunction<_IntArgN, _IntArg>('zx_tape_set_paused');
     _tapeRecord = lib.lookupFunction<_IntArgN, _IntArg>('zx_tape_record');
     _tapeTake = lib.lookupFunction<_TakeN, _Take>('zx_tape_take_recorded');
+    _saveSnap = lib.lookupFunction<_SaveN, _Save>('zx_save_snapshot');
   }
 
   static final ZxBridge instance = ZxBridge._();
 
   late final _Create _create;
   late final _LastErrorN _lastError;
+  late final _Save _saveSnap;
   late final _VoidH _destroy;
   late final _Run _run;
   late final _FbN _fb;
@@ -136,7 +144,11 @@ class ZxBridge {
   late final _IntRet _isTurbo;
   late final _IntRet _getModel;
   late final _IntRet _isUla;
+  late final _IntArg _setUla;
   late final _IntArg _setGiga;
+  late final _IntArg _setInterlace;
+  late final _FbN _fbHr;
+  late final _IntRet _fbHeight;
   late final _PdpStart _pdpStart;
   late final _Path _tapeInsert;
   late final _VoidH _tapeEject;
@@ -159,7 +171,7 @@ class ZxBridge {
     if (_romDir != null) return _romDir!;
     final dir = Directory('${(await getApplicationSupportDirectory()).path}/roms');
     await dir.create(recursive: true);
-    for (final name in ['48.rom', '128.rom', 'plus2.rom', 'plus3.rom']) {
+    for (final name in ['48.rom', '128.rom', 'plus2.rom', 'plus3.rom', 'tc2048.rom', 'ts2068.rom']) {
       final f = File('${dir.path}/$name');
       if (!await f.exists()) {
         final data = await rootBundle.load('assets/roms/$name');
@@ -182,7 +194,7 @@ class ZxBridge {
     final pRom = romDir.toNativeUtf8();
     final pMedia = mediaPath.toNativeUtf8();
     try {
-      _h = _create(pRom, model.index, pMedia, audioFreq);
+      _h = _create(pRom, model.id, pMedia, audioFreq);
     } finally {
       calloc.free(pRom);
       calloc.free(pMedia);
@@ -201,13 +213,16 @@ class ZxBridge {
   /// Avanza [seconds] de tiempo real; devuelve frames completados.
   int run(double seconds) => isRunning ? _run(_h, seconds) : 0;
 
-  /// Frame actual como imagen lista para pintar.
+  /// Frame actual como imagen lista para pintar. Con interlace hi-res activo la imagen
+  /// es 320×512 (dos campos intercalados); si no, 320×256.
   Future<ui.Image?> frame() {
-    final bytes = framebuffer();
-    if (bytes == null) return Future.value(null);
+    if (!isRunning) return Future.value(null);
+    final h = _fbHeight(_h);
+    final ptr = h == zxFbHeightHr ? _fbHr(_h) : _fb(_h);
+    if (ptr == nullptr) return Future.value(null);
+    final bytes = Uint8List.fromList(ptr.asTypedList(zxFbWidth * h * 4));
     final c = Completer<ui.Image>();
-    ui.decodeImageFromPixels(
-        bytes, zxFbWidth, zxFbHeight, ui.PixelFormat.rgba8888, c.complete);
+    ui.decodeImageFromPixels(bytes, zxFbWidth, h, ui.PixelFormat.rgba8888, c.complete);
     return c.future;
   }
 
@@ -306,12 +321,34 @@ class ZxBridge {
   /// El programa activó la paleta ULAplus.
   bool get ulaplus => isRunning && _isUla(_h) != 0;
 
+  /// Ajuste ULAplus ([UlaplusMode]): vale para la máquina en marcha y las siguientes.
+  set ulaplusMode(UlaplusMode mode) => _setUla(_h, mode.index);
+
   /// true mientras la cinta carga en turbo (emulación acelerada y sin sonido).
   bool get turbo => isRunning && _isTurbo(_h) != 0;
 
   /// Gigascreen: cada frame se mezcla con el anterior (dos pantallas alternadas = más colores).
   void setGigascreen(bool enabled) {
     if (isRunning) _setGiga(_h, enabled ? 1 : 0);
+  }
+
+  /// Interlace hi-res (modo LCD de Velesoft): las dos pantallas alternadas se intercalan
+  /// como campos par/impar → 256×384. Excluyente con Gigascreen. No aplica a la Next.
+  void setInterlace(bool enabled) {
+    if (isRunning) _setInterlace(_h, enabled ? 1 : 0);
+  }
+
+  /// Guarda el estado en [path]: .sna si termina así, si no .z80. Devuelve null si salió
+  /// bien, o el código de error de `zx_last_error` (ver `zxErrorText`).
+  String? saveSnapshot(String path) {
+    if (!isRunning) return 'snapshot_failed';
+    final p = path.toNativeUtf8();
+    try {
+      final sna = path.toLowerCase().endsWith('.sna');
+      return _saveSnap(_h, p, sna ? 1 : 0) == 0 ? null : _lastError().toDartString();
+    } finally {
+      calloc.free(p);
+    }
   }
 
   void setQuickLoad(bool enabled) {

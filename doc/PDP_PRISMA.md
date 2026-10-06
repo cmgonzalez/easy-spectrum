@@ -13,7 +13,7 @@ capturas, todo con los símbolos de `build/game.map`. Referencia completa: `C:\d
 $env:EASYSPECTRUM_PDP_PORT = 7878
 & "$env:LOCALAPPDATA\Programs\Easy Spectrum\EasySpectrum.exe" C:\prisma\out\JUEGO.tap --model 128k
 ```
-(`--model 48k|128k|+2|+2a|+3|16k`; con la app ya abierta, recargar el `.tap` es F2). Usa la ruta real
+(`--model 48k|128k|+2|+2a|+3|16k`; con la app ya abierta, recargar el `.tap` es F4). Usa la ruta real
 de instalación si es otra. Preferir `.z80`/`.sna` a `.tap`: arrancan directo en el juego. Sin
 `EASYSPECTRUM_PDP_PORT` no hay depurador.
 

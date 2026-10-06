@@ -11,8 +11,12 @@ typedef struct ZxHandle ZxHandle;
 /* Framebuffer de salida: 256×192 de pantalla + 32 px de borde por lado. */
 #define ZX_FB_WIDTH  320
 #define ZX_FB_HEIGHT 256
+/* Interlace hi-res (modo LCD de Velesoft): dos pantallas alternadas se intercalan como
+ * campos par/impar → 256×384 de papel + 64 px de borde arriba/abajo. Mismo ancho. */
+#define ZX_FB_HEIGHT_HR 512
 
-/* Modelos — mismo orden que Analyser::Static::ZXSpectrum::Target::Model. */
+/* Modelos — 0-5 en el mismo orden que Analyser::Static::ZXSpectrum::Target::Model; los Timex
+ * se traducen (clk_model/zx_model_of en zx_bridge.cpp). */
 #define ZX_MODEL_16K    0
 #define ZX_MODEL_48K    1
 #define ZX_MODEL_128K   2
@@ -20,6 +24,8 @@ typedef struct ZxHandle ZxHandle;
 #define ZX_MODEL_PLUS2A 4
 #define ZX_MODEL_PLUS3  5
 #define ZX_MODEL_NEXT   6	/* ZX Spectrum Next: solo archivos .nex (máquina propia, sin CLK) */
+#define ZX_MODEL_TC2048 7	/* Timex TC2048: 48K + modos de vídeo de $FF (ROM tc2048.rom) */
+#define ZX_MODEL_TS2068 8	/* Timex Sinclair 2068: NTSC, AY en $F5/$F6, MMU $F4 (ROM ts2068.rom, 24K) */
 
 /* Joystick (Kempston + Sinclair a la vez) — bitmask de zx_set_joystick. */
 #define ZX_JOY_UP    (1u << 0)
@@ -60,8 +66,23 @@ int zx_get_model(ZxHandle* h);
 /* 1 si el programa activó la paleta ULAplus (puerto FF3B, modo 1). */
 int zx_is_ulaplus(ZxHandle* h);
 
-/* Framebuffer RGBA8888 ZX_FB_WIDTH×ZX_FB_HEIGHT del último frame completo. */
+/* ULAplus: 0 = apagado (los puertos BF3B/FF3B no responden), 1 = paleta de 64 colores,
+ * 2 = paleta + modo extendido (el subgrupo del registro de modo elige los modos de vídeo
+ * Timex: segunda pantalla, hi-color 8x1, hi-res 512). Defecto 2. Global: vale para la máquina
+ * en marcha y las siguientes. */
+void zx_set_ulaplus(ZxHandle* h, int mode);
+
+/* Framebuffer RGBA8888 ZX_FB_WIDTH×ZX_FB_HEIGHT del último frame completo. En modo
+ * interlace hi-res sigue siendo 320×256 (último campo suelto): sirve para miniaturas/capturas. */
 const uint8_t* zx_get_framebuffer(ZxHandle* h);
+
+/* Framebuffer RGBA8888 ZX_FB_WIDTH×ZX_FB_HEIGHT_HR con los dos campos intercalados (modo
+ * interlace hi-res). Solo válido si zx_fb_height() devuelve ZX_FB_HEIGHT_HR. */
+const uint8_t* zx_get_framebuffer_hr(ZxHandle* h);
+
+/* Alto del framebuffer a mostrar: ZX_FB_HEIGHT normalmente, ZX_FB_HEIGHT_HR con interlace
+ * hi-res activo (entonces usar zx_get_framebuffer_hr). El ancho es siempre ZX_FB_WIDTH. */
+int zx_fb_height(ZxHandle* h);
 
 /* Tecla de la matriz: key = (fila << 8) | bit, igual que Sinclair::ZX::Keyboard::Key. */
 void zx_set_key(ZxHandle* h, int key, int pressed);
@@ -119,10 +140,21 @@ void zx_set_quickload(ZxHandle* h, int enabled);
 /* Gigascreen: 1 = cada frame se mezcla con el anterior (en luz lineal). Defecto 0. */
 void zx_set_gigascreen(ZxHandle* h, int enabled);
 
+/* Interlace hi-res (modo LCD de Velesoft): 1 = los frames consecutivos se intercalan como
+ * campos par/impar en un framebuffer de 320×512 (256×384 de papel). Defecto 0. Excluyente
+ * con Gigascreen (activar uno apaga el otro). No aplica a la Next. */
+void zx_set_interlace(ZxHandle* h, int enabled);
+
 /* Depuracion PDP (Prisma Debug Protocol, doc/PDP.md): abre un servidor TCP en 127.0.0.1:<port>
  * (0 = puerto libre). Devuelve el puerto, o -1 si falla. Solo una maquina a la vez. */
 int  zx_pdp_start(ZxHandle* h, int port);
 void zx_pdp_stop(ZxHandle* h);
+
+/* Guarda el estado de la máquina en un snapshot: format 0 = .z80 (v2 para 16K/48K/128K,
+ * v3 para +2/+2A/+3, con AY y $1FFD), 1 = .sna (48K, o 128K con $7FFD). Se toma al
+ * principio de una instrucción. 0 = ok; -1 = error (zx_last_error: snapshot_unsupported
+ * con la Next, write_failed…). */
+int  zx_save_snapshot(ZxHandle* h, const char* path, int format);
 
 /* Multiplicador de velocidad (1.0 = normal). */
 void zx_set_speed(ZxHandle* h, double multiplier);

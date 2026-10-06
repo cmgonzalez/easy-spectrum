@@ -11,7 +11,7 @@ Desde C: `zx_pdp_start(h, port)` / `zx_pdp_stop(h)` (zx_bridge.h).
 
 | cmd | parámetros | respuesta |
 |---|---|---|
-| `hello` | | protocolo, máquina, `state` |
+| `hello` | | protocolo, máquina, `model` (`48k`, `128k`, `+3`, `tc2048`, `ts2068`, `next`…), `state` |
 | `status` | | `state`, `emulated` (s), `breakpoints` |
 | `pause` / `resume` (`run`) / `step` / `next` | `wait:true` espera a la parada; `resume` admite `until` | `state`, `reason`, `pc` |
 | `regs` | | `regs{pc,sp,af,bc,de,hl,af2..hl2,ix,iy,memptr,i,r,iff1,iff2,im,flags}` |
@@ -50,7 +50,7 @@ Desde C: `zx_pdp_start(h, port)` / `zx_pdp_stop(h)` (zx_bridge.h).
 | cmd | parámetros | respuesta |
 |---|---|---|
 | `mem` / `poke` | `bank` (RAM 0-7) o `rom` (0-3, solo lectura); `addr` = desplazamiento 0-0x3FFF | |
-| `paging` | | `p7ffd`, `p1ffd`, `ram_c000` (banco en C000), `screen` (5/7), `rom_bit`, `locked` |
+| `paging` | | `p7ffd`, `p1ffd`, `ram_c000` (banco en C000), `screen` (5/7), `rom_bit`, `locked`; en TC2048/TS2068 además `timex_ff`, `timex_f4` y `screen_mode` (b0-2 de `$FF`) |
 | `resume` | `frames:N` | para tras N frames exactos (`reason:"frames"`) |
 | `profile` | `on:true/false`, `reset:true`; sin ellos informa: `top`, `by:"func"\|"addr"` | `total_tstates`, `profile[{name,tstates,pct,instr}]` |
 | `framelog` | `set:"a,[_var],[game_key]w"` (columnas y arranca), `stop`/`start`/`clear`; sin ellos: `n` | `columns`, `rows` = `[frame, idle, valores...]` |

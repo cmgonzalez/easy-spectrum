@@ -10,7 +10,8 @@ namespace pdp {
 
 struct Host {
 	bool supported = true;			// false: máquina sin depuración (p. ej. la Next, fase posterior)
-	std::string machine;			// "zx48", "zx128"…
+	std::string machine;			// "zx" (CLK) o "next"
+	std::string model;				// "48k", "128k", "+3", "tc2048", "ts2068"… (vacío si no se sabe)
 	std::function<void()> reset;	// reinicia la máquina
 	std::function<double()> emulated_seconds;
 	std::function<void(int key, bool down)> set_key;	// key = (fila << 8) | bit

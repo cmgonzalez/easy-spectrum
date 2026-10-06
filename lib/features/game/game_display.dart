@@ -126,6 +126,13 @@ class _FramePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Interlace hi-res: la imagen viene de doble alto (320×512). El borde vertical se
+    // escala igual (×2); el horizontal y la proporción física no cambian.
+    final scaleY = image.height ~/ zxFbHeight; // 1 normal, 2 interlace hi-res
+    final bx = border.toDouble();
+    final by = (border * scaleY).toDouble();
+    final paperW = (image.width - 2 * border).toDouble();
+    final paperH = (image.height - 2 * border * scaleY).toDouble();
     final crt = mode.crt;
     final s = shader;
     if (crt != null && s != null) {
@@ -133,8 +140,8 @@ class _FramePainter extends CustomPainter {
       s
         ..setFloat(0, size.width)
         ..setFloat(1, size.height)
-        ..setFloat(2, (zxFbWidth - 2 * border).toDouble())
-        ..setFloat(3, (zxFbHeight - 2 * border).toDouble())
+        ..setFloat(2, paperW)
+        ..setFloat(3, paperH)
         ..setFloat(4, dpr)
         ..setFloat(5, crt.curve)
         ..setFloat(6, crt.scan)
@@ -142,18 +149,17 @@ class _FramePainter extends CustomPainter {
         ..setFloat(8, crt.vignette)
         ..setFloat(9, crt.corner)
         ..setFloat(10, crt.glow)
-        ..setFloat(11, border.toDouble())
-        ..setFloat(12, border.toDouble())
-        ..setFloat(13, zxFbWidth.toDouble())
-        ..setFloat(14, zxFbHeight.toDouble())
+        ..setFloat(11, bx)
+        ..setFloat(12, by)
+        ..setFloat(13, image.width.toDouble())
+        ..setFloat(14, image.height.toDouble())
         ..setImageSampler(0, image);
       canvas.drawRect(Offset.zero & size, Paint()..shader = s);
       return;
     }
     canvas.drawImageRect(
       image,
-      Rect.fromLTWH(border.toDouble(), border.toDouble(), (zxFbWidth - 2 * border).toDouble(),
-          (zxFbHeight - 2 * border).toDouble()),
+      Rect.fromLTWH(bx, by, paperW, paperH),
       Offset.zero & size,
       Paint()..filterQuality = mode == VideoMode.smooth ? FilterQuality.medium : FilterQuality.none,
     );

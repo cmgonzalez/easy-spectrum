@@ -91,6 +91,17 @@ function(zx_patch NAME FIND REPLACEMENT)
     set(ZX_TEXT "${ZX_TEXT}" PARENT_SCOPE)
 endfunction()
 
+# Modelos Timex (TC2048, TS2068): se agregan AL FINAL del enum de CLK (0-5 no cambian) en una
+# copia de Target.hpp que tapa a la original (directorio de includes antepuesto, ver más abajo).
+# Todos los que la usan la incluyen como "Analyser/Static/ZXSpectrum/Target.hpp".
+set(CLK_OVER "${CMAKE_CURRENT_BINARY_DIR}/clk_over")
+set(TARGET_SRC "${CLK}/Analyser/Static/ZXSpectrum/Target.hpp")
+configure_file("${TARGET_SRC}" "${CMAKE_CURRENT_BINARY_DIR}/Target.hpp.orig" COPYONLY)
+file(READ "${TARGET_SRC}" TARGET_TEXT)
+string(REPLACE "\r\n" "\n" TARGET_TEXT "${TARGET_TEXT}")
+clk_patch(TARGET_TEXT modelos-timex "\t\tPlus3,\n\t);" "\t\tPlus3,\n\t\tTC2048,\n\t\tTS2068,\n\t);")
+file(WRITE "${CLK_OVER}/Analyser/Static/ZXSpectrum/Target.hpp" "${TARGET_TEXT}")
+
 # 1. Bug: al instalar el estado de un snapshot 128K asigna port7ffd_ y actualiza el
 #    mapa de memoria, pero no la base de vídeo → se ignora la pantalla sombra (banco 7).
 #    Afecta a .sna 128K, .z80 y .szx.
@@ -107,15 +118,17 @@ zx_patch(cinta-terminada
 
 # 3. ULAplus: puertos BF3B (registro) y FF3B (dato); el reset apaga el modo ULAplus.
 #    La paleta y la salida de color están en la copia parcheada de Video.hpp (más abajo).
+#    Desactivable (zx_ulaplus_mode = 0: los puertos no responden). Con el modo extendido
+#    (zx_ulaplus_mode = 2) el subgrupo del registro de modo replica los modos de vídeo Timex.
 zx_patch(ulaplus-escritura
     "\t\t\t\t// Test for classic 128kb paging register (i.e. port 7ffd).\n"
-    "\t\t\t\t// ULAplus.\n\t\t\t\tif(address == 0xbf3b) video_->ulaplus_write_register(*cycle.value);\n\t\t\t\tif(address == 0xff3b) video_->ulaplus_write_data(*cycle.value);\n\n\t\t\t\t// Test for classic 128kb paging register (i.e. port 7ffd).\n")
+    "\t\t\t\t// ULAplus.\n\t\t\t\tif(zx_ulaplus_mode) {\n\t\t\t\t\tif(address == 0xbf3b) {\n\t\t\t\t\t\tvideo_->ulaplus_write_register(*cycle.value);\n\t\t\t\t\t\ttimex_sync_video();\n\t\t\t\t\t}\n\t\t\t\t\tif(address == 0xff3b) video_->ulaplus_write_data(*cycle.value);\n\t\t\t\t}\n\n@TIMEX_OUT@\t\t\t\t// Test for classic 128kb paging register (i.e. port 7ffd).\n")
 zx_patch(ulaplus-lectura
     "\t\t\t\tif constexpr (model <= Model::Plus2) {\n\t\t\t\t\tif(!did_match) {\n"
-    "\t\t\t\tif(address == 0xff3b) {\n\t\t\t\t\tdid_match = true;\n\t\t\t\t\t*cycle.value = video_->ulaplus_read_data();\n\t\t\t\t}\n\n\t\t\t\tif constexpr (model <= Model::Plus2) {\n\t\t\t\t\tif(!did_match) {\n")
+    "\t\t\t\tif(address == 0xff3b && zx_ulaplus_mode) {\n\t\t\t\t\tdid_match = true;\n\t\t\t\t\t*cycle.value = video_->ulaplus_read_data();\n\t\t\t\t}\n\n@TIMEX_IN@\t\t\t\tif constexpr (model <= Model::Plus2) {\n\t\t\t\t\tif(!did_match) {\n")
 zx_patch(ulaplus-reset
     "\t\tupdate_video_base();\n\t\tz80_.set_power_on_reset();\n"
-    "\t\tupdate_video_base();\n\t\tvideo_->ulaplus_reset();\n\t\tz80_.set_power_on_reset();\n")
+    "\t\tupdate_video_base();\n\t\tvideo_->ulaplus_reset();\n\t\ttimex_reset();\n\t\tz80_.set_power_on_reset();\n")
 
 # 4. Ratón Kempston (zx_mouse.h): FBDF/FFDF/FADF. Va antes de la lectura del joystick Kempston
 #    porque esos puertos (byte bajo DF) también tienen A5 a 0 y el joystick los taparía.
@@ -138,7 +151,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_
 #    el coste es un bool global por opcode.
 zx_patch(pdp-include
     "#include \"ZXSpectrum.hpp\"\n"
-    "#include \"ZXSpectrum.hpp\"\n#include \"zx_debug.h\"\n")
+    "#include \"ZXSpectrum.hpp\"\n#include \"zx_debug.h\"\n#include \"clk_patches/snapshot_access.h\"\n")
 zx_patch(pdp-attach
     "\tvoid run_for(const Cycles cycles) override {\n\t\tz80_.run_for(cycles);\n"
     "\tvoid run_for(const Cycles cycles) override {\n\t\tif(zxdbg::g.t.ctx != this) debug_attach();\n\t\tz80_.run_for(cycles);\n")
@@ -162,7 +175,90 @@ zx_patch(cinta-grabar-include
     "#include \"ZXSpectrum.hpp\"\n#include \"zx_tape.h\"\n")
 zx_patch(cinta-grabar
     "\t\t\tcase PartialMachineCycle::ReadOpcode:\n\t\t\t\t// Fast loading: ROM version.\n"
-    "\t\t\tcase PartialMachineCycle::ReadOpcode:\n\t\t\t\tif(address == 0x04c2 && zxtape::recording() && banks_[0].read == &rom_[classic_rom_offset()]) {\n\t\t\t\t\tusing Register = CPU::Z80::Register;\n\t\t\t\t\tconst uint8_t flag = uint8_t(z80_.value_of(Register::A));\n\t\t\t\t\tuint16_t length = z80_.value_of(Register::DE);\n\t\t\t\t\tuint16_t source = z80_.value_of(Register::IX);\n\t\t\t\t\tstd::vector<uint8_t> block;\n\t\t\t\t\tblock.reserve(size_t(length) + 2);\n\t\t\t\t\tblock.push_back(flag);\n\t\t\t\t\tuint8_t parity = flag;\n\t\t\t\t\twhile(length--) {\n\t\t\t\t\t\tconst uint8_t byte = banks_[source >> 14].read[source];\n\t\t\t\t\t\tblock.push_back(byte);\n\t\t\t\t\t\tparity ^= byte;\n\t\t\t\t\t\t++source;\n\t\t\t\t\t}\n\t\t\t\t\tblock.push_back(parity);\n\t\t\t\t\tzxtape::record_block(block.data(), block.size());\n\t\t\t\t\t*cycle.value = 0xc9;\t// RET\n\t\t\t\t\tbreak;\n\t\t\t\t}\n\t\t\t\t// Fast loading: ROM version.\n")
+    "\t\t\tcase PartialMachineCycle::ReadOpcode:\n\t\t\t\tif(Model::TS2068 != model && address == 0x04c2 && zxtape::recording() && banks_[0].read == &rom_[classic_rom_offset()]) {\n\t\t\t\t\tusing Register = CPU::Z80::Register;\n\t\t\t\t\tconst uint8_t flag = uint8_t(z80_.value_of(Register::A));\n\t\t\t\t\tuint16_t length = z80_.value_of(Register::DE);\n\t\t\t\t\tuint16_t source = z80_.value_of(Register::IX);\n\t\t\t\t\tstd::vector<uint8_t> block;\n\t\t\t\t\tblock.reserve(size_t(length) + 2);\n\t\t\t\t\tblock.push_back(flag);\n\t\t\t\t\tuint8_t parity = flag;\n\t\t\t\t\twhile(length--) {\n\t\t\t\t\t\tconst uint8_t byte = banks_[source >> 14].read[source];\n\t\t\t\t\t\tblock.push_back(byte);\n\t\t\t\t\t\tparity ^= byte;\n\t\t\t\t\t\t++source;\n\t\t\t\t\t}\n\t\t\t\t\tblock.push_back(parity);\n\t\t\t\t\tzxtape::record_block(block.data(), block.size());\n\t\t\t\t\t*cycle.value = 0xc9;\t// RET\n\t\t\t\t\tbreak;\n\t\t\t\t}\n\t\t\t\t// Fast loading: ROM version.\n")
+
+# 6. Unidad del +3 con dos cabezas: FDC.hpp de CLK la crea con una sola y +3DOS rechaza los
+#    discos de doble cara (720K, 80 pistas) al leer el ID de la cara 1. Se usa una copia
+#    parcheada (FDC_plus3.hpp) que queda junto a ZXSpectrum_patched.cpp.
+set(FDC_SRC "${CLK}/Machines/AmstradCPC/FDC.hpp")
+configure_file("${FDC_SRC}" "${CMAKE_CURRENT_BINARY_DIR}/FDC_plus3.hpp.orig" COPYONLY)
+file(READ "${FDC_SRC}" FDC_TEXT)
+string(REPLACE "\r\n" "\n" FDC_TEXT "${FDC_TEXT}")
+clk_patch(FDC_TEXT disco-dos-caras
+    "emplace_drive(clock_rate.as<int>(), 300, 1);" "emplace_drive(clock_rate.as<int>(), 300, 2);")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/FDC_plus3.hpp" "${FDC_TEXT}")
+zx_patch(disco-dos-caras-include
+    "#include \"Machines/AmstradCPC/FDC.hpp\"\n" "#include \"FDC_plus3.hpp\"\n")
+
+# 7. Timex TC2048 / TS2068 (clk_patches/timex_*.inc). Puertos $FF/$F4/$F5/$F6, MMU de 8K,
+#    EXROM/DOCK, NTSC del TS2068, sin interrupción con el bit 6 de $FF.
+foreach(INC timex_machine timex_out timex_in)
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/clk_patches/${INC}.inc" INC_TEXT)
+    string(REPLACE "\r\n" "\n" INC_TEXT "${INC_TEXT}")
+    string(TOUPPER "${INC}" INC_VAR)
+    set(${INC_VAR} "${INC_TEXT}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/clk_patches/${INC}.inc")
+endforeach()
+zx_patch(timex-puertos-out "@TIMEX_OUT@" "${TIMEX_OUT}")
+zx_patch(timex-puertos-in "@TIMEX_IN@" "${TIMEX_IN}")
+zx_patch(timex-miembros
+    "private:\n\tCPU::Z80::Processor<ConcreteMachine, false, false> z80_;"
+    "private:\n${TIMEX_MACHINE}\tCPU::Z80::Processor<ConcreteMachine, false, false> z80_;")
+zx_patch(timex-crear
+    "\t\tcase Plus3:\t\t\treturn std::make_unique<ConcreteMachine<Plus3>>(zx_target, rom_fetcher);\n"
+    "\t\tcase Plus3:\t\t\treturn std::make_unique<ConcreteMachine<Plus3>>(zx_target, rom_fetcher);\n\t\tcase TC2048:\t\treturn std::make_unique<ConcreteMachine<TC2048>>(zx_target, rom_fetcher);\n\t\tcase TS2068:\t\treturn std::make_unique<ConcreteMachine<TS2068>>(zx_target, rom_fetcher);\n")
+zx_patch(timex-rom "\t\tconst auto request = ROM::Request(rom_name);"
+    "\t\tif constexpr (Model::TS2068 == model) rom_name = ROM::Name::SpectrumPlus3;	// 24K: casa + EXROM\n\t\tconst auto request = ROM::Request(rom_name);")
+zx_patch(timex-switch "switch(model) {" "switch(base_model) {")
+zx_patch(timex-reloj "\t\treturn model < Model::OneTwoEightK ? OriginalClockRate : Plus3ClockRate;"
+    "\t\tif constexpr (Model::TS2068 == model) return 3'528'000;\n\t\treturn model < Model::OneTwoEightK ? OriginalClockRate : Plus3ClockRate;")
+# El ROM del TS2068 no tiene LD-BYTES en 0x056B: sin trap (carga a velocidad real + turbo).
+zx_patch(timex-trap "if(use_fast_tape_hack_ && address == 0x056b"
+    "if(Model::TS2068 != model && use_fast_tape_hack_ && address == 0x056b")
+zx_patch(timex-int "z80_.set_interrupt_line(video_.get()->get_interrupt_line(),"
+    "z80_.set_interrupt_line(video_.get()->get_interrupt_line() && !(timex_ff_ & 0x40),")
+zx_patch(timex-puerto-fe "if(!(address&1)) {" "if(ula_port(address)) {")
+zx_patch(timex-bancos "std::array<Bank, 4> banks_;" "std::array<Bank, 8> banks_;	// chunks de 8K (MMU del TS2068)")
+zx_patch(timex-bancos-a "banks_[address >> 14]" "banks_[address >> 13]")
+zx_patch(timex-bancos-t "banks_[target >> 14]" "banks_[target >> 13]")
+zx_patch(timex-bancos-s "banks_[source >> 14]" "banks_[source >> 13]")
+zx_patch(timex-bancos-snap "&banks_[c + 1].write[(c+1) * 0x4000]" "&banks_[(c + 1) * 2].write[(c+1) * 0x4000]")
+zx_patch(timex-bancos-video
+    "\t\tbanks_[0].is_video = banks_[0].page == video_page;\n\t\tbanks_[1].is_video = banks_[1].page == video_page;\n\t\tbanks_[2].is_video = banks_[2].page == video_page;\n\t\tbanks_[3].is_video = banks_[3].page == video_page;\n"
+    "\t\tfor(auto &bank : banks_) bank.is_video = bank.page == video_page;\n")
+clk_patch_block(ZX_TEXT timex-set-memory
+    "\tvoid set_memory(std::size_t bank, uint8_t source) {"
+    "\t\tbanks_[bank].write = ((source < 0x80) ? read : scratch_.data()) - offset;\n\t}\n"
+    "\tvoid set_memory(std::size_t bank, uint8_t source) {
+		uint8_t *const base = (source < 0x80) ? &ram_[source * 16384] : &rom_[(source & 0x7f) * 16384];
+		for(std::size_t half = 0; half < 2; half++) {
+			auto &chunk = banks_[bank * 2 + half];
+			if constexpr (model >= Model::Plus2a) {
+				chunk.is_contended = source >= 4 && source < 8;
+			} else {
+				chunk.is_contended = source < 0x80 && source & 1;
+			}
+			chunk.page = source;
+
+			uint8_t *const read = base + half * 8192;
+			const auto offset = bank * 16384 + half * 8192;
+			chunk.read = read - offset;
+			chunk.write = ((source < 0x80) ? read : scratch_.data()) - offset;
+		}
+	}
+")
+zx_patch(timex-mmu "\t\tdisable_paging_ = port7ffd_ & 0x20;\n"
+    "\t\tdisable_paging_ = port7ffd_ & 0x20;\n\t\ttimex_overlay();\n")
+zx_patch(timex-flush-video "(address & 0x3fff) < 6912" "(address & 0x3fff) < video_write_limit()")
+# Snapshot de Timex: el lector .z80 deja $F4 en last_7ffd y $FF en last_1ffd.
+zx_patch(timex-snapshot
+    "\t\t\t} else {\n\t\t\t\tstd::copy_n(state->ram.begin(), std::min(ram_.size(), state->ram.size()), ram_.data());"
+    "\t\t\t\tif constexpr (is_timex) {\n\t\t\t\t\ttimex_f4_ = state->last_7ffd;\n\t\t\t\t\ttimex_write_ff(state->last_1ffd);\n\t\t\t\t}\n\t\t\t} else {\n\t\t\t\tstd::copy_n(state->ram.begin(), std::min(ram_.size(), state->ram.size()), ram_.data());")
+zx_patch(timex-video "\tJustInTimeActor<VideoType> video_;"
+    "\tusing VideoTypeTimex = std::conditional_t<Model::TS2068 == model, Video::Video<Video::Timing::TS2068>,\n\t\tstd::conditional_t<Model::TC2048 == model, Video::Video<Video::Timing::TC2048>, VideoType>>;\n\tJustInTimeActor<VideoTypeTimex> video_;")
+# Al final: toda comparación "model <op> Model::X" pasa a base_model (los Timex son 48K para
+# el resto de la máquina). El código inyectado escribe "Model::X == model" para no caer aquí.
+string(REGEX REPLACE "([^_A-Za-z0-9])model ([<>=]=?) Model::" "\\1base_model \\2 Model::" ZX_TEXT "${ZX_TEXT}")
 file(WRITE "${ZX_PATCHED}" "${ZX_TEXT}")
 
 # Posición de la cinta (gestor de cintas): copias de ZXSpectrumTAP.cpp y TZX.cpp que avisan
@@ -199,6 +295,63 @@ clk_patch(TZX_TEXT cinta-bloque
     "\twhile(empty()) {\n\t\tzxtape::note_block(long(file_.tell()));\n\t\tconst uint8_t chunk_id = file_.get();\n")
 file(WRITE "${TZX_PATCHED}" "${TZX_TEXT}")
 
+# 8272: los bits "unidad N buscando" del registro de estado principal se encendían al empezar un
+# SEEK/RECALIBRATE y no se apagaban nunca. +3DOS no los mira, pero los cargadores propios que
+# esperan a que se apaguen antes de pedir SENSE INTERRUPT STATUS se quedaban colgados (Flashback +3).
+set(FDC8272_PATCHED "${CMAKE_CURRENT_BINARY_DIR}/i8272_patched.cpp")
+tape_patched_copy(Components/8272/i8272.cpp "${FDC8272_PATCHED}" FDC8272_TEXT)
+clk_patch(FDC8272_TEXT seek-fin
+    "drives_[c].phase = Drive::CompletedSeeking;"
+    "drives_[c].phase = Drive::CompletedSeeking; status_.set(MainStatus(1 << c), false);")
+clk_patch(FDC8272_TEXT seek-cancelado
+    "drives_[c].phase = Drive::NotSeeking;"
+    "drives_[c].phase = Drive::NotSeeking; status_.set(MainStatus(1 << c), false);")
+clk_patch(FDC8272_TEXT seek-inmediato
+    "drives_[drive].phase = Drive::CompletedSeeking;"
+    "drives_[drive].phase = Drive::CompletedSeeking; status_.set(MainStatus(1 << drive), false);")
+file(WRITE "${FDC8272_PATCHED}" "${FDC8272_TEXT}")
+list(REMOVE_ITEM CLK_SOURCES "${CLK}/Components/8272/i8272.cpp")
+set_source_files_properties("${FDC8272_PATCHED}" PROPERTIES
+    INCLUDE_DIRECTORIES "${CLK}/Components/8272")
+list(APPEND CLK_SOURCES "${FDC8272_PATCHED}")
+
+# .z80: el modo de hardware 3 es 128K en la v2 pero 48K + M.G.T. en la v3 (cabecera de 54/55
+# bytes), donde 128K es el 4 (5 y 6 = 128K con Interface 1 / M.G.T.). CLK solo conocía la
+# tabla de la v2 y rechazaba los .z80 v3 de 128K que guardan Fuse y casi todos los emuladores.
+set(Z80_PATCHED "${CMAKE_CURRENT_BINARY_DIR}/Z80_patched.cpp")
+tape_patched_copy(Storage/State/Z80.cpp "${Z80_PATCHED}" Z80_TEXT)
+clk_patch(Z80_TEXT z80-modos-v3
+    "\t\tcase 3:\t\tresult->model = Target::Model::OneTwoEightK;\tbreak;\n"
+    "\t\tcase 3:\t\tresult->model = bonus_header_size == 23 ? Target::Model::OneTwoEightK : Target::Model::FortyEightK;\tbreak;\n\t\tcase 4:\n\t\tcase 5:\n\t\tcase 6:\t\tresult->model = Target::Model::OneTwoEightK;\tbreak;\n")
+# El color del borde (bits 1-3 del byte 12) no se leía: todo .z80 abría con borde negro.
+clk_patch(Z80_TEXT z80-borde
+    "\tconst uint8_t misc = (raw_misc == 0xff) ? 1 : raw_misc;\n"
+    "\tconst uint8_t misc = (raw_misc == 0xff) ? 1 : raw_misc;\n\tstate->video.border_colour = (misc >> 1) & 7;\n")
+# Timex en .z80 v3: hardware 14 = TC2048, 15 = TC2068 y 128 = TS2068 (los dos últimos como
+# TS2068). El byte 35 es el último OUT a $F4 (queda en last_7ffd) y el 36 el último a $FF
+# (queda en last_1ffd; en la cabecera de 55 bytes el $1FFD se ignora). Memoria como el 48K.
+clk_patch(Z80_TEXT z80-timex-modelo
+    "\t\tcase 13:\tresult->model = Target::Model::Plus2a;\t\t\tbreak;\n"
+    "\t\tcase 13:\tresult->model = Target::Model::Plus2a;\t\t\tbreak;\n\t\tcase 14:\tresult->model = Target::Model::TC2048;\t\t\tbreak;\n\t\tcase 15:\n\t\tcase 128:\tresult->model = Target::Model::TS2068;\t\t\tbreak;\n")
+clk_patch(Z80_TEXT z80-timex-ff
+    "\tstate->last_7ffd = file.get();\n\n\tfile.seek(1, Whence::CUR);\n"
+    "\tstate->last_7ffd = file.get();\n\n\tconst bool timex = result->model == Target::Model::TC2048 || result->model == Target::Model::TS2068;\n\tif(timex) state->last_1ffd = file.get();\n\telse file.seek(1, Whence::CUR);\n")
+clk_patch(Z80_TEXT z80-timex-1ffd "\t\t\tstate->last_1ffd = file.get();\n"
+    "\t\t\tconst uint8_t port_1ffd = file.get();\n\t\t\tif(!timex) state->last_1ffd = port_1ffd;\n")
+clk_patch(Z80_TEXT z80-timex-tstates
+    "\t\t\tcase Target::Model::FortyEightK:\n\t\t\t\tstate->video.half_cycles_since_interrupt"
+    "\t\t\tcase Target::Model::FortyEightK:\n\t\t\tcase Target::Model::TC2048:\n\t\t\tcase Target::Model::TS2068:\n\t\t\t\tstate->video.half_cycles_since_interrupt")
+clk_patch(Z80_TEXT z80-timex-ram
+    "\t\tcase Target::Model::FortyEightK:\tstate->ram.resize(48 * 1024);"
+    "\t\tcase Target::Model::TC2048:\n\t\tcase Target::Model::TS2068:\n\t\tcase Target::Model::FortyEightK:\tstate->ram.resize(48 * 1024);")
+clk_patch(Z80_TEXT z80-timex-paginas
+    "if(result->model == Target::Model::SixteenK || result->model == Target::Model::FortyEightK) {"
+    "if(result->model == Target::Model::SixteenK || result->model == Target::Model::FortyEightK || timex) {")
+file(WRITE "${Z80_PATCHED}" "${Z80_TEXT}")
+list(REMOVE_ITEM CLK_SOURCES "${CLK}/Storage/State/Z80.cpp")
+set_source_files_properties("${Z80_PATCHED}" PROPERTIES INCLUDE_DIRECTORIES "${CLK}/Storage/State")
+list(APPEND CLK_SOURCES "${Z80_PATCHED}")
+
 list(REMOVE_ITEM CLK_SOURCES
     "${CLK}/Storage/Tape/Formats/ZXSpectrumTAP.cpp"
     "${CLK}/Storage/Tape/Formats/TZX.cpp")
@@ -224,6 +377,9 @@ file(READ "${PATCH_DIR}/ulaplus_private.inc" ULAPLUS_PRIVATE)
 string(REPLACE "\r\n" "\n" ULAPLUS_PUBLIC "${ULAPLUS_PUBLIC}")
 string(REPLACE "\r\n" "\n" ULAPLUS_PRIVATE "${ULAPLUS_PRIVATE}")
 
+# Video::State(const Video &) llama a time_since_interrupt(), que no era const: el
+# constructor no compilaba (CLK no lo usa). Lo usa zx_save_snapshot.
+clk_patch(VIDEO_TEXT tiempo-const "\tHalfCycles time_since_interrupt() {" "\tHalfCycles time_since_interrupt() const {")
 clk_patch(VIDEO_TEXT salida-rgb8 "InputDataType::Red2Green2Blue2" "InputDataType::Red8Green8Blue8")
 clk_patch(VIDEO_TEXT buffer-pixeles "\tuint8_t *pixel_target_ = nullptr;" "\tuint32_t *pixel_target_ = nullptr;")
 clk_patch(VIDEO_TEXT begin-data "pixel_target_ = crt_.begin_data(256);"
@@ -231,12 +387,39 @@ clk_patch(VIDEO_TEXT begin-data "pixel_target_ = crt_.begin_data(256);"
 clk_patch(VIDEO_TEXT nivel-borde "crt_.output_level<uint8_t>(" "crt_.output_level<uint32_t>(")
 clk_patch(VIDEO_TEXT color-borde "\tuint8_t border_colour_ = 0;" "\tuint32_t border_colour_ = 0;")
 clk_patch(VIDEO_TEXT set-borde "border_colour_ = palette[colour];" "border_colour_ = border_rgb(colour);")
-clk_patch(VIDEO_TEXT flash "masks[flash_mask_ & (last_fetches_[n+1] >> 7)]"
-    "masks[flash_mask_ & flash_enable_ & (last_fetches_[n+1] >> 7)]")
-clk_patch(VIDEO_TEXT tipo-colores "const uint8_t colours[2] = {" "const uint32_t colours[2] = {")
-clk_patch(VIDEO_TEXT papel "palette[(last_fetches_[n+1] & 0x78) >> 3]," "paper_colour(last_fetches_[n+1]),")
-clk_patch(VIDEO_TEXT tinta "palette[((last_fetches_[n+1] & 0x40) >> 3) | (last_fetches_[n+1] & 0x07)],"
-    "ink_colour(last_fetches_[n+1]),")
+# Cada columna de 16 píxeles la dibuja output_column() (ulaplus_private.inc): colores ULAplus,
+# FLASH, escala de grises y los modos Timex (segunda pantalla, hi-color 8x1, hi-res 512).
+clk_patch_block(VIDEO_TEXT columna
+    "							for(int column = start_column; column < end_column; column++) {"
+    "#undef Output
+"
+    "							for(int column = start_column; column < end_column; column++) {
+								output_column();
+")
+# Timex: TC2048 (50 Hz, 48K con la primera línea de papel 15 ciclos antes) y TS2068 (NTSC:
+# 262 líneas, interrupción 9169 ciclos antes del papel). Datos de libspectrum (Fuse).
+clk_patch(VIDEO_TEXT timing-timex "	Plus3,
+};" "	Plus3,
+	TC2048,
+	TS2068,
+};")
+clk_patch(VIDEO_TEXT timings-timex "	static constexpr Timings get_timings() {
+"
+    "	static constexpr Timings get_timings() {
+		if constexpr (timing == Timing::TS2068) {
+			constexpr int delays[] = {6, 5, 4, 3, 2, 1, 0, 0};
+			return Timings(224, 262, 4, 128, 9168, delays);
+		}
+		if constexpr (timing == Timing::TC2048) {
+			constexpr int delays[] = {6, 5, 4, 3, 2, 1, 0, 0};
+			return Timings(224, 312, 4, 128, 14320, delays);
+		}
+")
+clk_patch(VIDEO_TEXT timex-como-48k "timing == Timing::FortyEightK" "(timing == Timing::FortyEightK || timing >= Timing::TC2048)")
+clk_patch(VIDEO_TEXT timex-burst "if constexpr (timing >= Timing::OneTwoEightK) {"
+    "if constexpr (timing == Timing::OneTwoEightK || timing == Timing::Plus3) {")
+clk_patch(VIDEO_TEXT timex-ntsc "Outputs::Display::Type::PAL50"
+    "(timing == Timing::TS2068 ? Outputs::Display::Type::NTSC60 : Outputs::Display::Type::PAL50)")
 # Floating bus exacto (aline, multicolor por floating bus): el original devuelve
 # last_fetches_, que solo se rellena al COMPLETAR una columna del raster (y solo si hay
 # buffer de pixeles): va una columna por detras, la pareja 15 de una linea aparece al
@@ -253,6 +436,7 @@ clk_patch(VIDEO_TEXT floating-valor "const uint8_t value = last_fetches_[(time_i
 		const uint8_t value = memory_[fb_base + ((fb_t >> 4) << 1) + (fb_slot >> 1)];")
 clk_patch(VIDEO_TEXT decl-ulaplus "namespace Sinclair::ZXSpectrum::Video {"
     "extern volatile int zx_ulaplus_active;
+extern volatile int zx_ulaplus_mode;
 extern volatile int zx_fb_lag;
 
 namespace Sinclair::ZXSpectrum::Video {")
@@ -282,6 +466,7 @@ add_library(zx_bridge SHARED
 )
 
 target_include_directories(zx_bridge PRIVATE
+    "${CLK_OVER}"
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CLK}"
 )

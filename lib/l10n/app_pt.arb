@@ -118,8 +118,14 @@
   "keyMap": "Mapa de teclas",
   "menuHelp": "Ajuda",
   "dropHint": "Solte o jogo para carregá-lo",
-  "keyMapText": "Letras, números, Enter e Espaço: as mesmas teclas do Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nBackspace = DELETE · Esc = BREAK\nSímbolos (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + sua tecla\nSetas = joystick escolhido (ou cursores com «Nenhum») · Alt ou Tab = tiro\n\nF2 recarregar · F3 abrir · F5 reiniciar · F6 fita · F8 pausa · F11 / Alt+Enter tela cheia\nClique duplo: tela cheia · Arraste um arquivo para a janela para carregá-lo",
+  "keyMapText": "Letras, números, Enter e Espaço: as mesmas teclas do Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nBackspace = DELETE · Esc = BREAK\nSímbolos (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + sua tecla\nSetas = joystick escolhido (ou cursores com «Nenhum») · Alt ou Tab = tiro\n\nF1 teclas · F2 salvar snapshot · F3 abrir · F4 recarregar · F5 reiniciar · F6 gerenciador de fitas · F7 inserir fita · F8 tocar/parar fita (Shift+F8 rebobinar) · Pause pausa · F11 / Alt+Enter tela cheia · F12 copiar tela\nClique duplo: tela cheia · Arraste um arquivo para a janela para carregá-lo",
   "gigascreenSubtitle": "Mistura cada quadro com o anterior: mais cores em programas que alternam duas telas.",
+  "interlaceSubtitle": "Modo LCD da Velesoft: intercala as duas telas alternadas como alta resolução 256×384.",
+  "ulaplus": "ULAplus",
+  "ulaplusOff": "Desligado",
+  "ulaplusPalette": "Paleta de 64 cores",
+  "ulaplusExtended": "Paleta + modos Timex (estendido)",
+  "ulaplusSubtitle": "O modo estendido permite ativar os modos de vídeo Timex (hi-color 8x1, 512×192) pelo ULAplus em qualquer modelo.",
   "tabGame": "Controles",
   "tabGeneral": "Geral",
   "sound": "Som",
@@ -215,5 +221,11 @@
       }
     }
   },
-  "nothingToCopy": "Ainda não há imagem para copiar"
+  "nothingToCopy": "Ainda não há imagem para copiar",
+  "saveSnapshot": "Salvar snapshot",
+  "snapshotSaved": "Snapshot salvo: {name}",
+  "snapshotSaveFailed": "Não foi possível salvar o snapshot: {reason}",
+  "errSnapshotUnsupported": "O ZX Spectrum Next não permite salvar snapshots.",
+  "errSnapshotFailed": "não foi possível ler o estado da máquina.",
+  "errWriteFailed": "não foi possível gravar o arquivo."
 }

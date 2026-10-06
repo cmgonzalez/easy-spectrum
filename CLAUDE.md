@@ -20,7 +20,7 @@ Base de estructura: `C:\dev\easygbemu` (mismo patrón FFI + Ticker + flutter_sol
 | Ads | google_mobile_ads (IDs de prueba) — banner home + interstitial al salir |
 | ABIs | arm64-v8a, x86_64 (emulador) |
 
-Modelos: 16K, 48K, 128K, +2, +2A, +3 (+ ZX Spectrum Next solo para `.nex`, ver sección propia). Formatos: `.tap .tzx .csw .z80 .sna .szx .dsk .nex` (+ `.zip`).
+Modelos: 16K, 48K, 128K, +2, +2A, +3, Timex TC2048 y TS2068 (ver sección propia) (+ ZX Spectrum Next solo para `.nex`, ver sección propia). Formatos: `.tap .tzx .csw .z80 .sna .szx .dsk .nex` (+ `.zip`).
 ROMs en `assets/roms/` (48.rom, 128.rom, plus2.rom, plus3.rom = p2a41) — Amstrad permite
 distribuirlas con emuladores. Se copian a `<appSupport>/roms` al primer arranque (el core las lee por ruta).
 
@@ -64,6 +64,13 @@ distribuirlas con emuladores. Se copian a `<appSupport>/roms` al primer arranque
   llama a `set_video_address()` → se ignoraba la pantalla sombra (banco 7) en .sna/.z80/.szx 128K.
   Segundo parche: `get_tape_is_playing()` = motor encendido **y** cinta sin terminar (ver turbo).
   Si CLK cambia ese código, el configure falla con "Parche ZXSpectrum.cpp '<nombre>': no se encontró el texto".
+- **Discos +3 de doble cara / cargadores propios** (parches `disco-dos-caras` y `seek-*`, 2026-10-04): la
+  unidad que crea `Machines/AmstradCPC/FDC.hpp` tenía 1 cabeza → +3DOS leía el ID de la cara 1, recibía H=0 y
+  caía al cargador de cinta con los discos de 720K (80 pistas, 2 caras). Ahora 2 cabezas (`FDC_plus3.hpp` en el
+  dir de build). Además el 8272 de CLK nunca apagaba los bits "unidad buscando" (0-3) del registro de estado
+  principal: los cargadores que hablan directo con el FDC y esperan a que se apaguen se colgaban tras el
+  RECALIBRATE (`i8272_patched.cpp`). Verificado con Flashback +3 (`flashback-l1.dsk`) en Windows headless;
+  sin probar de nuevo un `.dsk` normal de 40 pistas / 1 cara. Sigue habiendo una sola unidad (A:).
 - **Carga rápida = trap + turbo.** El trap de CLK solo intercepta `LD-BYTES` del ROM (0x056B):
   sirve para .tap, pero casi todos los .tzx traen cargadores propios (Ocean 0x11, Speedlock
   0x12/0x13…) que cargarían a velocidad real. `zx_run()` emula en turbo mientras la cinta gira:
@@ -287,8 +294,94 @@ Mezcla en luz lineal (gamma 2,2 con tablas), no promedio sRGB: negro + blanco (2
 parpadeo en un CRT. Es solo visual; se combina con cualquier modo de video. Verificado en Windows con
 un SNA 128K que alterna pantalla normal (negra) y sombra (blanca) en cada frame: sin Gigascreen
 0/215 alternando, con Gigascreen 157 fijo. Escritorio: menú Pantalla › Gigascreen.
+Autotest: `python tools/gigascreen_test.py` (genera un SNA 128K que conmuta el bit 3 de `$7FFD` en cada
+interrupción; comprueba con la DLL de Windows atributos distintos, solo píxeles distintos y zona idéntica).
 
-## ULAplus (siempre activo, en Android y Windows)
+## Interlace hi-res (Ajustes › Pantalla, desactivado por defecto)
+
+Modo "LCD" de Velesoft: los programas que alternan dos pantallas a 50 Hz (vía bit D3 de
+`$7FFD`, banco 5 ↔ banco 7) se muestran como **256×384 de alta resolución** intercalando los
+dos frames como campos par/impar — igual que el des-entrelazado de un TV LCD o del scandoubler
+ZX-HD/VGA-JOY con la señal real. Excluyente con Gigascreen (que mezcla los dos frames en vez de
+intercalarlos; activar uno apaga el otro, en `settings.dart` y en los toggles).
+- Nativo (`SoftScanTarget`, `zx_bridge.cpp`): con `interlace_`, en cada `BeginVerticalRetrace`
+  limpio el frame va a las filas `2r+field_` de un buffer de doble alto `front_hr_` (320×512) y
+  `field_` conmuta 0/1. `front_` sigue guardando el campo suelto (320×256) → capturas/miniaturas
+  no cambian. `field_` solo conmuta en frames dibujados, así el emparejamiento no se desfasa en los
+  saltos de turbo.
+- **Paridad de campo** = pantalla mostrada (bit 3 de `$7FFD`, leído a mitad de frame por
+  `zxdbg::g.t.paging`): normal (banco 5) → filas pares, sombra (banco 7) → impares. Con la paridad
+  ligada al frame en que se activaba el modo, la mitad de las veces los campos salían cruzados
+  (texto y diagonales dentados). Si el programa no alterna con `$7FFD` (48K, o cambia la pantalla
+  copiando memoria) se alterna sola y la paridad queda al azar.
+- Verificación sin Flutter: `C:\dev\entrelazado\mktestcard.py` genera una carta de ajuste `.z80`
+  (IM2 + HALT alternando `$7FFD`); cargada con ctypes sobre `zx_bridge.dll`, `zx_get_framebuffer_hr`
+  coincide píxel a píxel con la referencia. Al generar `.z80` propios: cabecera v3 (54) con hardware
+  **4** = 128K (el 3 es 48K+MGT), páginas siempre comprimidas (CLK no salta bien las de `0xFFFF`).
+- **Mezcla de color** (`front_hr()`): al publicar, cada línea se funde con sus vecinas (del otro
+  campo) con un filtro vertical 1-2-1 en luz lineal, como hace un LCD. Las imágenes `.lce` de
+  Velesoft (LCDgfx50) cuentan con eso para sus colores extra: solo intercalando se veían rayas de
+  dos colores. Costo: una rejilla de 1 px par/impar se ve gris uniforme (igual que en el LCD).
+  `C:\dev\entrelazado\lce2z80.py` empaqueta un `.lce` en un `.z80` que alterna las pantallas.
+- **Sincronía de campos:** si el campo que llega cambió en 64 filas o más (`SyncRows`; con 16 un
+  sprite que se redibuja en cada campo se tomaba por scroll y dejaba 2 frames desfasados) respecto de lo que se
+  muestra (`changed_rows`), se retiene un frame (`pending_buf_`) y se publica junto con su pareja.
+  Un scroll entrelazado (dos pantallas que se actualizan en frames consecutivos) ya no muestra
+  el frame de imagen doble de cada paso: la demo `C:/dev/entrelazado/pinball/p256-scroll.z80` da
+  420 de 420 frames idénticos a la referencia (antes 340). Costo: un frame de latencia cuando hay
+  cambios, y un programa que no alterna pantallas se actualiza a 25 fps en este modo.
+- API FFI nueva: `zx_set_interlace`, `zx_get_framebuffer_hr` (320×512), `zx_fb_height` (256 o 512).
+  No aplica a la Next (`zx_fb_height` devuelve 256). Símbolos exportados por `WINDOWS_EXPORT_ALL_SYMBOLS`.
+- Dart: `ZxBridge.frame()` consulta `zx_fb_height` y decodifica 320×256 o 320×512 (`zxFbHeightHr`).
+  `GameDisplay._FramePainter` deriva el borde vertical del alto real (×2 en HR); la proporción
+  física (`aspectFor`) no cambia porque cada scanline mostrada mide la mitad.
+- Persistencia `interlace` en `AppSettings` (global + por juego, igual que gigascreen).
+- **`--interlace` por linea de comandos** (2026-10-05, lo pasa PRISMA con el motor
+  `GFX_INFERNO_INTERLACE`): `_forceInterlace` en `DesktopScreen`, solo para la sesion (no
+  se guarda en `AppSettings`); tocar Gigascreen/Interlace HR en el menu lo suelta, y cada
+  archivo reenviado a la instancia abierta trae (o no) su propio `--interlace`.
+
+## Timex TC2048 / TS2068 y ULAplus extendido (2026-10-06)
+
+Pedido por PRISMA (`C:\prisma\doc_ia\INFERNO_TIMEX_PLAN.md`, §7: motor `GFX_INFERNO_TIMEX`, hi-color 8x1).
+- **Modelos**: `ZX_MODEL_TC2048` = 7, `ZX_MODEL_TS2068` = 8 (el 6 es la Next). En CLK se agregan **al final** del enum
+  `Target::Model` con una copia de `Target.hpp` en `<build>/clk_over/` (directorio de includes antepuesto; todos la
+  incluyen como `"Analyser/Static/ZXSpectrum/Target.hpp"`). El bridge traduce (`clk_model` / `zx_model_of`).
+  Dart: `ZxModel.tc2048/ts2068` con `id` (el índice del enum es lo que se guarda en ajustes). `--model tc2048|ts2068`.
+- **ROMs**: `assets/roms/tc2048.rom` (16K) y `ts2068.rom` (24K = casa 16K + EXROM 8K), copiadas del ZEsarUX de
+  PRISMA (la de 2068 es idéntica a `tc2068-0/1.rom` de Fuse). ⚠ **Licencia**: el permiso de Amstrad no cubre las
+  ROM de Timex; revisar antes de publicar en Play Store. El TC2048 pide la ROM "48K" de CLK y el TS2068 la "+3"
+  (64K, para que no la recorte a 16K): el fetcher del bridge les da la suya.
+- **Máquina** (`clk_patches/timex_machine.inc`, `timex_out.inc`, `timex_in.inc`, parches `timex-*` de
+  `ZXSpectrum.cpp`): para el resto del código son 48K (`base_model`). **Al final del parcheo, un `REGEX REPLACE`
+  cambia toda comparación `model <op> Model::X` por `base_model`**: en código inyectado escribir `Model::X == model`.
+  `banks_` pasó a **8 chunks de 8K** en todos los modelos (`set_memory` llena dos; `banks_[address >> 13]`).
+  - `$FF` (los dos, byte bajo completo): b0-5 modo de vídeo → `Video::set_timex_mode`, b6 corta la interrupción,
+    b7 elige EXROM/DOCK. Se lee de vuelta.
+  - TS2068: `$F4` MMU horizontal (`timex_overlay()` al final de `update_memory_map`: EXROM espejado o DOCK vacío
+    = `$FF`, escrituras a `scratch_`), AY en `$F5`/`$F6` (reloj CPU/2), joysticks por el registro 14 (A8 = 1,
+    A9 = 2, activos a 0), `$FE` decodificado completo (`$F4/$F6` también tienen A0 = 0), 3,528 MHz, sin trap de
+    LD-BYTES ni de SA-BYTES (su ROM es otra: carga a velocidad real + turbo).
+  - Escrituras en `$6000-$7AFF` vacían el vídeo solo con un modo Timex activo (`video_write_limit`).
+- **Vídeo** (`ulaplus_private.inc`, `output_column()` reemplaza el bucle de columnas de `Video.hpp`): modo 1 =
+  segunda pantalla `$6000`; 2 = hi-color (atributo = dirección del píxel `| $2000`); 4/6 = hi-res 512 (tinta = b3-5,
+  papel y borde = complemento, con BRIGHT; con ULAplus CLUT 3). **Hi-res fase 1**: 512 → 256 muestras (pares
+  iguales = ese color, distintos = la media); falta un framebuffer de 640.
+  Timings (libspectrum): `Timing::TC2048` 48K con el papel 15 ciclos antes; `Timing::TS2068` NTSC 224×262,
+  interrupción 9169 ciclos antes del papel, CRT `NTSC60` (60 fps; tarda ~1 s en fijar la vertical).
+- **Snapshots `.z80`**: hardware 14 = TC2048, 15/128 = TS2068; byte 35 = `$F4` (en `last_7ffd`), 36 = `$FF` (en
+  `last_1ffd`). `zx_save_snapshot` los escribe (v3; el TS2068 con AY). `.sna` = 48K (pierde `$FF`); `.szx` sin Timex.
+- **ULAplus opcional** (`zx_set_ulaplus`, `AppSettings.ulaplus`, global): 0 apagado (BF3B/FF3B no responden),
+  1 paleta, 2 **extendido** (defecto): el subgrupo del registro de modo (`BF3B` = `$40 | modo`) replica los modos de
+  `$FF` en cualquier modelo. Escala de grises (bit 1 del modo) implementada. Móvil: Ajustes › Pantalla (solo en los
+  ajustes generales); Windows: Máquina › ULAplus.
+- PDP: `hello` trae `model` (`tc2048`, `ts2068`…), `paging` agrega `timex_ff`, `timex_f4`, `screen_mode`.
+- Autotest: `python tools/timex_test.py [--ppm carpeta]` (arranque de las dos ROM, modos 0/1/2/6 + borde hi-res,
+  ULAplus extendido con el ajuste en 2/1/0, ida y vuelta de `.z80` TC2048, EXROM por la MMU, AY y joystick del TS2068).
+- Pendiente: hi-res a 640 px, `.szx` (`SCLD`), cartuchos DOCK, contención de I/O propia del SCLD, TC2068 (PAL) como
+  modelo aparte, verificar con juegos/demos reales de Timex.
+
+## ULAplus (Android y Windows; desactivable, ver Timex)
 
 CLK no lo trae: va por parches generados en CMake (mismo mecanismo que `ZXSpectrum_patched.cpp`,
 funciones `clk_patch` / `clk_patch_block`). Si CLK cambia upstream, el configure falla con el nombre
@@ -394,12 +487,25 @@ con `window_manager`, audio con la misma `ZxAudio` que Android.
   `open_args`). Pendiente verificar que Configuración abra la página de la app y no la general.
   Verificado: instalación silenciosa, arranque desde la copia instalada y desinstalación sin restos.
 - **Línea de comandos** (para PRISMA u otras herramientas):
-  `EasySpectrum.exe juego.tap --model 48k|128k|+2|+2a|+3|16k`. Recargar (F2) vuelve a leer el
-  archivo del disco: recompilar el .tap y F2.
+  `EasySpectrum.exe juego.tap --model 48k|128k|+2|+2a|+3|16k`. Recargar (F4) vuelve a leer el
+  archivo del disco: recompilar el .tap y F4.
 - Teclado (`pc_keyboard.dart`): por posición; Shift = CAPS, Ctrl = SYM, signos por carácter con SYM
   (soltando CAPS), flechas + Alt/Tab = joystick elegido (o cursores). Cada tecla del PC recuerda lo
-  que pulsó y la matriz se recalcula como unión → no quedan teclas pegadas. F2 recargar, F3 abrir,
-  F5 reset, F6 cinta, F8 pausa, F11 pantalla completa. Por eso los atajos van en teclas F: Ctrl es SYM.
+  que pulsó y la matriz se recalcula como unión → no quedan teclas pegadas. Teclas F al estilo Fuse:
+  F1 mapa de teclas, F2 guardar snapshot, F3 abrir, F4 recargar, F5 reset, F6 gestor de cintas, F7 insertar
+  cinta, F8 play/stop (Shift+F8 rebobinar), Pause pausa/reanudar, F9 soltar ratón, F11 pantalla completa,
+  F12 copiar pantalla. Por eso los atajos van en teclas F: Ctrl es SYM.
+- **Guardar snapshot** (F2, Archivo › Guardar snapshot, botón de la barra): `zx_save_snapshot` escribe
+  `.z80` o `.sna` según la extensión; la emulación se pausa con el diálogo abierto. El estado se toma con
+  la CPU detenida al inicio de una instrucción por el núcleo PDP (`capture_state` en `zx_bridge.cpp`;
+  si el depurador ya la tenía parada, usa esa parada). Borde y T-states por `Video::State` (parche
+  `tiempo-const`: su constructor no compilaba), registros del AY por `clk_patches/snapshot_access.h`
+  (especialización de `GI::AY38910::State::apply<>`, amiga del AY). `.z80`: v2 (23 bytes) para 128K,
+  porque en la v3 el modo 3 es 48K+M.G.T.; v3 (55 bytes, con `$1FFD`) para 16K/48K/+2/+2A/+3. `.sna` no
+  guarda el modelo: uno de +2/+2A/+3 se reabre como 128K. Parches al lector `.z80` de CLK
+  (`Z80_patched.cpp`): modos v3 4/5/6 = 128K (rechazaba los `.z80` 128K de Fuse) y color del borde
+  (no se leía). Autotest: `python tools/snapshot_test.py` (ida y vuelta en los 6 modelos + contenido
+  del `.z80` con pantalla sombra).
 - **Core**: `windows/CMakeLists.txt` compila `native/` como proyecto externo con **clang-cl**
   (toolset `ClangCL`, siempre Release): MSVC no acepta las extensiones de GCC/Clang de CLK.
   zlib se baja con FetchContent. `windows_prelude.h` (/FI) define `ssize_t`.
@@ -439,9 +545,10 @@ Firma release: `android/key.properties` (no va al repo). Primera compilación na
 - [x] UI: biblioteca, teclado ZX, joystick, ajustes, acerca de
 - [x] APK release verificado en AVD (BASIC 128K, carga .tap, teclado, juego jugable)
 - [ ] Probar en SM S926B (audio real)
-- [ ] Save states (requiere parchear CLK o serializar State)
+- [x] Guardar snapshot .z80/.sna en Windows (F2). Falta en Android y el estado de cinta/disco
 - [x] Ediciones Free/Pro con flavors (verificado en AVD: Pro sin anuncios ni permisos publicitarios)
 - [ ] IDs AdMob reales (solo Free) / política de privacidad `www.easysoft.cl/easy-spectrum/privacy.html`
 - [x] Localización es/en/ru/it/pt
 - [x] SNA de 128K (cargador propio) + fix de pantalla sombra en snapshots 128K (verificado con SNA sintéticos)
 - [ ] Un juego que falla al cargar queda igual en "Mis juegos" (¿borrarlo o marcarlo?)
+- [x] Timex TC2048 / TS2068 + ULAplus extendido (núcleo verificado con `tools/timex_test.py`; falta probar juegos reales y la app)

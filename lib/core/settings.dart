@@ -20,6 +20,8 @@ class AppSettings {
   bool onlineInfo = true;
   VideoMode videoMode = VideoMode.sharp;
   bool gigascreen = false;
+  bool interlace = false; // interlace hi-res (modo LCD de Velesoft); excluyente con gigascreen
+  UlaplusMode ulaplus = UlaplusMode.extended; // global (no por juego)
   bool fullScreen = false; // móvil: sin barra de título ni franja superior
   bool fitWidth = true; // vertical: la imagen de borde a borde, sin marco
   ScreenBorder screenBorder = ScreenBorder.half;
@@ -45,6 +47,7 @@ class AppSettings {
       if (j['video_mode'] != null) s.videoMode = VideoMode.byName(j['video_mode'] as String?);
       if (j['screen_border'] != null) s.screenBorder = ScreenBorder.byName(j['screen_border'] as String?);
       s.gigascreen = j['gigascreen'] as bool? ?? s.gigascreen;
+      s.interlace = j['interlace'] as bool? ?? s.interlace;
       s.fitWidth = j['fit_width'] as bool? ?? s.fitWidth;
       s.fullScreen = j['full_screen'] as bool? ?? s.fullScreen;
     } catch (_) {}
@@ -70,6 +73,8 @@ class AppSettings {
     s.onlineInfo = p.getBool('online_info') ?? true;
     s.videoMode = VideoMode.byName(p.getString('video_mode'));
     s.gigascreen = p.getBool('gigascreen') ?? false;
+    s.interlace = p.getBool('interlace') ?? false;
+    s.ulaplus = UlaplusMode.byName(p.getString('ulaplus'));
     s.fitWidth = p.getBool('fit_width') ?? true;
     s.fullScreen = p.getBool('full_screen') ?? false;
     s.screenBorder = ScreenBorder.byName(p.getString('screen_border'));
@@ -89,6 +94,7 @@ class AppSettings {
         'video_mode': videoMode.name,
         'screen_border': screenBorder.name,
         'gigascreen': gigascreen,
+        'interlace': interlace,
         'fit_width': fitWidth,
         'full_screen': fullScreen,
       };
@@ -100,6 +106,7 @@ class AppSettings {
         'video_mode': d.videoMode.name,
         'screen_border': d.screenBorder.name,
         'gigascreen': d.gigascreen,
+        'interlace': d.interlace,
         'fit_width': d.fitWidth,
         'full_screen': d.fullScreen,
       };
@@ -120,6 +127,8 @@ class AppSettings {
     await p.setBool('online_info', onlineInfo);
     await p.setString('video_mode', videoMode.name);
     await p.setBool('gigascreen', gigascreen);
+    await p.setBool('interlace', interlace);
+    await p.setString('ulaplus', ulaplus.name);
     await p.setBool('fit_width', fitWidth);
     await p.setBool('full_screen', fullScreen);
     await p.setString('screen_border', screenBorder.name);

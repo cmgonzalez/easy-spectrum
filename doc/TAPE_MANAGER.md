@@ -8,7 +8,7 @@
 | 2 — posición, seek, insertar/expulsar, pausa | nativo + `TapeController` + UI Windows/Android | **nativo verificado** con `tools/tapetest.cpp` (CLK real + ROMs, g++ MSYS2); UI sin compilar |
 | 3.1 — grabar SAVE | trap de SA-BYTES 0x04C2 (parche CMake `cinta-grabar`) | **verificado**: `SAVE "a"` en 48K → header 19 + datos 2 bytes |
 | 3.2 — cinta nueva desde archivos | `tape_builder.dart`, `zx_basic.dart` (tokenizador), `tape_editor.dart` | test escrito, sin correr |
-| 4 — pulido | checksum ✓/✗, TZX→TAP, "Añadir a Mis juegos" (Android), atajos F4/F7 | — |
+| 4 — pulido | checksum ✓/✗, TZX→TAP, "Añadir a Mis juegos" (Android), atajos Shift+F8/F6 | — |
 
 **Decisiones respecto al plan:**
 - **Posición (spike 1)**: no hizo falta envolver `Tape`. CLK lee cada bloque en un solo punto
@@ -30,7 +30,7 @@
   arte generado por `make_skins.py`; se puede sustituir por arte más adelante sin tocar la
   lógica. Se muestra solo al abrir un juego de cinta y vuelve al mando al terminar la carga.
 - **Escritorio**: panel acoplado a la derecha (la ventana se ensancha, como con el teclado).
-  F4 rebobinar, F6 play/pausa, F7 panel; Máquina › Rebobinar / Insertar / Expulsar / Gestor /
+  Shift+F8 rebobinar, F8 play/pausa, F6 panel, F7 insertar; Máquina › Rebobinar / Insertar / Expulsar / Gestor /
   Crear cinta.
 
 **Pendiente**: autocarga como conmutador (hoy siempre activa en `zx_create`), compartir en

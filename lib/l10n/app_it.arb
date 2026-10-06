@@ -118,8 +118,14 @@
   "keyMap": "Mappa dei tasti",
   "menuHelp": "Aiuto",
   "dropHint": "Rilascia il gioco per caricarlo",
-  "keyMapText": "Lettere, numeri, Invio e Spazio: gli stessi tasti dello Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nBackspace = DELETE · Esc = BREAK\nSimboli (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + il loro tasto\nFrecce = joystick scelto (o cursori con «Nessuno») · Alt o Tab = fuoco\n\nF2 ricarica · F3 apri · F5 reset · F6 nastro · F8 pausa · F11 / Alt+Enter schermo intero\nDoppio clic: schermo intero · Trascina un file sulla finestra per caricarlo",
+  "keyMapText": "Lettere, numeri, Invio e Spazio: gli stessi tasti dello Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nBackspace = DELETE · Esc = BREAK\nSimboli (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + il loro tasto\nFrecce = joystick scelto (o cursori con «Nessuno») · Alt o Tab = fuoco\n\nF1 tasti · F2 salva snapshot · F3 apri · F4 ricarica · F5 reset · F6 gestore nastri · F7 inserisci nastro · F8 avvia/ferma nastro (Shift+F8 riavvolgi) · Pause pausa · F11 / Alt+Enter schermo intero · F12 copia schermo\nDoppio clic: schermo intero · Trascina un file sulla finestra per caricarlo",
   "gigascreenSubtitle": "Fonde ogni fotogramma con il precedente: più colori nei programmi che alternano due schermate.",
+  "interlaceSubtitle": "Modalità LCD di Velesoft: intreccia le due schermate alternate come alta risoluzione 256×384.",
+  "ulaplus": "ULAplus",
+  "ulaplusOff": "Disattivato",
+  "ulaplusPalette": "Tavolozza a 64 colori",
+  "ulaplusExtended": "Tavolozza + modi Timex (esteso)",
+  "ulaplusSubtitle": "La modalità estesa consente di attivare i modi video Timex (hi-color 8x1, 512×192) da ULAplus su qualsiasi modello.",
   "tabGame": "Controlli",
   "tabGeneral": "Generale",
   "sound": "Suono",
@@ -215,5 +221,11 @@
       }
     }
   },
-  "nothingToCopy": "Ancora nessuna immagine da copiare"
+  "nothingToCopy": "Ancora nessuna immagine da copiare",
+  "saveSnapshot": "Salva snapshot",
+  "snapshotSaved": "Snapshot salvato: {name}",
+  "snapshotSaveFailed": "Impossibile salvare lo snapshot: {reason}",
+  "errSnapshotUnsupported": "Lo ZX Spectrum Next non permette di salvare snapshot.",
+  "errSnapshotFailed": "impossibile leggere lo stato della macchina.",
+  "errWriteFailed": "impossibile scrivere il file."
 }

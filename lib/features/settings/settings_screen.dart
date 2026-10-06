@@ -153,8 +153,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: const Text('Gigascreen'),
                 subtitle: Text(t.gigascreenSubtitle),
                 value: s.gigascreen,
-                onChanged: (v) => _update((s) => s.gigascreen = v),
+                onChanged: (v) => _update((s) {
+                  s.gigascreen = v;
+                  if (v) s.interlace = false; // excluyentes
+                }),
               ),
+              SwitchListTile(
+                secondary: const Icon(Icons.hd_rounded, size: 32),
+                title: const Text('Interlace HR'),
+                subtitle: Text(t.interlaceSubtitle),
+                value: s.interlace,
+                onChanged: (v) => _update((s) {
+                  s.interlace = v;
+                  if (v) s.gigascreen = false; // excluyentes
+                }),
+              ),
+              if (!inGame) // global: los ajustes de un juego no lo guardan
+                ListTile(
+                  leading: const Icon(Icons.palette_rounded, size: 32),
+                  title: Text('${t.ulaplus}: ${ulaplusModeLabel(t, s.ulaplus)}'),
+                  subtitle: Text(t.ulaplusSubtitle),
+                  onTap: () async {
+                    final v = await _choose(t.ulaplus, UlaplusMode.values, (m) => ulaplusModeLabel(t, m), s.ulaplus);
+                    if (v != null) _update((s) => s.ulaplus = v);
+                  },
+                ),
               _Header(t.sound),
               SwitchListTile(
                 secondary: const Icon(Icons.volume_up_rounded, size: 32),

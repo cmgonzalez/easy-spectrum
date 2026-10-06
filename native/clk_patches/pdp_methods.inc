@@ -10,9 +10,27 @@ public:
 		t.peek_bank = [](void *c, int kind, int bank, uint16_t off) -> uint8_t { return static_cast<ConcreteMachine *>(c)->debug_peek_bank(kind, bank, off); };
 		t.poke_bank = [](void *c, int kind, int bank, uint16_t off, uint8_t v) { static_cast<ConcreteMachine *>(c)->debug_poke_bank(kind, bank, off, v); };
 		t.paging = [](void *c, uint8_t *p7, uint8_t *p1) { auto *m = static_cast<ConcreteMachine *>(c); *p7 = m->port7ffd_; *p1 = m->port1ffd_; };
-		t.frame_half_cycles = (model < Model::OneTwoEightK ? 69888 : 70908) * 2;
+		t.machine_state = [](void *c, uint8_t *border, uint8_t ay[16], uint8_t *sel, int *hc) {
+			static_cast<ConcreteMachine *>(c)->debug_machine_state(border, ay, sel, hc);
+		};
+		if constexpr (is_timex) {
+			t.timex = [](void *c, uint8_t *ff, uint8_t *f4) { auto *m = static_cast<ConcreteMachine *>(c); *ff = m->timex_ff_; *f4 = m->timex_f4_; };
+		}
+		t.frame_half_cycles = (Model::TS2068 == model ? 224 * 262 : model < Model::OneTwoEightK ? 69888 : 70908) * 2;
 		zxdbg::g.t = t;
 		zxdbg::g.clock = zxdbg::g.last_clock = zxdbg::g.next_frame = 0;
+	}
+
+	// Borde y tiempo de vídeo por Video::State (amiga de Video); el AY por zxsnap::AyPeek
+	// (clk_patches/snapshot_access.h).
+	void debug_machine_state(uint8_t *border, uint8_t ay[16], uint8_t *sel, int *hc) {
+		const Sinclair::ZXSpectrum::Video::State vs(*video_.get());
+		*border = vs.border_colour & 7;
+		*hc = vs.half_cycles_since_interrupt;
+		zxsnap::AyPeek p{&ay_};
+		GI::AY38910::State().apply(p);
+		std::copy_n(p.regs, 16, ay);
+		*sel = p.sel;
 	}
 
 	uint8_t debug_peek_bank(int kind, int bank, uint16_t off) const {

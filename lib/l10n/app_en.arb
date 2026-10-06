@@ -118,8 +118,14 @@
   "keyMap": "Key map",
   "menuHelp": "Help",
   "dropHint": "Drop the game to load it",
-  "keyMapText": "Letters, numbers, Enter and Space: same keys as the Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nBackspace = DELETE · Esc = BREAK\nSymbols (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + their key\nArrows = selected joystick (or cursor keys with \"None\") · Alt or Tab = fire\n\nF2 reload · F3 open · F5 reset · F6 tape · F8 pause · F11 / Alt+Enter full screen\nDouble click: full screen · Drag a file onto the window to load it",
+  "keyMapText": "Letters, numbers, Enter and Space: same keys as the Spectrum.\nShift = CAPS SHIFT · Ctrl = SYMBOL SHIFT\nBackspace = DELETE · Esc = BREAK\nSymbols (, . ; : - + = / * < > ? \" ') = SYMBOL SHIFT + their key\nArrows = selected joystick (or cursor keys with \"None\") · Alt or Tab = fire\n\nF1 keys · F2 save snapshot · F3 open · F4 reload · F5 reset · F6 tape manager · F7 insert tape · F8 play/stop tape (Shift+F8 rewind) · Pause pause · F11 / Alt+Enter full screen · F12 copy screen\nDouble click: full screen · Drag a file onto the window to load it",
   "gigascreenSubtitle": "Blends each frame with the previous one: more colours in programs that alternate two screens.",
+  "interlaceSubtitle": "Velesoft's LCD mode: interleaves the two alternating screens as 256×384 hi-res.",
+  "ulaplus": "ULAplus",
+  "ulaplusOff": "Off",
+  "ulaplusPalette": "64-colour palette",
+  "ulaplusExtended": "Palette + Timex modes (extended)",
+  "ulaplusSubtitle": "Extended mode lets ULAplus switch on the Timex video modes (8x1 hi-colour, 512×192) on any model.",
   "tabGame": "Controls",
   "tabGeneral": "General",
   "sound": "Sound",
@@ -215,5 +221,11 @@
       }
     }
   },
-  "nothingToCopy": "Nothing to copy yet"
+  "nothingToCopy": "Nothing to copy yet",
+  "saveSnapshot": "Save snapshot",
+  "snapshotSaved": "Snapshot saved: {name}",
+  "snapshotSaveFailed": "Could not save the snapshot: {reason}",
+  "errSnapshotUnsupported": "Snapshots can't be saved on the ZX Spectrum Next.",
+  "errSnapshotFailed": "could not read the machine state.",
+  "errWriteFailed": "could not write the file."
 }
